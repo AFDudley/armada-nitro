@@ -66,6 +66,19 @@ etched at the addresses linked in `foundry.toml`; only the SNARK check is bypass
 `test/fixtures/frost-2of3.json` is a 2-of-3 threshold signature from the `frost-secp256k1-evm` crate; regenerate it
 with `cargo run --manifest-path tools/frost-fixture/Cargo.toml`.
 
+These forge tests are the inner loop, not acceptance: they run in-process with the SNARK check off.
+
+`tools/discrimination.py` shows the security tests can fail. Each arm applies one intent-driven mutant (a plausible
+wrong implementation: the deposit binding dropped, a SHIELD payout made public, contract signatures ignored, the
+EIP-1271 gas cap removed, revocation made immediate, the operation nonce unbound, `expectedHeld` ignored) to a
+throwaway copy of the tree and requires every named test to fail; an unmutated negative control must pass. A mutation
+that does not apply exactly once or does not compile is reported `INCONCLUSIVE`, never killed.
+
+```sh
+python3 tools/discrimination.py            # all arms; exit 0 iff control passes and every arm is KILLED
+python3 tools/discrimination.py revocation-immediate
+```
+
 ## Local stack (laconic stack-orchestrator)
 
 `stack/` is an external stack: an anvil pod and two jobs. `deploy` deploys Armada's pool (testing mode), a mock USDC,
