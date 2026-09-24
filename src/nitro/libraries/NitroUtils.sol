@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import {INitroTypes} from '../interfaces/INitroTypes.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
+import {IERC1271} from '@openzeppelin/contracts/interfaces/IERC1271.sol';
 
 library NitroUtils {
     // *****************
@@ -54,6 +55,13 @@ library NitroUtils {
     }
 
     /**
+     * @notice Gas forwarded to a contract participant's EIP-1271 `isValidSignature`.
+     * @dev nitro-railgun: bounded so a participant contract cannot make a counterparty's
+     * challenge or checkpoint run out of gas.
+     */
+    uint256 internal constant EIP1271_GAS = 100_000;
+
+    /**
      * @notice Given a digest and ethereum digital signature, recover the signer.
      * @dev Given a digest and digital signature, recover the signer.
      * @param _d message digest.
@@ -64,10 +72,57 @@ library NitroUtils {
         bytes32 _d,
         INitroTypes.Signature memory sig
     ) internal pure returns (address) {
-        bytes32 prefixedHash = keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', _d));
-        address a = ecrecover(prefixedHash, sig.v, sig.r, sig.s);
+        address a = ecrecover(prefixedHash(_d), sig.v, sig.r, sig.s);
         require(a != address(0), 'Invalid signature');
         return (a);
+    }
+
+    /**
+     * @notice The EIP-191 digest every participant signature is over.
+     * @param _d message digest.
+     * @return keccak256 of the "\x19Ethereum Signed Message:\n32" prefix and `_d`.
+     */
+    function prefixedHash(bytes32 _d) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', _d));
+    }
+
+    /**
+     * @notice Check whether `participant` authorized `_d` with `sig`.
+     * @dev nitro-railgun: a participant authorizes a digest either as the ECDSA signer of `sig`, or,
+     * when it is a contract, by accepting `sig` over `prefixedHash(_d)` through EIP-1271. The call is
+     * a gas-capped staticcall that reads a single return word, so a hostile participant contract can
+     * only refuse its own signatures; it cannot revert or exhaust the caller.
+     * @param _d message digest.
+     * @param sig ethereum digital signature.
+     * @param signer The address `sig` recovers to over `prefixedHash(_d)`.
+     * @param participant Channel participant being tested.
+     * @return true if `participant` authorized `_d`.
+     */
+    function isAuthorizedBy(
+        bytes32 _d,
+        INitroTypes.Signature memory sig,
+        address signer,
+        address participant
+    ) internal view returns (bool) {
+        if (signer == participant) return true;
+        if (participant.code.length == 0) return false;
+        bytes memory callData = abi.encodeWithSelector(
+            IERC1271.isValidSignature.selector,
+            prefixedHash(_d),
+            abi.encodePacked(sig.r, sig.s, sig.v)
+        );
+        bool success;
+        bytes32 result;
+        uint256 gasLimit = EIP1271_GAS;
+        /* solhint-disable no-inline-assembly */
+        assembly {
+            success := staticcall(gasLimit, participant, add(callData, 0x20), mload(callData), 0, 0x20)
+            if and(success, gt(returndatasize(), 0x1f)) {
+                result := mload(0)
+            }
+        }
+        /* solhint-enable no-inline-assembly */
+        return success && result == bytes32(IERC1271.isValidSignature.selector);
     }
 
     /**

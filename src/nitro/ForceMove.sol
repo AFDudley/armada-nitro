@@ -175,7 +175,8 @@ contract ForceMove is IForceMove, StatusManager {
 
     /**
      * @notice Checks that the challengerSignature was created by one of the supplied participants.
-     * @dev Checks that the challengerSignature was created by one of the supplied participants.
+     * @dev nitro-railgun: a participant may authorize the challenge as an EOA or through EIP-1271
+     * (NitroUtils.isAuthorizedBy).
      * @param supportedStateHash Forms part of the digest to be signed, along with the string 'forceMove'.
      * @param participants A list of addresses representing the participants of a channel.
      * @param challengerSignature The signature of a participant on the keccak256 of the abi.encode of (supportedStateHash, 'forceMove').
@@ -184,31 +185,15 @@ contract ForceMove is IForceMove, StatusManager {
         bytes32 supportedStateHash,
         address[] memory participants,
         Signature memory challengerSignature
-    ) internal pure {
-        address challenger = NitroUtils.recoverSigner(
-            keccak256(abi.encode(supportedStateHash, 'forceMove')),
-            challengerSignature
-        );
-        require(_isAddressInArray(challenger, participants), 'Challenger is not a participant');
-    }
-
-    /**
-     * @notice Tests whether a given address is in a given array of addresses.
-     * @dev Tests whether a given address is in a given array of addresses.
-     * @param suspect A single address of interest.
-     * @param addresses A line-up of possible perpetrators.
-     * @return true if the address is in the array, false otherwise
-     */
-    function _isAddressInArray(
-        address suspect,
-        address[] memory addresses
-    ) internal pure returns (bool) {
-        for (uint256 i = 0; i < addresses.length; i++) {
-            if (suspect == addresses[i]) {
-                return true;
+    ) internal view {
+        bytes32 digest = keccak256(abi.encode(supportedStateHash, 'forceMove'));
+        address challenger = NitroUtils.recoverSigner(digest, challengerSignature);
+        for (uint256 i = 0; i < participants.length; i++) {
+            if (NitroUtils.isAuthorizedBy(digest, challengerSignature, challenger, participants[i])) {
+                return;
             }
         }
-        return false;
+        revert('Challenger is not a participant');
     }
 
     /**
@@ -241,7 +226,7 @@ contract ForceMove is IForceMove, StatusManager {
     function recoverVariableParts(
         FixedPart memory fixedPart,
         SignedVariablePart[] memory signedVariableParts
-    ) internal pure returns (RecoveredVariablePart[] memory) {
+    ) internal view returns (RecoveredVariablePart[] memory) {
         RecoveredVariablePart[] memory recoveredVariableParts = new RecoveredVariablePart[](
             signedVariableParts.length
         );
@@ -253,7 +238,8 @@ contract ForceMove is IForceMove, StatusManager {
 
     /**
      * @notice Recover signatures for a variable part.
-     * @dev Recover signatures for a variable part.
+     * @dev nitro-railgun: a signature counts for participant i if participant i authorized the state
+     * hash as an EOA or through EIP-1271 (NitroUtils.isAuthorizedBy).
      * @param fixedPart Fixed Part of the states in the support proof.
      * @param signedVariablePart A signed variable part.
      * @return RecoveredVariablePart, identical to the supplied signedVariablePart, but with the signatures replaced with a signedBy bitmask.
@@ -261,20 +247,19 @@ contract ForceMove is IForceMove, StatusManager {
     function recoverVariablePart(
         FixedPart memory fixedPart,
         SignedVariablePart memory signedVariablePart
-    ) internal pure returns (RecoveredVariablePart memory) {
+    ) internal view returns (RecoveredVariablePart memory) {
         RecoveredVariablePart memory rvp = RecoveredVariablePart({
             variablePart: signedVariablePart.variablePart,
             signedBy: 0
         });
+        bytes32 stateHash = NitroUtils.hashState(fixedPart, signedVariablePart.variablePart);
         //  For each signature
         for (uint256 j = 0; j < signedVariablePart.sigs.length; j++) {
-            address signer = NitroUtils.recoverSigner(
-                NitroUtils.hashState(fixedPart, signedVariablePart.variablePart),
-                signedVariablePart.sigs[j]
-            );
+            Signature memory sig = signedVariablePart.sigs[j];
+            address signer = NitroUtils.recoverSigner(stateHash, sig);
             // Check each participant to see if they signed it
             for (uint256 i = 0; i < fixedPart.participants.length; i++) {
-                if (signer == fixedPart.participants[i]) {
+                if (NitroUtils.isAuthorizedBy(stateHash, sig, signer, fixedPart.participants[i])) {
                     rvp.signedBy |= 2 ** i;
                     break; // Once we have found a match, assuming distinct participants, no-one else signed it
                 }

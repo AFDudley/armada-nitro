@@ -45,9 +45,4 @@ interface INitroAdjudicator is IMultiAssetHolder, IForceMove {
         SignedVariablePart[] calldata proof,
         SignedVariablePart calldata candidate
     ) external view returns (bool, string memory);
-
-    // Function to set map from l2ChannelId to l1ChannelId
-    function setL2ToL1(bytes32 l1ChannelId, bytes32 l2ChannelId) external;
-
-    event L2ToL1MapUpdated(bytes32 l1ChannelId, bytes32 l2ChannelId);
 }
