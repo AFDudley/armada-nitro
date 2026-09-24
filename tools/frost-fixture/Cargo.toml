@@ -1,0 +1,15 @@
+[package]
+name = "frost-fixture"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Writes a 2-of-3 FROST-secp256k1-KECCAK256 signature over a HubCustodian operation for the Solidity tests"
+
+[dependencies]
+frost-secp256k1-evm = "=3.0.0"
+k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
+rand_chacha = "0.3"
+rand_core = "0.6"
+sha3 = "0.10"
+hex = "0.4"
+serde_json = "1"

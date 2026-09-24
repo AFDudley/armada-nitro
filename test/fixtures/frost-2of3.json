@@ -1,0 +1,17 @@
+{
+  "chainId": 31337,
+  "commitmentX": "0x78f1592a7eac2b84edd4765bea23b226dc31a25cd68bb48a48e8e4d3aa12dca8",
+  "commitmentY": "0x422433fd4a07fed6da28d3a7aea43cbd2ff5a46acc57781f044b88071e80b523",
+  "custodian": "0x00000000000000000000000000000000c0570d1a",
+  "groupKeyX": "0xd963041ff4047c2d1d02ffb98e6704935b8093299c8fe26b8c6487b75773e51a",
+  "groupKeyY": "0xc5dd6b069f76a7b59a8bffb5fc6e22cead39ed25c0ef60d34e901f3515606aa1",
+  "nonce": 0,
+  "operationHash": "0xf8c17ac6628debeb9b1ad9597479b1ba1a4dbebbcf21b5e18de1d32fb539ea81",
+  "signers": [
+    1,
+    3
+  ],
+  "target": "0x000000000000000000000000000000007a26e700",
+  "threshold": "2-of-3",
+  "z": "0xdc5c5c996fbd556de18bc996c8e194d857ccc24df99fdab2dee3483e6b7b0740"
+}
