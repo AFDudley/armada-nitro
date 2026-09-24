@@ -17,6 +17,9 @@ import {
     UnshieldType
 } from './armada/IArmadaPool.sol';
 
+/// @dev Allocation type for a payout that shields a fresh note in the pool.
+uint8 constant SHIELD_ALLOCATION_TYPE = 3;
+
 /**
  * @title NitroRailgunAdjudicator
  * @notice go-nitro's adjudicator with note-native custody on an Armada pool.
@@ -29,7 +32,7 @@ contract NitroRailgunAdjudicator is NitroAdjudicator {
     using SafeERC20 for IERC20;
 
     /// @notice Allocation type for a payout that shields a fresh note in the pool.
-    uint8 public constant SHIELD = 3;
+    uint8 public constant SHIELD = SHIELD_ALLOCATION_TYPE;
 
     /// @notice The Armada pool this adjudicator funds from and settles into.
     IArmadaPool public immutable pool;

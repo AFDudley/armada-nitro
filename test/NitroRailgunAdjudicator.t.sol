@@ -2,7 +2,6 @@
 pragma solidity 0.8.17;
 
 import {Vm} from 'forge-std/Test.sol';
-import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {NitroRailgunAdjudicator} from 'src/NitroRailgunAdjudicator.sol';
 import {ConsensusApp} from 'src/nitro/ConsensusApp.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
@@ -10,6 +9,8 @@ import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {IForceMoveApp} from 'src/nitro/interfaces/IForceMoveApp.sol';
 import {CommitmentPreimage, ShieldCiphertext, Transaction} from 'src/armada/IArmadaPool.sol';
 import {ArmadaFixture} from './helpers/ArmadaFixture.sol';
+import {ArmadaNotes} from './helpers/ArmadaNotes.sol';
+import {ChannelStates} from './helpers/ChannelStates.sol';
 import {IHubCustodian, IFrostTestSigner} from './helpers/IHubCustodian.sol';
 
 /// @dev Accepts every state, so a test can isolate signature recovery from app rules.
@@ -266,16 +267,7 @@ contract NitroRailgunAdjudicatorTest is ArmadaFixture, INitroTypes {
     // ---------------------------------------------------------------- helpers
 
     function _fixedPart(address app) internal view returns (FixedPart memory) {
-        address[] memory participants = new address[](2);
-        participants[0] = user;
-        participants[1] = address(custodian);
-        return
-            FixedPart({
-                participants: participants,
-                channelNonce: 1,
-                appDefinition: app,
-                challengeDuration: CHALLENGE_DURATION
-            });
+        return ChannelStates.fixedPart(user, address(custodian), 1, app, CHALLENGE_DURATION);
     }
 
     function _channelId(FixedPart memory fixedPart) internal pure returns (bytes32) {
@@ -313,26 +305,16 @@ contract NitroRailgunAdjudicatorTest is ArmadaFixture, INitroTypes {
         uint256 userAmount,
         uint256 hubAmount
     ) internal view returns (VariablePart memory) {
-        Outcome.Allocation[] memory allocations = new Outcome.Allocation[](2);
-        allocations[0] = Outcome.Allocation({
-            destination: USER_PAYOUT_NPK,
-            amount: userAmount,
-            allocationType: adjudicator.SHIELD(),
-            metadata: abi.encode(_ciphertext(USER_PAYOUT_NPK))
-        });
-        allocations[1] = Outcome.Allocation({
-            destination: bytes32(uint256(uint160(address(custodian)))),
-            amount: hubAmount,
-            allocationType: uint8(Outcome.AllocationType.simple),
-            metadata: ''
-        });
-        Outcome.SingleAssetExit[] memory outcome = new Outcome.SingleAssetExit[](1);
-        outcome[0] = Outcome.SingleAssetExit({
-            asset: address(usdc),
-            assetMetadata: Outcome.AssetMetadata({assetType: Outcome.AssetType.Default, metadata: ''}),
-            allocations: allocations
-        });
-        return VariablePart({outcome: outcome, appData: '', turnNum: turnNum, isFinal: isFinal});
+        return
+            ChannelStates.state(
+                address(usdc),
+                USER_PAYOUT_NPK,
+                address(custodian),
+                turnNum,
+                isFinal,
+                userAmount,
+                hubAmount
+            );
     }
 
     function _sign(
@@ -340,18 +322,14 @@ contract NitroRailgunAdjudicatorTest is ArmadaFixture, INitroTypes {
         FixedPart memory fixedPart,
         VariablePart memory state
     ) internal pure returns (Signature memory) {
-        return _signDigest(key, NitroUtils.hashState(fixedPart, state));
+        return ChannelStates.sign(key, fixedPart, state);
     }
 
-    /// @dev User signs as an EOA; the hub signs with its delegate key, verified via the custodian.
     function _signedByBoth(
         FixedPart memory fixedPart,
         VariablePart memory state
     ) internal pure returns (SignedVariablePart memory) {
-        Signature[] memory sigs = new Signature[](2);
-        sigs[0] = _sign(USER_KEY, fixedPart, state);
-        sigs[1] = _sign(DELEGATE_KEY, fixedPart, state);
-        return SignedVariablePart({variablePart: state, sigs: sigs});
+        return ChannelStates.signedByBoth(USER_KEY, DELEGATE_KEY, fixedPart, state);
     }
 
     function _challengerSig(
@@ -359,13 +337,7 @@ contract NitroRailgunAdjudicatorTest is ArmadaFixture, INitroTypes {
         FixedPart memory fixedPart,
         VariablePart memory state
     ) internal pure returns (Signature memory) {
-        return
-            _signDigest(key, keccak256(abi.encode(NitroUtils.hashState(fixedPart, state), 'forceMove')));
-    }
-
-    function _signDigest(uint256 key, bytes32 digest) internal pure returns (Signature memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, NitroUtils.prefixedHash(digest));
-        return Signature({v: v, r: r, s: s});
+        return ChannelStates.challengerSig(key, fixedPart, state);
     }
 
     function _hubExecute(address target, bytes memory data) internal {
@@ -380,6 +352,6 @@ contract NitroRailgunAdjudicatorTest is ArmadaFixture, INitroTypes {
         assertEq(notes[0].npk, USER_PAYOUT_NPK);
         assertEq(notes[0].token.tokenAddress, address(usdc));
         assertEq(uint256(notes[0].value), amount);
-        assertEq(abi.encode(ciphertexts[0]), abi.encode(_ciphertext(USER_PAYOUT_NPK)));
+        assertEq(abi.encode(ciphertexts[0]), abi.encode(ArmadaNotes.ciphertext(USER_PAYOUT_NPK)));
     }
 }

@@ -1,0 +1,7 @@
+.git
+out
+cache
+broadcast
+deployments
+tools/frost-fixture/target
+foundry-pp

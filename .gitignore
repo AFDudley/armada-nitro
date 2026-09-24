@@ -12,3 +12,9 @@ docs/
 
 # Dotenv file
 .env
+
+# Local-chain deployment artifacts
+/deployments/31337*
+
+# forge-generated linking helpers
+/foundry-pp/
