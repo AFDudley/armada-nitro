@@ -1,0 +1,11 @@
+version: "1.0"
+name: armada-nitro-fixturenet
+description: "Single-node PoS devnet on upstream geth + lighthouse with every fork through Osaka active at genesis"
+repos:
+  - github.com/AFDudley/armada-nitro
+containers:
+  - ethereum/client-go
+  - sigp/lighthouse
+  - ethpandaops/ethereum-genesis-generator
+pods:
+  - armada-fixturenet

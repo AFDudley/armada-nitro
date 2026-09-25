@@ -1,0 +1,109 @@
+services:
+  armada-fixturenet-genesis:
+    image: ethpandaops/ethereum-genesis-generator:6.2.1
+    entrypoint:
+      - sh
+      - -c
+    command:
+      - |
+        export GENESIS_TIMESTAMP=$(date +%s)
+        exec /work/entrypoint.sh all
+    environment:
+      CHAIN_ID: "31337"
+      EL_AND_CL_MNEMONIC: "test test test test test test test test test test test junk"
+      NUMBER_OF_VALIDATORS: "64"
+      SLOT_DURATION_MS: "2000"
+      ALTAIR_FORK_EPOCH: "0"
+      BELLATRIX_FORK_EPOCH: "0"
+      CAPELLA_FORK_EPOCH: "0"
+      DENEB_FORK_EPOCH: "0"
+      ELECTRA_FORK_EPOCH: "0"
+      FULU_FORK_EPOCH: "0"
+      GLOAS_FORK_EPOCH: "18446744073709551615"
+      HEZE_FORK_EPOCH: "18446744073709551615"
+      EIP7441_FORK_EPOCH: "18446744073709551615"
+      EIP7928_FORK_EPOCH: "18446744073709551615"
+      EIP8321_FORK_EPOCH: "18446744073709551615"
+      EL_PREMINE_COUNT: "10"
+      EL_PREMINE_BALANCE: "10000ETH"
+    volumes:
+      - armada_fixturenet_genesis:/data
+
+  armada-fixturenet-geth:
+    image: ethereum/client-go:v1.17.6
+    depends_on:
+      armada-fixturenet-genesis:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    volumes:
+      - armada_fixturenet_genesis:/data
+      - geth_data:/root/ethdata
+    entrypoint:
+      - sh
+      - -c
+    command:
+      - |
+        set -e
+        # init subcommand (separate command, never takes the node flags)
+        if [ ! -d /root/ethdata/geth/chaindata ] && [ ! -d /root/ethdata/geth/ ] 2>/dev/null; then
+          geth init --datadir /root/ethdata /data/metadata/genesis.json
+        fi
+        exec geth           --datadir /root/ethdata           --networkid=31337           --http           --http.addr=0.0.0.0           --http.port=8545           --http.api=eth,net,web3,debug,txpool           --http.corsdomain="*"           --ws           --ws.addr=0.0.0.0           --ws.port=8546           --ws.api=eth,net,web3,debug,txpool           --authrpc.addr=0.0.0.0           --authrpc.port=8551           --authrpc.vhosts=*           --authrpc.jwtsecret=/data/jwt/jwtsecret           --syncmode=full
+    ports:
+      - "8545"
+      - "8546"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          wget -q -O - --header 'Content-Type: application/json' --post-data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' http://localhost:8545
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  armada-fixturenet-beacon:
+    image: sigp/lighthouse:v8.2.2
+    depends_on:
+      armada-fixturenet-genesis:
+        condition: service_completed_successfully
+      armada-fixturenet-geth:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - armada_fixturenet_genesis:/data
+      - beacon_data:/root/beacon
+    ports:
+      - "5052"
+    command:
+      - sh
+      - -c
+      - |
+        exec lighthouse bn           --datadir /root/beacon           --testnet-dir /data/metadata           --execution-endpoint http://armada-fixturenet-geth:8551           --execution-jwt /data/jwt/jwtsecret           --http           --http-address 0.0.0.0           --http-port 5052           --port 4000           --target-peers 0           --allow-insecure-genesis-sync           --ignore-ws-check
+
+  armada-fixturenet-validator:
+    image: sigp/lighthouse:v8.2.2
+    depends_on:
+      armada-fixturenet-genesis:
+        condition: service_completed_successfully
+      armada-fixturenet-geth:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - armada_fixturenet_genesis:/data
+      - validator_data:/root
+    command:
+      - sh
+      - -c
+      - |
+        # recover validators from the mnemonic file the generator wrote
+        if [ ! -d /root/validators ] 2>/dev/null; then
+          printf '%s' "test test test test test test test test test test test junk" > /tmp/mnemonic.txt
+          lighthouse account_manager validator recover             --datadir /root             --count 64             --first-index 0             --testnet-dir /data/metadata             --mnemonic-path /tmp/mnemonic.txt             --stdin-inputs
+        fi
+        exec lighthouse vc           --datadir /root           --testnet-dir /data/metadata           --beacon-nodes http://armada-fixturenet-beacon:5052           --init-slashing-protection           --suggested-fee-recipient 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+
+volumes:
+  armada_fixturenet_genesis:
+  geth_data:
+  beacon_data:
+  validator_data:
