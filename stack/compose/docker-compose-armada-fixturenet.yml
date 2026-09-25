@@ -100,7 +100,7 @@ services:
           printf '%s' "test test test test test test test test test test test junk" > /tmp/mnemonic.txt
           lighthouse account_manager validator recover             --datadir /root             --count 64             --first-index 0             --testnet-dir /data/metadata             --mnemonic-path /tmp/mnemonic.txt             --stdin-inputs
         fi
-        exec lighthouse vc           --datadir /root           --testnet-dir /data/metadata           --beacon-nodes http://armada-fixturenet-beacon:5052           --init-slashing-protection           --suggested-fee-recipient 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+        exec lighthouse vc           --datadir /root           --testnet-dir /data/metadata           --beacon-nodes http://armada-fixturenet-beacon:5052           --init-slashing-protection           --suggested-fee-recipient 0x000000000000000000000000000000000000fEE5
 
 volumes:
   armada_fixturenet_genesis:
