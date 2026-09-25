@@ -20,6 +20,11 @@ services:
       RECONCILER_VERIFY_ONLY: ${RECONCILER_VERIFY_ONLY:-}
     volumes:
       - armada_env:/env
+      # The lido module reads the fixturenet's genesis-placed beacon deposit contract
+      # address from here (armada_fixturenet_genesis's metadata/deposit_contract.txt,
+      # written by armada-fixturenet-genesis -- docker-compose-armada-fixturenet.yml).
+      - armada_fixturenet_genesis:/genesis:ro
 
 volumes:
   armada_env:
+  armada_fixturenet_genesis:

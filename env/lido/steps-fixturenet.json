@@ -1,0 +1,22 @@
+{
+  "_comment": "env/lido module's own STEPS_FILE override (docs/tasks/E5-lido.md) -- lido-core's own scripts/scratch/steps.json (tag v4.0.1), with the last three entries dropped. STEPS_FILE is itself a documented, overridable input (scripts/utils/migration-env.sh's load_env_var STEPS_FILE), so this is supplying an input, not editing lido-core (docs/ENVIRONMENT.md section 4). Dropped, and why: 0135-deploy-staking-modules clones lidofinance/community-staking-module and drives its deploy through `just`, unconditionally for any network but hardhat's in-process one (scripts/utils/staking-modules.ts's deployStakingModules); 0140-plug-staking-modules's enableExternalModule then needs to act as the Aragon Agent for the freshly-deployed Community Staking Module and Curated Module v2, and does so by calling lib/account.ts's impersonate() -- `${networkName}_impersonateAccount`, an Anvil/Hardhat cheatcode. Reproduced against this environment's own anvil-based throwaway test: HardhatError HH103 'Account ... is not managed by the node', because this environment's hardhat network config supplies an explicit deployer private key (LOCAL_DEVNET_PK, needed to sign real transactions at all) rather than 'remote' accounts, so Hardhat's LocalAccountsProvider intercepts before the node is ever asked to impersonate -- and real geth implements no such RPC method regardless. Neither Community Staking Module nor Curated Module v2 is named in docs/scratch-deploy.md or in docs/tasks/E5-lido.md's Goal (stETH, wstETH, locator, oracle contracts only); both are out of scope per that brief's own 'staking modules beyond what the scratch deploy creates' line. 0150-transfer-roles is also dropped: it only hands OZ AccessControl admin roles and OssifiableProxy admin control from the deployer to the Agent, which none of docs/ENVIRONMENT.md section 6's lido postconditions read.",
+  "steps": [
+    "scratch/steps/0000-populate-deploy-artifact-from-env",
+    "scratch/steps/0010-deploy-deposit-contract",
+    "scratch/steps/0020-deploy-aragon-env",
+    "scratch/steps/0030-deploy-template-and-app-bases",
+    "scratch/steps/0040-register-ens-domain",
+    "scratch/steps/0050-deploy-apm",
+    "scratch/steps/0060-create-app-repos",
+    "scratch/steps/0070-deploy-dao",
+    "scratch/steps/0080-issue-tokens",
+    "scratch/steps/0083-deploy-core",
+    "scratch/steps/0085-deploy-vaults",
+    "scratch/steps/0090-upgrade-locator",
+    "scratch/steps/0100-deploy-circuit-breaker",
+    "scratch/steps/0101-deploy-easytrack",
+    "scratch/steps/0110-finalize-dao",
+    "scratch/steps/0120-post-locator-initializers",
+    "scratch/steps/0130-grant-roles"
+  ]
+}

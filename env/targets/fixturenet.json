@@ -32,6 +32,9 @@
   "aave": {
     "deploy": {}
   },
+  "lido": {
+    "deploy": {}
+  },
   "armada": {
     "deploy": {}
   },
