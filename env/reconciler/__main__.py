@@ -122,6 +122,9 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 observed = module.observe(ctx)
                 action, gas_used = module.apply(ctx, observed)
+                # Record what apply() did before verify() can fail: a crash after a broadcast must not
+                # lose the addresses, or the next run would deploy again.
+                _write_manifest(args.state_dir, manifest)
             module.verify(ctx, action)
         except ReconcileError as e:
             print(f"reconciler: FAILED: {module_name}: {e.postcondition}", file=sys.stderr)
