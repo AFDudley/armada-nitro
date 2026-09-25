@@ -24,7 +24,7 @@ It is not a gate.
 | Choice | Value | Why |
 |---|---|---|
 | Fixturenet chain id | `31337` | armada-poc's hardhat `hub` network pins `chainId: 31337` (`hardhat.config.ts`); Armada's deploy and e2e scripts then run unmodified |
-| Fixturenet premine | accounts 0–9 of the public anvil/hardhat mnemonic (`test test … junk`), 10,000 ETH each | armada-poc's `hub` network and armada-nitro's scripts derive signers from it |
+| Fixturenet premine | accounts 0–9 of the public anvil/hardhat mnemonic (`test test … junk`), 10,000 ETH each. Block fees go to `0x000000000000000000000000000000000000fEE5`, outside the funded set, so test-account balances move only by their own transactions | armada-poc's `hub` network and armada-nitro's scripts derive signers from it |
 | Execution client | `ethereum/client-go:v1.17.6` (upstream release, 2026-09-23) | replaces the stale `cerc-io/go-ethereum@v1.11.6-statediff-v5` |
 | Consensus client | `sigp/lighthouse:v8.2.2` (2026-08-18) | replaces `sigp/lighthouse:v5.1.2` |
 | Genesis | `ethpandaops/ethereum-genesis-generator:6.2.1`, all forks through Fulu/Osaka at epoch 0 | armada-nitro compiles with `evm_version = "osaka"` (`foundry.toml:11`) |
@@ -35,7 +35,7 @@ It is not a gate.
 | Lido | `lidofinance/core` `v4.0.1`, scratch deploy (`scripts/dao-deploy.sh`, steps in `scripts/scratch/steps/`) | oracle contracts deployed; no committee members, no reports |
 | Armada | `ship-armada/armada-poc` `532bc064` (= `lib/armada-poc`, the demo3 commit), `scripts/deploy_privacy_pool.ts` with `CCTP_MODE=real` | same code and verification keys as demo3 |
 | armada-nitro | this repository, `script/Deploy.s.sol` | |
-| Toolchain | Foundry v1.8.3, Node 22 with yarn 4.9.2 (Lido `engines.node >=22`), Python 3 | |
+| Toolchain | Foundry v1.8.3 with `FOUNDRY_DYNAMIC_TEST_LINKING=false` (image-wide: its generated helpers do not compile under the solc 0.6/0.7 that stablecoin-evm and CCTP pin), Node 22 with yarn 4.9.2 (Lido `engines.node >=22`; stablecoin-evm uses its own yarn 1 via `packageManager`), Python 3 | |
 
 ## 3. Layout
 

@@ -25,6 +25,8 @@ The reconciler framework and the first three modules, run as a laconic-so job ag
   - Deploy with `stablecoin-evm`'s `scripts/deploy/deploy-fiat-token.s.sol`, driven by the environment variables that
     script reads (name `USDC`, symbol `USDC`, currency `USD`, decimals 6; owner, masterMinter, pauser, blacklister,
     lostAndFound = target parameters; on the fixturenet all are anvil account 0 except lostAndFound = account 9).
+  - Run it inside `cerc/armada-nitro-env`, which sets `FOUNDRY_DYNAMIC_TEST_LINKING=false`; with the Foundry 1.8.3
+    default (`true`) the solc 0.6.12 build fails in generated `foundry-pp/` helpers. The same applies to CCTP (solc 0.7.6).
   - Verify per §6.
     - Read `version()` from Sepolia USDC `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` with `cast` at run time.
     - Negative case: a mint from an unconfigured minter reverts.
