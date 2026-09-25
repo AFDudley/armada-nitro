@@ -5,7 +5,9 @@
     "rpcUrl": "http://armada-fixturenet-geth:8545",
     "hostRpcUrl": "http://127.0.0.1:8545"
   },
-  "weth": { "deploy": {} },
+  "weth": {
+    "deploy": {}
+  },
   "usdc": {
     "deploy": {
       "name": "USDC",
@@ -27,12 +29,19 @@
       "burnLimitPerMessage": 10000000000000
     }
   },
-  "armada": { "deploy": {} },
+  "aave": {
+    "deploy": {}
+  },
+  "armada": {
+    "deploy": {}
+  },
   "armada_nitro": {
     "deploy": {
       "revocationDelay": 60,
       "groupKeyScalar": "0xa4ddf31f7f32ba696f14ce50ecf3f21e3e100e83bdf47966e7b07468e9500b6e"
     }
   },
-  "funding": { "deploy": {} }
+  "funding": {
+    "deploy": {}
+  }
 }

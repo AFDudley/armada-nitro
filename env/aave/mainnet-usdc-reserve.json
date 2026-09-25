@@ -1,0 +1,37 @@
+{
+  "_comment": "Mainnet Aave v3 Ethereum pool's USDC reserve, read with cast (docs/tasks/E4-aave.md step 3). Consumed by env/reconciler/modules/aave.py as the target for AaveV3ConfigEngine.listAssets (via env/aave/EnvUsdcListingPayload.sol) and by its verify() to check the fixturenet's listed reserve against these recorded values. Bit layout: src/contracts/protocol/libraries/configuration/ReserveConfiguration.sol in /src/aave-v3-origin (tag v3.7.0). Re-derive by rerunning the commands below (each pinned to `block`).",
+  "rpcUrl": "https://ethereum-rpc.publicnode.com",
+  "pool": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
+  "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  "block": 26057104,
+  "commands": [
+    "cast block-number --rpc-url https://ethereum-rpc.publicnode.com",
+    "cast call 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2 \"getConfiguration(address)(uint256)\" 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --rpc-url https://ethereum-rpc.publicnode.com --block 26057104",
+    "cast call 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2 \"RESERVE_INTEREST_RATE_STRATEGY()(address)\" --rpc-url https://ethereum-rpc.publicnode.com --block 26057104",
+    "cast call 0x9ec6F08190DeA04A54f8Afc53Db96134e5E3FdFB \"getInterestRateDataBps(address)(uint16,uint32,uint32,uint32)\" 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --rpc-url https://ethereum-rpc.publicnode.com --block 26057104"
+  ],
+  "reserveConfiguration": {
+    "raw": "0x100000000000000000000007d00b2d05e000a0eebb0003e8850628d21e781d4c",
+    "ltv": 7500,
+    "liquidationThreshold": 7800,
+    "liquidationBonus": 10450,
+    "decimals": 6,
+    "active": true,
+    "frozen": false,
+    "borrowingEnabled": true,
+    "paused": false,
+    "flashloanEnabled": true,
+    "reserveFactor": 1000,
+    "borrowCap": 2700000000,
+    "supplyCap": 3000000000,
+    "liquidationProtocolFee": 2000,
+    "virtualAccountingActive": true
+  },
+  "interestRateStrategy": {
+    "address": "0x9ec6F08190DeA04A54f8Afc53Db96134e5E3FdFB",
+    "optimalUsageRatio": 9400,
+    "baseVariableBorrowRate": 0,
+    "variableRateSlope1": 440,
+    "variableRateSlope2": 1000
+  }
+}

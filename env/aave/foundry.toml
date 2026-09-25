@@ -1,0 +1,28 @@
+# Forge project for this environment's Aave v3 market input and deploy script. Remaps
+# straight into /src/aave-v3-origin (tag v3.7.0, baked into the image; see
+# docs/tasks/E4-aave.md and env/reconciler/modules/aave.py) rather than duplicating its
+# source or its lib/ checkouts -- so this project has no libs of its own, and pins the
+# same solc/evm_version aave-v3-origin's own foundry.toml pins.
+[profile.default]
+src = '.'
+script = 'script'
+out = 'out'
+libs = []
+solc = '0.8.27'
+evm_version = 'shanghai'
+optimizer = true
+optimizer_runs = 200
+bytecode_hash = 'none'
+remappings = [
+  'aave-v3-origin/=/src/aave-v3-origin/',
+  'solidity-utils/=/src/aave-v3-origin/lib/solidity-utils/src/',
+  'forge-std/=/src/aave-v3-origin/lib/forge-std/src/',
+  'ds-test/=/src/aave-v3-origin/lib/forge-std/lib/ds-test/src/',
+  'openzeppelin-contracts-upgradeable/=/src/aave-v3-origin/lib/solidity-utils/lib/openzeppelin-contracts-upgradeable/',
+  'openzeppelin-contracts/=/src/aave-v3-origin/lib/solidity-utils/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/',
+  '@openzeppelin/contracts-upgradeable/=/src/aave-v3-origin/lib/solidity-utils/lib/openzeppelin-contracts-upgradeable/contracts/',
+  '@openzeppelin/contracts/=/src/aave-v3-origin/lib/solidity-utils/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/',
+]
+fs_permissions = [
+  { access = "read-write", path = "./reports" },
+]

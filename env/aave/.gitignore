@@ -1,0 +1,8 @@
+# Forge build/run artifacts for this project (mirrors the repo root's cache/, out/, broadcast/
+# ignores, which are anchored to the repo root and so don't cover this nested project).
+cache/
+out/
+broadcast/
+# script/DeployMarket.s.sol's output, read by env/reconciler/modules/aave.py; regenerated
+# every deploy, never committed.
+reports/
