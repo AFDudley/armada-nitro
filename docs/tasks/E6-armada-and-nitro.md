@@ -52,5 +52,16 @@ cast call <adjudicator> "pool()(address)" --rpc-url http://127.0.0.1:8545  # = p
   mismatch.
 - Paste the per-module gas table.
 
+## As built (findings from the run)
+- `deploy_privacy_pool.ts` reads CCTP addresses from `deployments/hub-v3.json`, written by
+  `scripts/deploy_cctp_sepolia.ts` (generic despite the name; with `CCTP_MODE=real` it records and checks the given
+  addresses, sending no transactions). The module runs it first with the same environment.
+- Loading verification keys needs Armada's circuit build (`scripts/fetch-circuits.sh`, which uses `gh`). The image has
+  no `gh`, so the module downloads the same release asset (`ship-armada/armada-circuits` `v0.1.0-dev`, tarball
+  SHA-256 `e7c4e5ea…369a`, pins copied from `fetch-circuits.sh`) over HTTPS and checks it.
+- `script/Deploy.s.sol` writes `deployments/<chainId>.json` but does not create `deployments/`; the module creates it.
+- Fixturenet gas: weth 727,366; usdc 8,008,767; cctp 12,478,907; armada 33,711,821; armada_nitro 6,588,924; funding
+  273,312; total 61,789,097.
+
 ## Out of scope
 Proof generation, the gates (E7), Armada clients/governance, any edit to armada-poc.
