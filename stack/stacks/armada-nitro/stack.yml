@@ -1,0 +1,12 @@
+version: "1.0"
+name: armada-nitro
+description: "Local anvil chain with Armada's PrivacyPool, the armada-nitro adjudicator and a FROST hub custodian"
+repos:
+  - github.com/AFDudley/armada-nitro
+containers:
+  - cerc/armada-nitro-foundry
+pods:
+  - armada-nitro-anvil
+jobs:
+  - armada-nitro-deploy
+  - armada-nitro-scenario

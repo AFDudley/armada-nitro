@@ -1,6 +1,6 @@
 services:
-  nitro-railgun-anvil:
-    image: cerc/nitro-railgun-foundry:local
+  armada-nitro-anvil:
+    image: cerc/armada-nitro-foundry:local
     restart: unless-stopped
     entrypoint: ["anvil"]
     command:

@@ -5,7 +5,7 @@ import {Script, console2} from 'forge-std/Script.sol';
 import {Vm} from 'forge-std/Vm.sol';
 import {PrivacyPool} from 'armada/privacy-pool/PrivacyPool.sol';
 import {MockUSDCV2} from 'armada/cctp/MockUSDCV2.sol';
-import {NitroRailgunAdjudicator} from 'src/NitroRailgunAdjudicator.sol';
+import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {IArmadaPool, CommitmentPreimage, ShieldCiphertext, Transaction} from 'src/armada/IArmadaPool.sol';
@@ -45,7 +45,7 @@ contract LocalScenario is Script {
     struct Ctx {
         PrivacyPool privacyPool;
         MockUSDCV2 usdc;
-        NitroRailgunAdjudicator adjudicator;
+        ArmadaNitroAdjudicator adjudicator;
         address consensusApp;
         IHubCustodian custodian;
         uint256 deployerKey;
@@ -249,7 +249,7 @@ contract LocalScenario is Script {
         string memory ours = vm.readFile('deployments/31337.json');
         c.privacyPool = PrivacyPool(payable(vm.parseJsonAddress(armada, '.pool')));
         c.usdc = MockUSDCV2(vm.parseJsonAddress(armada, '.usdc'));
-        c.adjudicator = NitroRailgunAdjudicator(vm.parseJsonAddress(ours, '.adjudicator'));
+        c.adjudicator = ArmadaNitroAdjudicator(vm.parseJsonAddress(ours, '.adjudicator'));
         c.consensusApp = vm.parseJsonAddress(ours, '.consensusApp');
         c.custodian = IHubCustodian(vm.parseJsonAddress(ours, '.hubCustodian'));
         c.deployerKey = vm.envUint('DEPLOYER_KEY');

@@ -2,7 +2,7 @@
 pragma solidity 0.8.17;
 
 import {Vm} from 'forge-std/Test.sol';
-import {NitroRailgunAdjudicator} from 'src/NitroRailgunAdjudicator.sol';
+import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
 import {ConsensusApp} from 'src/nitro/ConsensusApp.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
@@ -32,7 +32,7 @@ contract GasBombParticipant {
     }
 }
 
-contract NitroRailgunAdjudicatorTest is ArmadaFixture, INitroTypes {
+contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
     uint256 internal constant USER_KEY = 0xA11CE;
     uint256 internal constant DELEGATE_KEY = 0xDE1E6A7E;
     uint256 internal constant GROUP_SCALAR =
@@ -45,7 +45,7 @@ contract NitroRailgunAdjudicatorTest is ArmadaFixture, INitroTypes {
     bytes32 internal constant USER_DEPOSIT_NPK = bytes32(uint256(0x1111));
     bytes32 internal constant USER_PAYOUT_NPK = bytes32(uint256(0x2222));
 
-    NitroRailgunAdjudicator internal adjudicator;
+    ArmadaNitroAdjudicator internal adjudicator;
     ConsensusApp internal consensusApp;
     IHubCustodian internal custodian;
     IFrostTestSigner internal frost;
@@ -55,7 +55,7 @@ contract NitroRailgunAdjudicatorTest is ArmadaFixture, INitroTypes {
 
     function setUp() public {
         _deployArmada();
-        adjudicator = new NitroRailgunAdjudicator(pool);
+        adjudicator = new ArmadaNitroAdjudicator(pool);
         consensusApp = new ConsensusApp();
         user = vm.addr(USER_KEY);
         delegate = vm.addr(DELEGATE_KEY);

@@ -2,7 +2,7 @@
 pragma solidity 0.8.17;
 
 import {Script, console2} from 'forge-std/Script.sol';
-import {NitroRailgunAdjudicator} from 'src/NitroRailgunAdjudicator.sol';
+import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
 import {ConsensusApp} from 'src/nitro/ConsensusApp.sol';
 import {IArmadaPool} from 'src/armada/IArmadaPool.sol';
 
@@ -20,7 +20,7 @@ import {IArmadaPool} from 'src/armada/IArmadaPool.sol';
 contract Deploy is Script {
     function run()
         external
-        returns (NitroRailgunAdjudicator adjudicator, ConsensusApp consensusApp, address custodian)
+        returns (ArmadaNitroAdjudicator adjudicator, ConsensusApp consensusApp, address custodian)
     {
         address pool = vm.envAddress('ARMADA_POOL');
         require(pool.code.length > 0, 'ARMADA_POOL has no code');
@@ -31,7 +31,7 @@ contract Deploy is Script {
         );
 
         vm.startBroadcast();
-        adjudicator = new NitroRailgunAdjudicator(IArmadaPool(pool));
+        adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(pool));
         consensusApp = new ConsensusApp();
         custodian = deployCode('HubCustodian.sol:HubCustodian', custodianArgs);
         vm.stopBroadcast();

@@ -1,9 +1,9 @@
-# nitro-railgun
+# armada-nitro
 
 Nitro state channels funded from and settled to Armada shielded notes. This is the v1.5 construction in the
 armada-laconic spec (ADR-0015/0016, `engineering/shielded-nitro-bridge-design.md` §3):
 
-- **nitro-railgun adjudicator** — go-nitro's ForceMove dispute machine plus
+- **armada-nitro adjudicator** — go-nitro's ForceMove dispute machine plus
   (a) note-native custody: a channel is funded by an Armada unshield bound to the channel, and an allocation is paid
   out by shielding a fresh note;
   (b) EIP-1271 participants, so a hub's channel participant is its custodian contract rather than an EOA.
@@ -56,7 +56,7 @@ let the owner pay out any channel's holdings under another channel's outcome.
 ## Build and test
 
 ```sh
-git clone --recursive https://github.com/AFDudley/nitro-railgun
+git clone --recursive https://github.com/AFDudley/armada-nitro
 forge build
 forge test
 ```
@@ -86,13 +86,13 @@ the adjudicator and a custodian. `scenario` runs a cooperative close, then a for
 challenge window, then verifies chain state and the pool's `Shield` logs; it can be rerun on the same deployment.
 
 ```sh
-S=$PWD/stack/stacks/nitro-railgun
+S=$PWD/stack/stacks/armada-nitro
 laconic-so --stack $S build-containers
-laconic-so --stack $S deploy init --output nitro-railgun-spec.yml
-laconic-so --stack $S deploy create --spec-file nitro-railgun-spec.yml --deployment-dir ~/deployments/nitro-railgun
-laconic-so deployment --dir ~/deployments/nitro-railgun start
-laconic-so deployment --dir ~/deployments/nitro-railgun run-job nitro-railgun-deploy
-laconic-so deployment --dir ~/deployments/nitro-railgun run-job nitro-railgun-scenario
+laconic-so --stack $S deploy init --output armada-nitro-spec.yml
+laconic-so --stack $S deploy create --spec-file armada-nitro-spec.yml --deployment-dir ~/deployments/armada-nitro
+laconic-so deployment --dir ~/deployments/armada-nitro start
+laconic-so deployment --dir ~/deployments/armada-nitro run-job armada-nitro-deploy
+laconic-so deployment --dir ~/deployments/armada-nitro run-job armada-nitro-scenario
 ```
 
 The jobs use anvil's published development keys and a fixed FROST scalar; `CHALLENGE_DURATION` (default 15 s) and

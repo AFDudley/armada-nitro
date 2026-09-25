@@ -21,14 +21,14 @@ import {
 uint8 constant SHIELD_ALLOCATION_TYPE = 3;
 
 /**
- * @title NitroRailgunAdjudicator
+ * @title ArmadaNitroAdjudicator
  * @notice go-nitro's adjudicator with note-native custody on an Armada pool.
  * @dev Funding: `depositFromNote` submits an Armada unshield that is bound, inside the proof, to one
  * channel and one expected holding. Payout: an allocation of type `SHIELD` is paid by shielding a
  * fresh note (`destination` = the recipient's note public key, `metadata` = the note's
  * `ShieldCiphertext`). Participants may be EOAs or EIP-1271 contracts (see NitroUtils.isAuthorizedBy).
  */
-contract NitroRailgunAdjudicator is NitroAdjudicator {
+contract ArmadaNitroAdjudicator is NitroAdjudicator {
     using SafeERC20 for IERC20;
 
     /// @notice Allocation type for a payout that shields a fresh note in the pool.

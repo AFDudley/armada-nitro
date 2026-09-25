@@ -1,0 +1,14 @@
+services:
+  armada-nitro-deploy:
+    image: cerc/armada-nitro-foundry:local
+    entrypoint: ["armada-nitro-local"]
+    command: ["deploy"]
+    environment:
+      CERC_ETH_RPC_ENDPOINT: ${CERC_ETH_RPC_ENDPOINT:-http://armada-nitro-anvil:8545}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-15}
+      HUB_REVOCATION_DELAY: ${HUB_REVOCATION_DELAY:-60}
+    volumes:
+      - armada_nitro_deployments:/app/deployments
+
+volumes:
+  armada_nitro_deployments:

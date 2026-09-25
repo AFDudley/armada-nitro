@@ -175,7 +175,7 @@ contract ForceMove is IForceMove, StatusManager {
 
     /**
      * @notice Checks that the challengerSignature was created by one of the supplied participants.
-     * @dev nitro-railgun: a participant may authorize the challenge as an EOA or through EIP-1271
+     * @dev armada-nitro: a participant may authorize the challenge as an EOA or through EIP-1271
      * (NitroUtils.isAuthorizedBy).
      * @param supportedStateHash Forms part of the digest to be signed, along with the string 'forceMove'.
      * @param participants A list of addresses representing the participants of a channel.
@@ -238,7 +238,7 @@ contract ForceMove is IForceMove, StatusManager {
 
     /**
      * @notice Recover signatures for a variable part.
-     * @dev nitro-railgun: a signature counts for participant i if participant i authorized the state
+     * @dev armada-nitro: a signature counts for participant i if participant i authorized the state
      * hash as an EOA or through EIP-1271 (NitroUtils.isAuthorizedBy).
      * @param fixedPart Fixed Part of the states in the support proof.
      * @param signedVariablePart A signed variable part.

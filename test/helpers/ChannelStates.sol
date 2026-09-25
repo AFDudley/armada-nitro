@@ -5,7 +5,7 @@ import {Vm} from 'forge-std/Vm.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
-import {SHIELD_ALLOCATION_TYPE} from 'src/NitroRailgunAdjudicator.sol';
+import {SHIELD_ALLOCATION_TYPE} from 'src/ArmadaNitroAdjudicator.sol';
 import {ArmadaNotes} from './ArmadaNotes.sol';
 
 /**

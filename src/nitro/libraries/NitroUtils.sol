@@ -56,7 +56,7 @@ library NitroUtils {
 
     /**
      * @notice Gas forwarded to a contract participant's EIP-1271 `isValidSignature`.
-     * @dev nitro-railgun: bounded so a participant contract cannot make a counterparty's
+     * @dev armada-nitro: bounded so a participant contract cannot make a counterparty's
      * challenge or checkpoint run out of gas.
      */
     uint256 internal constant EIP1271_GAS = 100_000;
@@ -88,7 +88,7 @@ library NitroUtils {
 
     /**
      * @notice Check whether `participant` authorized `_d` with `sig`.
-     * @dev nitro-railgun: a participant authorizes a digest either as the ECDSA signer of `sig`, or,
+     * @dev armada-nitro: a participant authorizes a digest either as the ECDSA signer of `sig`, or,
      * when it is a contract, by accepting `sig` over `prefixedHash(_d)` through EIP-1271. The call is
      * a gas-capped staticcall that reads a single return word, so a hostile participant contract can
      * only refuse its own signatures; it cannot revert or exhaust the caller.

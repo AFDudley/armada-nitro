@@ -1,0 +1,13 @@
+services:
+  armada-nitro-scenario:
+    image: cerc/armada-nitro-foundry:local
+    entrypoint: ["armada-nitro-local"]
+    command: ["scenario"]
+    environment:
+      CERC_ETH_RPC_ENDPOINT: ${CERC_ETH_RPC_ENDPOINT:-http://armada-nitro-anvil:8545}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-15}
+    volumes:
+      - armada_nitro_deployments:/app/deployments
+
+volumes:
+  armada_nitro_deployments:

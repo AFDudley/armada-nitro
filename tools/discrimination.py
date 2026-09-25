@@ -45,7 +45,7 @@ ARMS: tuple[Arm, ...] = (
     Arm(
         name="deposit-binding-dropped",
         intent="depositFromNote credits whatever channel the submitter names, ignoring the proof's adaptParams",
-        file="src/NitroRailgunAdjudicator.sol",
+        file="src/ArmadaNitroAdjudicator.sol",
         find="transaction.boundParams.adaptParams == depositBinding(channelId, expectedHeld)",
         replace="true",
         tests=("test_depositFromNote_rejectsUnshieldBoundToAnotherChannel",),
@@ -53,7 +53,7 @@ ARMS: tuple[Arm, ...] = (
     Arm(
         name="expected-held-ignored",
         intent="a deposit signed against an older holding lands on top of later deposits",
-        file="src/NitroRailgunAdjudicator.sol",
+        file="src/ArmadaNitroAdjudicator.sol",
         find="require(held == expectedHeld, 'held != expectedHeld');",
         replace="",
         tests=("test_depositFromNote_rejectsStaleExpectedHeld",),
@@ -61,7 +61,7 @@ ARMS: tuple[Arm, ...] = (
     Arm(
         name="shield-payout-made-public",
         intent="a SHIELD allocation is paid as a public transfer to the npk-as-address instead of a fresh note",
-        file="src/NitroRailgunAdjudicator.sol",
+        file="src/ArmadaNitroAdjudicator.sol",
         find="if (allocation.allocationType == SHIELD) {",
         replace="if (false) {",
         tests=(

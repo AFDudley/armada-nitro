@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Jobs for the nitro-railgun local stack.
+# Jobs for the armada-nitro local stack.
 #   deploy    Armada's PrivacyPool (testing mode) + mock USDC, then the adjudicator and a hub custodian
 #   scenario  cooperative close, then a force-close that waits out the challenge window, then verify
 set -euo pipefail
 
-RPC="${CERC_ETH_RPC_ENDPOINT:-http://nitro-railgun-anvil:8545}"
+RPC="${CERC_ETH_RPC_ENDPOINT:-http://armada-nitro-anvil:8545}"
 # anvil's published development accounts 0-2 and a fixed FROST group scalar: local chain only.
 export DEPLOYER_KEY="${DEPLOYER_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
 export USER_KEY="${USER_KEY:-0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d}"
@@ -47,7 +47,7 @@ case "${1:-}" in
     run_script script/LocalScenario.s.sol --sig 'verify()'
     ;;
   *)
-    echo "usage: nitro-railgun-local deploy|scenario" >&2
+    echo "usage: armada-nitro-local deploy|scenario" >&2
     exit 64
     ;;
 esac
