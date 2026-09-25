@@ -1,0 +1,25 @@
+services:
+  armada-env-reconcile:
+    image: cerc/armada-nitro-env:local
+    working_dir: /src/armada-nitro/env
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        exec python3 -m reconciler \
+          --target "${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}" \
+          --rpc "${RECONCILER_RPC_URL:-http://armada-fixturenet-geth:8545}" \
+          --state /env \
+          --key-file "${DEPLOYER_KEY_FILE:-/env/deployer.key}" \
+          ${RECONCILER_ONLY:+--only "$RECONCILER_ONLY"} \
+          ${RECONCILER_VERIFY_ONLY:+--verify-only}
+    environment:
+      RECONCILER_TARGET: ${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}
+      RECONCILER_RPC_URL: ${RECONCILER_RPC_URL:-http://armada-fixturenet-geth:8545}
+      DEPLOYER_KEY_FILE: ${DEPLOYER_KEY_FILE:-/env/deployer.key}
+      RECONCILER_ONLY: ${RECONCILER_ONLY:-}
+      RECONCILER_VERIFY_ONLY: ${RECONCILER_VERIFY_ONLY:-}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:

@@ -46,3 +46,34 @@ Notes:
   is a freshly generated devnet with no existing peers/checkpoint to sync from.
 - The genesis service computes `GENESIS_TIMESTAMP` at container start (`date +%s`) so the
   chain begins near "now" instead of the generator's default of the Unix epoch.
+- geth's default `--miner.gasprice` (1,000,000 wei) is above this fixturenet's single-digit-wei
+  base fee, so a `cast` transaction bidding the base fee never clears it and is never mined;
+  `--miner.gasprice=1` fixes that.
+
+### Environment reconciler
+
+`armada-env-reconcile` brings the fixturenet to the target state described by
+`env/targets/fixturenet.json` (docs/ENVIRONMENT.md §3-§6) and writes a
+manifest to the `armada_env` named volume, bind-mounted to
+`<deployment>/data/armada_env` (it is declared in the fixturenet pod's
+compose file so `deploy create` records it, per `docker-compose-armada-fixturenet.yml`).
+The job sees it at `/env`.
+
+It needs the deployer key in a file under that same volume -- key files
+belong in the reconciler's state directory, never in the repository or on
+the target. Put it there once per deployment before the first run (on the
+fixturenet this is anvil account 0):
+
+```sh
+# The volume's real name is the compose project prefix + armada_env, e.g.:
+VOLUME=$(docker volume ls -q | grep armada_env)
+docker run --rm -v ${VOLUME}:/env alpine \
+  sh -c "printf '%s' 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 > /env/deployer.key"
+
+laconic-so deployment --dir <deployment> run-job armada-env-reconcile
+```
+
+A second run sends no transactions and rewrites a byte-identical manifest
+(`<deployment>/data/armada_env/manifest.json`). Setting `RECONCILER_VERIFY_ONLY=1`
+in the environment before `run-job` checks postconditions read-only, without
+deploying anything; `RECONCILER_ONLY=<module>` restricts the run to one module.

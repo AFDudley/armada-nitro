@@ -17,3 +17,7 @@ out/
 
 # forge-generated linking helpers
 /foundry-pp/
+
+# Python bytecode
+__pycache__/
+*.pyc

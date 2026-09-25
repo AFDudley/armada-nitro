@@ -5,3 +5,5 @@ containers:
   - cerc/armada-nitro-env
 pods:
   - armada-fixturenet
+jobs:
+  - armada-env-reconcile
