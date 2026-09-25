@@ -9,8 +9,10 @@ mainnet's code, byte for byte.
 ## Deliver
 - Module **usdc**:
   - Deploy with `stablecoin-evm`'s `scripts/deploy/deploy-fiat-token.s.sol`, driven by the environment variables that
-    script reads (name `USDC`, symbol `USDC`, currency `USD`, decimals 6; owner, masterMinter, pauser, blacklister,
-    lostAndFound = target parameters; on the fixturenet all are anvil account 0 except lostAndFound = account 9).
+    script reads (`TOKEN_NAME` `USDC`, `TOKEN_SYMBOL` `USDC`, `TOKEN_CURRENCY` `USD`, `TOKEN_DECIMALS` 6; owner,
+    masterMinter owner, pauser, blacklister = target parameters, anvil account 0 on the fixturenet; `PROXY_ADMIN_ADDRESS`
+    = anvil account 9, which must differ from every other role because FiatToken's proxy rejects non-admin calls from its
+    admin). The script sets lostAndFound to the owner (`initializeV2_1(owner)`); it is not a parameter.
   - It runs inside `cerc/armada-nitro-env`, which sets `FOUNDRY_DYNAMIC_TEST_LINKING=false`. With the Foundry 1.8.3
     default (`true`) the solc 0.6.12 build fails in generated `foundry-pp/` helpers.
   - Record `usdc.proxy`, `usdc.implementation`, `usdc.masterMinter`.
