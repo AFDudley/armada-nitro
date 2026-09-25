@@ -1,6 +1,6 @@
 # E6 Armada, armada_nitro, funding modules; manifest complete
 
-Depends on: E3 (usdc, cctp). Read `docs/ENVIRONMENT.md` §4–§6, §8, and in `/src/armada-poc` (commit `532bc064`):
+Depends on: E3b (usdc, cctp). Read `docs/ENVIRONMENT.md` §4–§6, §8, and in `/src/armada-poc` (commit `532bc064`):
 `scripts/deploy_privacy_pool.ts`, `config/networks.ts` (`CCTP_MODE`, `HUB_USDC`, `CCTP_TOKEN_MESSENGER`,
 `CCTP_MESSAGE_TRANSMITTER`, `CCTP_TOKEN_MINTER`, `HUB_CCTP_DOMAIN`, `DEPLOY_ENV`, `TREASURY_ADDRESS`),
 `hardhat.config.ts` (network `hub`: chain id 31337, anvil mnemonic), `lib/artifacts.ts` (`loadVerificationKeys`,

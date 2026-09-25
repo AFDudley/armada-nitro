@@ -1,6 +1,6 @@
 # E4 Aave module
 
-Depends on: E3. Read `docs/ENVIRONMENT.md` §2, §4–§6, §8, and in `/src/aave-v3-origin` (tag `v3.7.0`):
+Depends on: E3b. Read `docs/ENVIRONMENT.md` §2, §4–§6, §8, and in `/src/aave-v3-origin` (tag `v3.7.0`):
 `scripts/DeployAaveV3MarketBatched.sol`, `src/deployments/inputs/MarketInput.sol`, `DefaultMarketInput.sol`,
 `src/deployments/contracts/procedures/AaveV3HelpersProcedureTwo.sol` (deploys `StataTokenFactory`),
 `src/contracts/extensions/v3-config-engine/AaveV3ConfigEngine.sol` (`listAssets`), `src/contracts/extensions/stata-token/`.

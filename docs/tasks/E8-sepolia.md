@@ -5,7 +5,7 @@ Depends on: E7 green on the fixturenet. Prerequisite from the maintainer:
 - two test-account key files `~/.config/armada-nitro/sepolia-user{1,2}.key`, funded with Sepolia ETH and Circle
   Sepolia USDC (faucet.circle.com).
 
-Required funding: the fixturenet gas table (E3–E6) at current Sepolia gas prices, plus a 2× margin. Report the number
+Required funding: the fixturenet gas table (E3a–E6) at current Sepolia gas prices, plus a 2× margin. Report the number
 before sending anything.
 
 Read `docs/ENVIRONMENT.md` §4–§8.

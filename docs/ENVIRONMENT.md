@@ -106,7 +106,7 @@ recorded constant with provenance.
 | Module | Postcondition |
 |---|---|
 | weth | `extcodehash` equals mainnet WETH9's (`0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2`), recorded in `sources.lock.json` with the command and block. `deposit` 1 ETH then `withdraw` round-trips |
-| usdc | `name()`/`symbol()`/`decimals()` = `USDC`/`USDC`/`6`. `version()` equals Sepolia USDC's. `masterMinter()` = the target's. A minter configured by `masterMinter` can `mint`. Transfer works |
+| usdc | `name()`/`symbol()`/`decimals()` = `USDC`/`USDC`/`6`. `version()` equals Sepolia USDC's. `masterMinter()` = the target's. A minter configured by `masterMinter` can `mint`. Transfer works. The implementation's runtime equals mainnet USDC's implementation byte for byte after stripping the metadata trailer and zeroing library link slots (E3b) |
 | cctp | `messageTransmitter.localDomain()` = target domain. `tokenMessenger.localMessageTransmitter()` = transmitter. The TokenMinter lists USDC as a local token. `messageTransmitter.version()` equals the Sepolia v2 transmitter's |
 | aave | `getReserveData(usdc).aTokenAddress` ≠ 0. LTV, liquidation threshold, liquidation bonus, reserve factor and decimals equal mainnet's USDC reserve (read with `cast` from mainnet at a recorded block). `stata.asset()` = USDC. Depositing 100 USDC into the stata token and redeeming every share returns 100 USDC at index 1 |
 | lido | `wstETH.stETH()` = stETH. `submit` 1 ETH mints stETH. `wstETH.stEthPerToken()` = `1e18` (no oracle report ever). Every HashConsensus has zero members |
@@ -150,10 +150,11 @@ after the fixturenet is green.
 |---|---|---|
 | E1 | Fixturenet pod: upstream geth + lighthouse, Osaka at genesis | — |
 | E2 | Environment image and `sources.lock.json` | — |
-| E3 | Reconciler core; weth, usdc, cctp modules; `reconcile` job | E1, E2 |
-| E4 | Aave module | E3 |
-| E5 | Lido module | E3 |
-| E6 | Armada, armada_nitro, funding modules; manifest complete | E3 (armada needs usdc + cctp) |
+| E3a | Reconciler framework, weth module, `reconcile` job | E1, E2 |
+| E3b | usdc and cctp modules (USDC bytecode oracle against mainnet) | E3a |
+| E4 | Aave module | E3b |
+| E5 | Lido module | E3a |
+| E6 | Armada, armada_nitro, funding modules; manifest complete | E3b (armada needs usdc + cctp) |
 | E7 | Gates: `armada-env-verify`, `armada-nitro-e2e` | E4, E5, E6 |
 | E8 | Sepolia target | E7 green on the fixturenet; a funded Sepolia deployer key |
 

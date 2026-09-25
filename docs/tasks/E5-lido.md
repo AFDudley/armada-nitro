@@ -1,6 +1,6 @@
 # E5 Lido module
 
-Depends on: E3. Read `docs/ENVIRONMENT.md` §2, §4–§6, §8, and in `/src/lido-core` (tag `v4.0.1`): `scripts/dao-deploy.sh`,
+Depends on: E3a. Read `docs/ENVIRONMENT.md` §2, §4–§6, §8, and in `/src/lido-core` (tag `v4.0.1`): `scripts/dao-deploy.sh`,
 `scripts/run-migration.sh`, `scripts/scratch/scratch-deploy.ts`, `scripts/scratch/steps.json`,
 `scripts/scratch/steps/*.ts`, `scripts/scratch/deploy-params-testnet.toml`, and the repository's scratch-deploy docs.
 
