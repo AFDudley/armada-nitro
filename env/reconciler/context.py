@@ -95,12 +95,14 @@ class Context:
             )
         return result.stdout.strip()
 
-    def cast(self, *args: str) -> str:
-        """Run a read-only `cast` subcommand; returns stdout, stripped."""
-        return self._run(["cast", *args, "--rpc-url", self.rpc_url])
+    def cast(self, *args: str, rpc_url: str | None = None) -> str:
+        """Run a read-only `cast` subcommand; returns stdout, stripped.
+        `rpc_url` overrides the network being reconciled -- used by oracle
+        postconditions that read a reference chain (mainnet, Sepolia)."""
+        return self._run(["cast", *args, "--rpc-url", rpc_url or self.rpc_url])
 
-    def cast_json(self, *args: str) -> Any:
-        return json.loads(self.cast(*args))
+    def cast_json(self, *args: str, rpc_url: str | None = None) -> Any:
+        return json.loads(self.cast(*args, rpc_url=rpc_url))
 
     def forge(self, *args: str, cwd: str | None = None) -> str:
         result = subprocess.run(["forge", *args], capture_output=True, text=True, cwd=cwd)
