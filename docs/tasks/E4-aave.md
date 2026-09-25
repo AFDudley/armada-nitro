@@ -44,5 +44,36 @@ evidence. A difference in LTV, liquidation threshold, liquidation bonus, decimal
 Also paste: deposit 100 USDC into `waUSDC` from the deployer, `balanceOf`, `redeem` all shares, and the final USDC
 balance change.
 
+## As built (findings from the run)
+- `EnvMarketInput.sol` is not a literal `is MarketInput`: `MarketInput._getMarketInput` (the abstract this would
+  override) is declared `pure`, and Solidity forbids widening an override's state mutability from `pure` to `view`
+  ("Overriding function changes state mutability from 'pure' to 'view'", reproduced against this image's forge 1.8.3
+  with a two-line contract). Reading `AAVE_WRAPPED_NATIVE_TOKEN` needs `vm.envAddress`, declared `view` in
+  forge-std's `Vm.sol` -- so a `pure` override could not call it, and could not read an `immutable` set from one in a
+  constructor either (immutable reads are also rejected from `pure` functions -- confirmed by the same repro
+  technique). `EnvMarketInput.sol` instead exposes the same four-struct shape through a plain `view` function that
+  `script/DeployMarket.s.sol` calls directly, feeding the same `AaveV3BatchOrchestration.deployAaveV3` that
+  `DeployAaveV3MarketBatchedBase.run()` calls internally.
+- `script/DeployMarket.s.sol` does not chain through `DeployAaveV3MarketBatchedBase.run()` at all (even though that
+  base contract itself needs no edits to be driven): its post-deployment step calls `MetadataReporter`, which shells
+  out via `vm.ffi` to `git`/`date`/`cast` and writes a timestamped report file -- convenience logging with no
+  postcondition depending on it. The module's own script calls `AaveV3BatchOrchestration.deployAaveV3` directly (the
+  same library call `DeployAaveV3MarketBatchedBase.run()` makes) and writes the exact addresses the manifest needs to
+  `reports/aave-market.json` itself.
+- `AaveV3ConfigEngine`'s `Listing.liqBonus` is the bonus **delta** above 100%, not the raw on-chain
+  `liquidationBonus` (`CollateralEngine.sol`: `poolConfigurator.configureReserveAsCollateral(asset, ltv, liqThreshold,
+  100_00 + updates[i].liqBonus)`). Passing mainnet's raw reserve value (10450) directly reverted every deploy attempt
+  with `INVALID_LT_LB_RATIO` (7800 * (10000+10450)/10000 ≈ 159.5% > 100%). Fixed by passing `liquidationBonus -
+  100_00` (450, i.e. a 4.50% bonus) from `env/aave/mainnet-usdc-reserve.json`'s raw value instead.
+- `cast call`'s tuple decoder wraps a single-field struct return (`DataTypes.ReserveConfigurationMap`, the first field
+  of `IPool.getReserveData`'s `ReserveDataLegacy`) in its own parentheses on that line (e.g.
+  `(7237...420 [7.237e75])`), which needs stripping before parsing as a plain integer.
+- Fixturenet gas: aave 52,933,580 (on top of E6's weth 727,366; usdc 8,008,767; cctp 12,478,907; armada 33,711,797;
+  armada_nitro 6,588,924; funding 273,312); total across all seven modules 114,722,653.
+- The fixturenet's listed USDC reserve configuration word came out byte-for-byte identical to mainnet's
+  (`7237005577332262213973186574461225012726266025894705449840963830289119321420` both sides, read at fixturenet head
+  and mainnet block 26057104) -- every bit matches, not just the five gated fields (ltv, liquidation threshold,
+  liquidation bonus, decimals, reserve factor); no bit needed explaining.
+
 ## Out of scope
 Other reserves, borrowing, incentives, Lido, Armada.
