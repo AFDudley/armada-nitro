@@ -134,7 +134,7 @@ after the fixturenet is green.
 
 ## 8. Worker protocol (localfirst)
 
-1. Work on kelce in `~/src/armada-nitro`, on branch `task/<id>` from `main`. `export PATH=$HOME/.foundry/bin:$PATH`.
+1. Work on kelce in `~/code/git_puller/repos/armada-nitro`, on branch `task/<id>` from `main`. `export PATH=$HOME/.foundry/bin:$PATH`.
    laconic-so is `~/bin/laconic-so`.
 2. Do only what the brief says. If a fact in the brief is wrong (a path, a signature, a version, a script's
    behavior), stop and report the discrepancy with evidence instead of improvising.

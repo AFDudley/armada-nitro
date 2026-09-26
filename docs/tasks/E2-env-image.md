@@ -35,7 +35,7 @@ install at job time).
 
 ## Acceptance (paste output)
 ```sh
-~/bin/laconic-so --stack ~/src/armada-nitro/stack/stacks/armada-nitro-fixturenet build-containers --include cerc/armada-nitro-env
+~/bin/laconic-so --stack ~/code/git_puller/repos/armada-nitro/stack/stacks/armada-nitro-fixturenet build-containers --include cerc/armada-nitro-env
 docker run --rm cerc/armada-nitro-env:local sh -c 'forge --version; node --version; yarn --version; python3 --version;
   for d in /src/*; do printf "%s " $d; git -C $d rev-parse HEAD 2>/dev/null || echo "(no git)"; done'
 ```
