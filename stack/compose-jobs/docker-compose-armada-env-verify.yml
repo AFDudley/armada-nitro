@@ -19,10 +19,9 @@ services:
           --key-file "${DEPLOYER_KEY_FILE:-/env/deployer.key}" \
           --verify-only
 
-        # This job's container is fresh -- the armada module's own circuit-build fetch
-        # (env/reconciler/modules/armada.py, _ensure_circuits_fetched) only happened inside the
-        # armada-env-reconcile job's now-discarded container. Reuse that exact function (same
-        # pinned tag/tarball/SHA256, not a re-derived download) rather than re-fetching by hand.
+        # Circuits are baked into the image (docs/tasks/E9-operability.md); this verifies them
+        # (armada.py's _ensure_circuits_fetched, backed by reconciler.modules._circuits.verify())
+        # against env/sources.lock.json's armada-circuits pins -- it never downloads.
         python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()"
 
         # The armada module's job container (armada-env-reconcile) writes Armada's own

@@ -45,5 +45,15 @@ RUN set -e \
 COPY . /src/armada-nitro
 RUN set -e && cd /src/armada-nitro && forge build
 
+# Armada's circuit build (docs/tasks/E9-operability.md): fetched, verified, and
+# extracted once, here, instead of by each job at run time. Pins (repo, release tag,
+# tarball SHA-256, SHA256SUMS SHA-256) come from env/sources.lock.json's
+# `armada-circuits` entry; a wrong pin fails this step, and so the image build. Jobs
+# call the same module's verify() (env/reconciler/modules/_circuits.py) against the
+# circuits baked in here -- they never download.
+RUN set -e \
+  && cd /src/armada-nitro/env \
+  && python3 -c "from reconciler.modules import _circuits; _circuits.fetch()"
+
 # Fail the build if the active Foundry version drifted from v1.8.3.
 RUN forge --version | grep -q "Version: 1.8.3"

@@ -11,9 +11,12 @@ Osaka active at genesis.
 
 ```sh
 # 1. Generate the deployment spec (maps geth's 8545/8546 and the beacon's 5052 to
-#    127.0.0.1 on the host)
+#    127.0.0.1 on the host). --config DEPLOYER_KEY=<key> puts the reconciler's deployer
+#    key into the spec's `config:` section (on the fixturenet, anvil account 0) -- see
+#    "Environment reconciler" below.
 laconic-so --stack stack/stacks/armada-nitro-fixturenet deploy init \
   --map-ports-to-host localhost-same \
+  --config DEPLOYER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
   --output ~/deployments/armada-fixturenet-e1-spec.yml
 
 # 2. Create the deployment directory from the spec
@@ -59,17 +62,19 @@ manifest to the `armada_env` named volume, bind-mounted to
 compose file so `deploy create` records it, per `docker-compose-armada-fixturenet.yml`).
 The job sees it at `/env`.
 
-It needs the deployer key in a file under that same volume -- key files
-belong in the reconciler's state directory, never in the repository or on
-the target. Put it there once per deployment before the first run (on the
-fixturenet this is anvil account 0):
+The job needs the deployer key, which it takes from the deployment's own configuration --
+never from the repository or the image. Put it in the spec's `config:` section with
+`deploy init --config DEPLOYER_KEY=<key>` (on the fixturenet, anvil account 0; see
+"Commands" above), which `deploy create` turns into the deployment's `config.env`, read by
+every job as `$DEPLOYER_KEY`. On its first run, `armada-env-reconcile` writes that key to
+`<state>/deployer.key` (mode 0600) if the file is not already there; later runs, and the
+gate jobs (which share the same `armada_env` volume), find it already in place. A
+deployment created without `DEPLOYER_KEY` in its config -- and with no key file placed by
+hand -- fails the job, naming the missing variable. (The key can still be placed by hand
+instead, e.g. for a deployment created before this option existed: write it directly to
+`<state>/deployer.key` under the `armada_env` volume.)
 
 ```sh
-# The volume's real name is the compose project prefix + armada_env, e.g.:
-VOLUME=$(docker volume ls -q | grep armada_env)
-docker run --rm -v ${VOLUME}:/env alpine \
-  sh -c "printf '%s' 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 > /env/deployer.key"
-
 laconic-so deployment --dir <deployment> run-job armada-env-reconcile
 ```
 
@@ -120,16 +125,24 @@ laconic-so deployment --dir <deployment> run-job armada-nitro-e2e
      the channelId) comes from the job environment. Ends with `verified: both channels paid the
      user by shielding a note`, read from chain state and the pool's `Shield` logs.
 
+Both jobs need Armada's compiled circuit build on disk (`/src/armada-circuits/build`) for
+the artifacts `lib/sdk/armada-artifacts.ts` loads. It is baked into `cerc/armada-nitro-env`
+at image build time (`stack/container-build/cerc-armada-nitro-env/Dockerfile`, pinned in
+`env/sources.lock.json`'s `armada-circuits` entry); every job, including the first
+`armada-env-reconcile`, only verifies the baked-in circuits' SHA-256 and never downloads
+them (docs/tasks/E9-operability.md).
+
 ### Full sequence
 
 ```sh
 laconic-so --stack stack/stacks/armada-nitro-fixturenet build-containers
 laconic-so --stack stack/stacks/armada-nitro-fixturenet deploy init \
-  --map-ports-to-host localhost-same --output ~/deployments/armada-fixturenet-spec.yml
+  --map-ports-to-host localhost-same \
+  --config DEPLOYER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+  --output ~/deployments/armada-fixturenet-spec.yml
 laconic-so --stack stack/stacks/armada-nitro-fixturenet deploy create \
   --spec-file ~/deployments/armada-fixturenet-spec.yml --deployment-dir ~/deployments/armada-fixturenet
 laconic-so deployment --dir ~/deployments/armada-fixturenet start
-# place the deployer key (see "Environment reconciler" above), then:
 laconic-so deployment --dir ~/deployments/armada-fixturenet run-job armada-env-reconcile
 laconic-so deployment --dir ~/deployments/armada-fixturenet run-job armada-env-reconcile   # sends nothing
 laconic-so deployment --dir ~/deployments/armada-fixturenet run-job armada-env-verify

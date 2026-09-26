@@ -17,9 +17,8 @@ services:
       - |
         set -e
 
-        # This job's container is fresh -- reuse the armada module's own circuit-build fetch
-        # (same pinned tag/tarball/SHA256) rather than re-fetching by hand; see
-        # docker-compose-armada-env-verify.yml for the same step and its rationale.
+        # Circuits are baked into the image (docs/tasks/E9-operability.md); this verifies them
+        # rather than downloading -- see docker-compose-armada-env-verify.yml for the same step.
         (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
 
         # ---- stage 1: env/gates/nitro-e2e/prepare.ts, with armada-poc's toolchain + lib/sdk ----

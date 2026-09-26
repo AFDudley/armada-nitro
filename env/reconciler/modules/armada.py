@@ -18,15 +18,16 @@ drives both, they just don't reach `deployHub()` the way one might expect):
    `deploy_privacy_pool.ts`, both with the same environment.
 
 2. `loadVerificationKeys` (step 9) needs Armada's own compiled circuit artifacts on
-   disk (`lib/sdk/armada-artifacts.ts`, fixed path `/src/armada-circuits/build/<n>x<m>/`),
-   fetched by `scripts/fetch-circuits.sh` -- which shells out to the `gh` CLI, not
-   present in this image (env/sources.lock.json's toolchain list: git, jq, python3,
-   curl, ca-certificates, Foundry, Node/yarn; no `gh`). `_ensure_circuits_fetched` below
-   reimplements that script's download+verify (same repo, tag, tarball, and SHA256
-   pins -- copied from fetch-circuits.sh, not re-derived) using a plain HTTPS GET
-   instead: GitHub serves public release assets over anonymous HTTPS, so no `gh` login
-   is needed. The container filesystem is discarded after the job, so this re-fetches
-   every time apply() actually deploys -- but that is only ever the first run.
+   disk (`lib/sdk/armada-artifacts.ts`, fixed path `/src/armada-circuits/build/<n>x<m>/`).
+   Upstream fetches those with `scripts/fetch-circuits.sh`, which shells out to the `gh`
+   CLI, not present in this image. Here they are baked into the image at build time
+   (stack/container-build/cerc-armada-nitro-env/Dockerfile, `_circuits.fetch()`) from
+   the same repo/tag/SHA-256 pins as fetch-circuits.sh, now recorded once in
+   env/sources.lock.json's `armada-circuits` entry. `_ensure_circuits_fetched` below
+   only verifies those baked-in circuits (`_circuits.verify()`) -- it never downloads at
+   job time (docs/tasks/E9-operability.md). The container filesystem is discarded after
+   the job, so this re-verifies every time apply() actually deploys -- but that is only
+   ever the first run, and verifying is a local SHA-256 pass, not a network fetch.
 """
 from __future__ import annotations
 
@@ -34,13 +35,10 @@ import hashlib
 import json
 import os
 import subprocess
-import tarfile
-import tempfile
-import urllib.request
 from pathlib import Path
 
 from reconciler.context import CastError, Context, resolve_target_mode, to_int
-from reconciler.modules import _wallet
+from reconciler.modules import _circuits, _wallet
 
 _ARMADA_POC = Path("/src/armada-poc")
 _HUB_POOL_DEPLOYMENT_FILE = _ARMADA_POC / "deployments" / "privacy-pool-hub.json"
@@ -52,7 +50,7 @@ _TREASURY_ACCOUNT_INDEX = 7
 
 # Recorded in the manifest verbatim (docs/ENVIRONMENT.md §5); this is the base URL a
 # runtime SDK later fetches circuits from, not where this module gets them (see
-# _ensure_circuits_fetched).
+# _ensure_circuits_fetched / reconciler.modules._circuits).
 _ARTIFACTS_BASE_URL = "https://circuits.knowable.run/v0.1.0-dev"
 
 # The demo3 pool on Sepolia this environment's verification keys must match
@@ -70,16 +68,6 @@ _TESTING_ARTIFACT_CONFIGS: list[tuple[int, int]] = [
     (1, 3), (3, 3), (4, 3),
 ]
 
-# scripts/fetch-circuits.sh's own pins, copied verbatim -- see module docstring point 2.
-_CIRCUITS_REPO = "ship-armada/armada-circuits"
-_CIRCUITS_TAG = "v0.1.0-dev"
-_CIRCUITS_TARBALL = f"armada-circuits-{_CIRCUITS_TAG}.tgz"
-_CIRCUITS_TARBALL_SHA256 = "e7c4e5eac92973a9d43733efa240f52793b8609eb338db0bbd3a7e1550be369a"
-_CIRCUITS_SUMSFILE_SHA256 = "e5e21a52db55e776a6ad7d9c2fbd368a9ed93cfe376954e242ad299341fe3f2e"
-# lib/sdk/armada-artifacts.ts's CIRCUITS_BUILD: resolve(__dirname, '../../..', 'armada-circuits', 'build')
-# from /src/armada-poc/lib/sdk -- i.e. a sibling of the armada-poc checkout itself.
-_CIRCUITS_BUILD_DIR = Path("/src/armada-circuits/build")
-
 
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -90,43 +78,9 @@ def _sha256_file(path: Path) -> str:
 
 
 def _ensure_circuits_fetched() -> None:
-    stamp = _CIRCUITS_BUILD_DIR / f".fetched-{_CIRCUITS_TAG}"
-    if stamp.exists() and stamp.read_text().strip() == _CIRCUITS_TARBALL_SHA256:
-        return
-
-    base_url = f"https://github.com/{_CIRCUITS_REPO}/releases/download/{_CIRCUITS_TAG}"
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        tarball_path = tmp_path / _CIRCUITS_TARBALL
-        sums_path = tmp_path / "SHA256SUMS"
-        urllib.request.urlretrieve(f"{base_url}/{_CIRCUITS_TARBALL}", tarball_path)
-        urllib.request.urlretrieve(f"{base_url}/SHA256SUMS", sums_path)
-
-        actual = _sha256_file(tarball_path)
-        if actual != _CIRCUITS_TARBALL_SHA256:
-            raise CastError(f"{_CIRCUITS_TARBALL} sha256 = {actual}, expected {_CIRCUITS_TARBALL_SHA256}")
-        actual = _sha256_file(sums_path)
-        if actual != _CIRCUITS_SUMSFILE_SHA256:
-            raise CastError(f"SHA256SUMS sha256 = {actual}, expected {_CIRCUITS_SUMSFILE_SHA256}")
-
-        _CIRCUITS_BUILD_DIR.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(tarball_path) as tar:
-            tar.extractall(_CIRCUITS_BUILD_DIR)
-
-        # Belt-and-braces, mirroring fetch-circuits.sh: verify every extracted file
-        # against the per-file manifest (the SHA256SUMS lines for the tarball itself,
-        # already checked above, refer to the archive, not an extracted file).
-        for line in sums_path.read_text().splitlines():
-            line = line.strip()
-            if not line or _CIRCUITS_TARBALL in line:
-                continue
-            expected, _, rel_path = line.partition("  ")
-            file_path = _CIRCUITS_BUILD_DIR / rel_path
-            actual = _sha256_file(file_path)
-            if actual != expected:
-                raise CastError(f"{rel_path} sha256 = {actual}, expected {expected} (post-extraction)")
-
-        stamp.write_text(_CIRCUITS_TARBALL_SHA256)
+    """The circuits are baked into the image (see module docstring point 2); this only
+    verifies them, and never downloads at job time."""
+    _circuits.verify()
 
 
 def _run_hardhat(script: str, env: dict[str, str]) -> str:

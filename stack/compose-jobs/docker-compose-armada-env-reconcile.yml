@@ -5,6 +5,25 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
+        set -e
+        # The deployer key comes from the deployment's own config (deploy init --config
+        # DEPLOYER_KEY=<key>, which laconic-so turns into config.env, which docker
+        # compose reads into DEPLOYER_KEY here) -- never from the repository or the
+        # image. Written once, mode 0600, on the first reconcile of a fresh deployment;
+        # later runs (and armada-env-verify/armada-nitro-e2e, which share this volume)
+        # find it already in place. Every reference below repeats the same
+        # DEPLOYER_KEY_FILE/DEPLOYER_KEY compose default rather than a local shell
+        # variable, so docker compose's own ${VAR} interpolation of this block resolves
+        # every occurrence the same way (an unset local shell variable referenced here
+        # would otherwise be blanked at compose-parse time, not left for this shell).
+        if [ ! -f "${DEPLOYER_KEY_FILE:-/env/deployer.key}" ]; then
+          if [ -z "${DEPLOYER_KEY:-}" ]; then
+            echo "armada-env-reconcile: no deployer key at ${DEPLOYER_KEY_FILE:-/env/deployer.key} and the DEPLOYER_KEY config variable is not set (put the key in the deployment's config, e.g. deploy init --config DEPLOYER_KEY=<key>, or place the file by hand)" >&2
+            exit 1
+          fi
+          printf '%s' "${DEPLOYER_KEY:-}" > "${DEPLOYER_KEY_FILE:-/env/deployer.key}"
+          chmod 600 "${DEPLOYER_KEY_FILE:-/env/deployer.key}"
+        fi
         exec python3 -m reconciler \
           --target "${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}" \
           --rpc "${RECONCILER_RPC_URL:-http://armada-fixturenet-geth:8545}" \
@@ -16,6 +35,7 @@ services:
       RECONCILER_TARGET: ${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}
       RECONCILER_RPC_URL: ${RECONCILER_RPC_URL:-http://armada-fixturenet-geth:8545}
       DEPLOYER_KEY_FILE: ${DEPLOYER_KEY_FILE:-/env/deployer.key}
+      DEPLOYER_KEY: ${DEPLOYER_KEY:-}
       RECONCILER_ONLY: ${RECONCILER_ONLY:-}
       RECONCILER_VERIFY_ONLY: ${RECONCILER_VERIFY_ONLY:-}
     volumes:
