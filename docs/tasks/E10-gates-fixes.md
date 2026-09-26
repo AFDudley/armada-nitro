@@ -30,11 +30,19 @@ On a fresh fixturenet (E9: no manual steps), paste the output of `run-job armada
 armada-nitro-e2e`. Both must exit 0.
 
 Discrimination, in scratch copies (revert after); each must make its gate fail, and you paste the failure line:
-- (a) `pool-e2e.ts` expects the unshield recipient's balance change without subtracting the unshield fee.
+- (a) `pool-e2e.ts` expects the shield note without subtracting the shield fee. (Unshield is free by Armada's spec,
+  `TransactModule._transferTokenOut`, so an unshield-fee mutation would not discriminate.)
 - (b) The early settle attempt is removed from the scenario's expected-revert check, i.e. the early settle is expected
   to succeed.
 - (c) Run the gate with `CHALLENGE_DURATION=1`. The early-settle step must still see a revert, or you report why the
   one-second window cannot be observed on 2 s slots and pick the smallest duration that can.
+
+## As built
+- Unshield is fee-free (`unshieldFee()` is deprecated and always 0); shield fee is inclusive, 50 bps here.
+- The early-settle attempt is a plain `call` inside the script, not broadcast, so a revert does not abort `forge
+  script --broadcast`.
+- Gates spend test-account USDC; each gate job first runs `reconciler --only funding`, which mints only the
+  shortfall. Without it, the funding postcondition failed after one run of the gates (account 1 at 80 USDC).
 
 ## Out of scope
 Aave/Lido assets in channels (E11), the watchtower (E15).

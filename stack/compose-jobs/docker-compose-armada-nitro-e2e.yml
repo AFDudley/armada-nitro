@@ -17,6 +17,13 @@ services:
       - |
         set -e
 
+        # Gates spend test-account USDC (shields, channel deposits); top the accounts back up to the
+        # funding target first so the funding postcondition and later gate runs hold. funding.py
+        # mints only the shortfall and sends nothing when balances are already at target.
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc http://127.0.0.1:8545 \
+          --state /env --key-file /env/deployer.key --only funding)
+
         # Circuits are baked into the image (docs/tasks/E9-operability.md); this verifies them
         # rather than downloading -- see docker-compose-armada-env-verify.yml for the same step.
         (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")

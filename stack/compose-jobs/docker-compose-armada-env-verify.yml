@@ -12,6 +12,13 @@ services:
     command:
       - |
         set -e
+
+        # Gates spend test-account USDC (shields, channel deposits); top the accounts back up to the
+        # funding target first so the funding postcondition and later gate runs hold. funding.py
+        # mints only the shortfall and sends nothing when balances are already at target.
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc http://127.0.0.1:8545 \
+          --state /env --key-file /env/deployer.key --only funding)
         python3 -m reconciler \
           --target "${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}" \
           --rpc "${RECONCILER_RPC_URL:-http://127.0.0.1:8545}" \
