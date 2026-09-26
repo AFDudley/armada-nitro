@@ -7,3 +7,5 @@ pods:
   - armada-fixturenet
 jobs:
   - armada-env-reconcile
+  - armada-env-verify
+  - armada-nitro-e2e

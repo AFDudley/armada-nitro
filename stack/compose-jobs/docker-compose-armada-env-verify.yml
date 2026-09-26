@@ -1,0 +1,49 @@
+services:
+  armada-env-verify:
+    image: cerc/armada-nitro-env:local
+    # lib/sdk/chain-config.ts (loadNetworkIntoEngine's merkle-tree scan, used by
+    # scripts/capture/e2e-armada-circuits.ts) hardcodes the RPC for chain 31337 to
+    # http://localhost:8545 -- it ignores HUB_RPC. Host networking is what makes that
+    # resolve to the fixturenet: geth's 8545 is published to 127.0.0.1:8545 on the host
+    # (stack/README.md, `--map-ports-to-host localhost-same`).
+    network_mode: host
+    working_dir: /src/armada-nitro/env
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        python3 -m reconciler \
+          --target "${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}" \
+          --rpc "${RECONCILER_RPC_URL:-http://127.0.0.1:8545}" \
+          --state /env \
+          --key-file "${DEPLOYER_KEY_FILE:-/env/deployer.key}" \
+          --verify-only
+
+        # This job's container is fresh -- the armada module's own circuit-build fetch
+        # (env/reconciler/modules/armada.py, _ensure_circuits_fetched) only happened inside the
+        # armada-env-reconcile job's now-discarded container. Reuse that exact function (same
+        # pinned tag/tarball/SHA256, not a re-derived download) rather than re-fetching by hand.
+        python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()"
+
+        # The armada module's job container (armada-env-reconcile) writes Armada's own
+        # deployment files into the armada_env state dir before its container is discarded
+        # (env/reconciler/modules/armada.py); restore them into this container's writable
+        # copy of armada-poc so scripts/capture/e2e-armada-circuits.ts's loadDeployment()
+        # finds them (it reads deployments/privacy-pool-hub.json relative to /src/armada-poc).
+        mkdir -p /src/armada-poc/deployments
+        cp /env/armada-deployments/privacy-pool-hub.json /src/armada-poc/deployments/privacy-pool-hub.json
+        cp /env/armada-deployments/hub-v3.json /src/armada-poc/deployments/hub-v3.json
+
+        cd /src/armada-poc
+        HUB_RPC="${HUB_RPC:-http://127.0.0.1:8545}" DEPLOY_ENV=local CCTP_MODE=real \
+          npx hardhat run scripts/capture/e2e-armada-circuits.ts --network hub
+    environment:
+      RECONCILER_TARGET: ${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}
+      RECONCILER_RPC_URL: ${RECONCILER_RPC_URL:-http://127.0.0.1:8545}
+      DEPLOYER_KEY_FILE: ${DEPLOYER_KEY_FILE:-/env/deployer.key}
+      HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:

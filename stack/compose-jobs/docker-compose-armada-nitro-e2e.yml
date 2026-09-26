@@ -1,0 +1,66 @@
+services:
+  armada-nitro-e2e:
+    image: cerc/armada-nitro-env:local
+    # Same reason as armada-env-verify: env/gates/nitro-e2e/prepare.ts uses
+    # lib/sdk/chain-config.ts's hardcoded http://localhost:8545 for chain 31337 (merkle-tree
+    # scan). Host networking makes that resolve to geth's host-published 127.0.0.1:8545.
+    #
+    # Every `$NAME` in the command block below is written `$$NAME` (docker compose's escape for
+    # a literal `$`) and read from the container's real environment (set once, with defaults, by
+    # the `environment:` section) -- docker compose interpolates any *unescaped* `$NAME`/`${NAME}`
+    # in this file against the *host*'s environment at parse time, which would otherwise silently
+    # blank a variable this container's own shell was meant to read at runtime.
+    network_mode: host
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # This job's container is fresh -- reuse the armada module's own circuit-build fetch
+        # (same pinned tag/tarball/SHA256) rather than re-fetching by hand; see
+        # docker-compose-armada-env-verify.yml for the same step and its rationale.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # ---- stage 1: env/gates/nitro-e2e/prepare.ts, with armada-poc's toolchain + lib/sdk ----
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        (
+          cd /src/armada-poc
+          MANIFEST_PATH="$$MANIFEST_PATH" \
+          DEPOSITS_OUTPUT="$$DEPOSITS_PATH" \
+          CHALLENGE_DURATION="$$CHALLENGE_DURATION" \
+          HUB_RPC="$$HUB_RPC" DEPLOY_ENV=local CCTP_MODE=real \
+          NITRO_E2E_BAD_ADAPT_PARAMS="$$NITRO_E2E_BAD_ADAPT_PARAMS" \
+          NITRO_E2E_BAD_ADAPT_CONTRACT="$$NITRO_E2E_BAD_ADAPT_CONTRACT" \
+            npx hardhat run scripts/gates/prepare.ts --network hub
+        )
+
+        # ---- stage 2: script/FixturenetScenario.s.sol -- cooperative close, then force close ----
+        export KEYS_DIR=/env
+
+        run_script() {
+          forge script "$$@" --rpc-url "$$HUB_RPC" --slow --broadcast
+        }
+
+        run_script script/FixturenetScenario.s.sol --sig 'setUpHub()'
+        run_script script/FixturenetScenario.s.sol --sig 'cooperativeClose()'
+        run_script script/FixturenetScenario.s.sol --sig 'openAndChallenge()'
+        echo "waiting out the $${CHALLENGE_DURATION}s challenge window"
+        sleep $$((CHALLENGE_DURATION + 3))
+        run_script script/FixturenetScenario.s.sol --sig 'settle()'
+        forge script script/FixturenetScenario.s.sol --sig 'verify()' --rpc-url "$$HUB_RPC"
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/nitro-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      DELEGATE_KEY: ${DELEGATE_KEY:-0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a}
+      HUB_GROUP_SCALAR: ${HUB_GROUP_SCALAR:-0xa4ddf31f7f32ba696f14ce50ecf3f21e3e100e83bdf47966e7b07468e9500b6e}
+      NITRO_E2E_BAD_ADAPT_PARAMS: ${NITRO_E2E_BAD_ADAPT_PARAMS:-}
+      NITRO_E2E_BAD_ADAPT_CONTRACT: ${NITRO_E2E_BAD_ADAPT_CONTRACT:-}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
