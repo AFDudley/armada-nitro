@@ -37,5 +37,24 @@ for h in <hashConsensus…>; do cast call $h "getMembers()(address[],uint256[])"
 ```
 Report the Lido deploy's total gas and wall time.
 
+## As built (findings from the run)
+- The scratch deploy runs through Lido's own `STEPS_FILE` and `SCRATCH_DEPLOY_CONFIG` overrides
+  (`env/lido/steps-fixturenet.json`, `env/lido/deploy-params-fixturenet.toml`); lido-core is not edited.
+- Steps skipped:
+  - `0135`/`0140` deploy and plug the Community Staking Module and Curated Module v2 from a separate repository.
+    `0140` configures them by impersonating the Aragon Agent (`hardhat_impersonateAccount`), which real geth does
+    not support.
+  - `0150-transfer-roles` hands the OpenZeppelin admin roles to the Agent. Consequence: the deployer keeps
+    `DEFAULT_ADMIN_ROLE` on the oracle contracts (verified on HashConsensus). Mainnet Lido's roles are held by its DAO.
+- Staking starts paused, and only the Agent may resume it. The module resumes it with a real Aragon vote
+  (TokenManager → Voting, 360 s vote window), using LDO voting power that the params file gives the deployer through
+  a `vesting.holders` entry.
+- The deposit contract is the fixturenet's genesis one (`metadata/deposit_contract.txt`, mounted into the job
+  read-only at `/genesis`).
+- Fixturenet gas: lido 174,944,813. A full fresh reconcile of all eight modules totals 300,229,466 gas. Lido's wall
+  time was not measured separately.
+- Verified: a second run sent nothing; `stEthPerToken` = 1e18 after a submit; submitting 1 ETH mints 1 stETH; both
+  HashConsensus have zero members. Adding a member makes `--verify-only` fail naming it.
+
 ## Out of scope
 Configuring the oracle, running `lido-oracle`, staking modules beyond what the scratch deploy creates, withdrawals.
