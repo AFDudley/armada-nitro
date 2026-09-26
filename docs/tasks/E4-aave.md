@@ -68,8 +68,13 @@ balance change.
 - `cast call`'s tuple decoder wraps a single-field struct return (`DataTypes.ReserveConfigurationMap`, the first field
   of `IPool.getReserveData`'s `ReserveDataLegacy`) in its own parentheses on that line (e.g.
   `(7237...420 [7.237e75])`), which needs stripping before parsing as a plain integer.
-- Fixturenet gas: aave 52,933,580 (on top of E6's weth 727,366; usdc 8,008,767; cctp 12,478,907; armada 33,711,797;
-  armada_nitro 6,588,924; funding 273,312); total across all seven modules 114,722,653.
+- Fixturenet gas on a fresh chain: aave 63,495,580. This run first recorded 52,933,580 on a chain where an earlier
+  attempt had already deployed the five Aave logic libraries: `forge script` deploys linked libraries through the
+  CREATE2 deployer (`0x4e59b448…`, predeployed by the genesis generator) and skips any that already exist. The
+  difference (10,561,952 for BorrowLogic, SupplyLogic, PoolLogic, LiquidationLogic, FlashLoanLogic, plus 48 gas of
+  calldata bytes) is not a reporting bug; `gasUsed` sums the receipts of what apply() broadcast. The same effect on
+  usdc (SignatureChecker, 428,254) explains E3b's 7,580,525 versus 8,008,767 fresh. Gas figures in these docs are
+  fresh-chain values.
 - The fixturenet's listed USDC reserve configuration word came out byte-for-byte identical to mainnet's
   (`7237005577332262213973186574461225012726266025894705449840963830289119321420` both sides, read at fixturenet head
   and mainnet block 26057104) -- every bit matches, not just the five gated fields (ltv, liquidation threshold,
