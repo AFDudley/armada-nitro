@@ -1,0 +1,30 @@
+{
+  "_comment": "Reference staking-router module list from a full scratch deploy on a real Hardhat node (hardhat's in-process EVM exposed over JSON-RPC via `npx hardhat node`, so step 0135's external CSM/CMv2 deploy runs for real -- see env/lido/tools/run-capture.sh). Produced by env/lido/tools/capture-0140-calls.ts. Used by env/reconciler/modules/lido.py's verify() to check the fixturenet's staking router lists the same modules (docs/tasks/E12-slices/s4.md).",
+  "command": "env/lido/tools/run-capture.sh (NETWORK=local-devnet RUN_NETWORK=localhost yarn hardhat --network localhost run --no-compile scripts/capture-0140-calls.ts)",
+  "modules": [
+    {
+      "id": 1,
+      "name": "curated-onchain-v1",
+      "stakingModuleAddress": "0x13765f00119e45c63004aC0587a45a889171EFcA",
+      "contractName": "NodeOperatorsRegistry"
+    },
+    {
+      "id": 2,
+      "name": "SimpleDVT",
+      "stakingModuleAddress": "0x89eDDde70037A68983D576a036b1DB7CdCAAb0A1",
+      "contractName": "NodeOperatorsRegistry"
+    },
+    {
+      "id": 3,
+      "name": "Community Staking",
+      "stakingModuleAddress": "0x02b0B4EFd909240FCB2Eb5FAe060dC60D112E3a4",
+      "contractName": "CSModule"
+    },
+    {
+      "id": 4,
+      "name": "curated-onchain-v2",
+      "stakingModuleAddress": "0x512F7469BcC83089497506b5df64c6E246B39925",
+      "contractName": "CuratedModule"
+    }
+  ]
+}
