@@ -17,7 +17,7 @@ stack (`stack/`).
 
 | Path | Source | Pin |
 |---|---|---|
-| `src/nitro/` | go-nitro `packages/nitro-protocol/contracts` (MIT) | `435eb2b`; first vendored unmodified, changes are separate commits |
+| `src/nitro/` | go-nitro `packages/nitro-protocol/contracts` (MIT) | `435eb2b` (cerc-io/go-nitro v0.1.7); first vendored unmodified, changes are separate commits, including the `MultiAssetHolder.transfer` guarantee-check fix also released as cerc-io/go-nitro v0.1.8 |
 | `lib/exit-format` | statechannels/exit-format (MIT) | `43450d8` (npm 0.2.0) |
 | `lib/openzeppelin-contracts` | OpenZeppelin (MIT) | v4.9.3 |
 | `lib/frost-secp256k1-evm` | StackOverflowExcept1on/frost-secp256k1-evm (MIT), FROST-secp256k1-KECCAK256 verifier | `65d03d0` |
