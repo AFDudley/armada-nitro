@@ -2,7 +2,7 @@ services:
   armada-env-verify:
     image: cerc/armada-nitro-env:local
     # lib/sdk/chain-config.ts (loadNetworkIntoEngine's merkle-tree scan, used by
-    # scripts/capture/e2e-armada-circuits.ts) hardcodes the RPC for chain 31337 to
+    # env/gates/pool-e2e/pool-e2e.ts) hardcodes the RPC for chain 31337 to
     # http://localhost:8545 -- it ignores HUB_RPC. Host networking is what makes that
     # resolve to the fixturenet: geth's 8545 is published to 127.0.0.1:8545 on the host
     # (stack/README.md, `--map-ports-to-host localhost-same`).
@@ -24,22 +24,24 @@ services:
         # against env/sources.lock.json's armada-circuits pins -- it never downloads.
         python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()"
 
-        # The armada module's job container (armada-env-reconcile) writes Armada's own
-        # deployment files into the armada_env state dir before its container is discarded
-        # (env/reconciler/modules/armada.py); restore them into this container's writable
-        # copy of armada-poc so scripts/capture/e2e-armada-circuits.ts's loadDeployment()
-        # finds them (it reads deployments/privacy-pool-hub.json relative to /src/armada-poc).
-        mkdir -p /src/armada-poc/deployments
-        cp /env/armada-deployments/privacy-pool-hub.json /src/armada-poc/deployments/privacy-pool-hub.json
-        cp /env/armada-deployments/hub-v3.json /src/armada-poc/deployments/hub-v3.json
-
+        # E10: our own shield/transfer/unshield e2e, against this environment's own manifest and
+        # fee getters, replaces Armada's scripts/capture/e2e-armada-circuits.ts here -- that
+        # script's step 4 (yield) needs Armada governance, their yield adapter and their mock
+        # Aave, none of which this environment deploys (docs/tasks/E10-gates-fixes.md). Unlike
+        # e2e-armada-circuits.ts, pool-e2e.ts reads /env/manifest.json directly and never calls
+        # armada-poc's loadDeployment(), so it needs none of armada-env-reconcile's saved
+        # deployments/*.json copied back in.
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/pool-e2e/pool-e2e.ts /src/armada-poc/scripts/gates/pool-e2e.ts
         cd /src/armada-poc
+        MANIFEST_PATH="${MANIFEST_PATH:-/env/manifest.json}" \
         HUB_RPC="${HUB_RPC:-http://127.0.0.1:8545}" DEPLOY_ENV=local CCTP_MODE=real \
-          npx hardhat run scripts/capture/e2e-armada-circuits.ts --network hub
+          npx hardhat run scripts/gates/pool-e2e.ts --network hub
     environment:
       RECONCILER_TARGET: ${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}
       RECONCILER_RPC_URL: ${RECONCILER_RPC_URL:-http://127.0.0.1:8545}
       DEPLOYER_KEY_FILE: ${DEPLOYER_KEY_FILE:-/env/deployer.key}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
       HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
     volumes:
       - armada_env:/env

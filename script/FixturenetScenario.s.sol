@@ -33,6 +33,10 @@ interface IMintableUSDC {
  *   setUpHub          authorize the hub's delegate (FROST-signed) and stock the custodian
  *   cooperativeClose  fund channel 0 from deposits.json + custodian, conclude, shield the payout
  *   openAndChallenge  fund channel 1; the user challenges with the latest co-signed state
+ *   earlySettle       (E10) attempt transferAllAssets immediately -- must revert: the challenge
+ *                      window (ForceMove's `finalizesAt`) has not elapsed, so the channel is not
+ *                      yet in ChannelMode.Finalized (StatusManager._mode) and
+ *                      MultiAssetHolder._requireChannelFinalized reverts 'Channel not finalized.'
  *   settle            after the window: pay out the challenged outcome
  *   verify            read chain state and Shield logs; revert on any mismatch
  *
@@ -131,6 +135,38 @@ contract FixturenetScenario is Script {
         console2.log('challenge window (s)', c.challengeDuration);
     }
 
+    /// @dev E10: prove the challenge window is enforced, not just present. Attempts the same
+    /// `transferAllAssets` call `settle()` makes below, immediately after `openAndChallenge()`
+    /// registered the challenge -- i.e. strictly before `finalizesAt` (`block.timestamp` at
+    /// challenge time + `challengeDuration`, per `ForceMove.challenge`). `_mode` (StatusManager)
+    /// is therefore `Challenge`, not `Finalized`, and `_requireChannelFinalized`
+    /// (MultiAssetHolder.sol) must revert 'Channel not finalized.'.
+    ///
+    /// Deliberately NOT wrapped in `vm.broadcast()`: forge script's `--broadcast` mode replays
+    /// every call made under an active broadcast prank as a real transaction in its second
+    /// (post-simulation) pass, *whether or not that call reverted during simulation* -- a
+    /// reverting low-level `.call()` under `vm.broadcast()` still gets queued and then fails the
+    /// replay with "Simulated execution failed.", aborting the whole `forge script` process
+    /// before this function's own `require(!ok, ...)` result matters (confirmed by running it
+    /// that way first). Left unwrapped, this call executes only against forge's local fork of
+    /// the live RPC's current state (the same state `settle()` below will see) and is never
+    /// queued for broadcast -- so it faithfully reproduces the real revert without ever
+    /// attempting to resend it, and guarantees nothing here touches chain state ahead of
+    /// `settle()`.
+    function earlySettle() external {
+        Ctx memory c = _ctx();
+        Deposit memory d = _deposit(1);
+        INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
+        INitroTypes.VariablePart memory latest = _state(c, 12, false, FORCED_USER, FORCED_HUB);
+        bytes memory data = abi.encodeCall(
+            c.adjudicator.transferAllAssets,
+            (NitroUtils.getChannelId(fp), latest.outcome, NitroUtils.hashState(fp, latest))
+        );
+        (bool ok, bytes memory ret) = address(c.adjudicator).call(data);
+        require(!ok, 'early settle unexpectedly succeeded before the challenge window elapsed');
+        console2.log('early settle correctly reverted:', _decodeRevertReason(ret));
+    }
+
     function settle() external {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(1);
@@ -224,6 +260,19 @@ contract FixturenetScenario is Script {
     function _netOfShieldFee(Ctx memory c, uint256 amount) internal view returns (uint256) {
         uint256 feeBps = c.privacyPool.shieldFee();
         return amount - (amount * feeBps) / 10_000;
+    }
+
+    /// @dev Decode a standard `require(cond, "reason")` revert payload (selector
+    /// `Error(string)` = 0x08c379a0 + abi-encoded string). Falls back to a fixed string for any
+    /// other shape (e.g. a custom error or an out-of-gas revert with no payload) rather than
+    /// reverting itself while reporting a revert.
+    function _decodeRevertReason(bytes memory ret) internal pure returns (string memory) {
+        if (ret.length < 4) return '<no revert reason>';
+        bytes memory encoded = new bytes(ret.length - 4);
+        for (uint256 i = 0; i < encoded.length; i++) {
+            encoded[i] = ret[i + 4];
+        }
+        return abi.decode(encoded, (string));
     }
 
     function _fixedPart(Ctx memory c, uint64 channelNonce) internal view returns (INitroTypes.FixedPart memory) {

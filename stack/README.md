@@ -101,12 +101,17 @@ laconic-so deployment --dir <deployment> run-job armada-nitro-e2e
 ```
 
 - **`armada-env-verify`**: `python3 -m reconciler --verify-only` against the manifest (every §6
-  postcondition, read-only), then Armada's own `scripts/capture/e2e-armada-circuits.ts` against
-  the network -- shield, private transfer and unshield with real Groth16 proofs verified
-  on-chain. The armada module keeps a copy of the deployment files it produced
-  (`<deployment>/data/armada_env/armada-deployments/`, since the reconcile job's own container
-  filesystem is discarded); this job restores them into `/src/armada-poc/deployments/` before
-  running the capture script, which reads them by that path.
+  postcondition, read-only), then our own `env/gates/pool-e2e/pool-e2e.ts` against the network:
+  shield 10 USDC, privately transfer 3 USDC and unshield 1 USDC, each with a real Groth16 proof
+  (E10: replaces Armada's `scripts/capture/e2e-armada-circuits.ts`, whose step 4 -- yield -- needs
+  Armada governance, their yield adapter and their mock Aave, none of which this environment
+  deploys). Every step is checked on chain independently of the SDK: the `Shield`/`Transact`/
+  `Unshield` event (decoded from a minimal ABI, not the SDK's own handling), and the payer's
+  (shield) or recipient's (unshield) public USDC balance change, net of the pool's `shieldFee()`
+  (50 bps) and `unshieldFee()` (always 0 on this pool version -- `TransactModule._transferTokenOut`
+  pays the note's full value with no fee logic at all; `unshieldFee()`'s storage slot is
+  commented "DEPRECATED -- unshield is free per spec" and has no setter). `pool-e2e.ts` still
+  reads both fees live rather than hardcoding them.
 - **`armada-nitro-e2e`**: two stages in one job.
   1. `env/gates/nitro-e2e/prepare.ts` (copied into `/src/armada-poc/scripts/gates/` so its
      `lib/sdk` imports resolve, then run with `npx hardhat run --network hub`): for two channels,
@@ -122,8 +127,13 @@ laconic-so deployment --dir <deployment> run-job armada-nitro-e2e
      close against `/env/manifest.json` (not `deployments/31337*.json`), funded by
      `deposits.json`'s calldata sent by the test account instead of `ArmadaNotes.unshield`'s
      testing-mode notes. `CHALLENGE_DURATION` (default 30s, must match what stage 1 bound into
-     the channelId) comes from the job environment. Ends with `verified: both channels paid the
-     user by shielding a note`, read from chain state and the pool's `Shield` logs.
+     the channelId) comes from the job environment. After the second channel's `challenge()`,
+     `earlySettle()` (E10) attempts `transferAllAssets` immediately -- strictly inside the
+     window, before any sleep -- and it must revert `'Channel not finalized.'`
+     (`MultiAssetHolder._requireChannelFinalized`; proves the window is enforced, not just
+     present). The job then sleeps out `CHALLENGE_DURATION` and `settle()` pays out the
+     challenged outcome for real. Ends with `verified: both channels paid the user by shielding
+     a note`, read from chain state and the pool's `Shield` logs.
 
 Both jobs need Armada's compiled circuit build on disk (`/src/armada-circuits/build`) for
 the artifacts `lib/sdk/armada-artifacts.ts` loads. It is baked into `cerc/armada-nitro-env`

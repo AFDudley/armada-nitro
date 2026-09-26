@@ -45,6 +45,9 @@ services:
         run_script script/FixturenetScenario.s.sol --sig 'setUpHub()'
         run_script script/FixturenetScenario.s.sol --sig 'cooperativeClose()'
         run_script script/FixturenetScenario.s.sol --sig 'openAndChallenge()'
+        # E10: prove the challenge window is enforced, not just present -- transferAllAssets
+        # must revert here, strictly inside the window (no sleep yet).
+        run_script script/FixturenetScenario.s.sol --sig 'earlySettle()'
         echo "waiting out the $${CHALLENGE_DURATION}s challenge window"
         sleep $$((CHALLENGE_DURATION + 3))
         run_script script/FixturenetScenario.s.sol --sig 'settle()'
