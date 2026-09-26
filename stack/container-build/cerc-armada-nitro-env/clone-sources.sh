@@ -4,6 +4,7 @@
 # documents:
 #   - stablecoin-evm and lido-core need `node_modules` populated before `forge build`
 #     (their foundry.toml `libs` includes `node_modules`), so `yarn install` runs first.
+#   - community-staking-module also needs `yarn install` before `forge build`.
 #   - armada-poc's foundry.toml also lists `node_modules`, so `npm ci` runs before
 #     `forge build`; it additionally needs `npx hardhat compile`.
 #   - evm-cctp-contracts and aave-v3-origin vendor OpenZeppelin via git submodules only,
@@ -23,6 +24,9 @@ while IFS="|" read -r name repo ref commit; do
       (cd "/src/${name}" && CI=true yarn install --ignore-engines)
       ;;
     lido-core)
+      (cd "/src/${name}" && yarn install --immutable)
+      ;;
+    community-staking-module)
       (cd "/src/${name}" && yarn install --immutable)
       ;;
     armada-poc)

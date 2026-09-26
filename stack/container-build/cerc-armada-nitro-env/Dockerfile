@@ -6,6 +6,15 @@ FROM debian:bookworm
 RUN set -e \
   && apt-get update \
   && apt-get install -y --no-install-recommends git jq python3 curl ca-certificates
+# 'just' command runner (required by staking-modules/ repos).
+RUN set -e \
+  && curl -sL https://github.com/casey/just/releases/download/1.58.0/just-1.58.0-x86_64-unknown-linux-musl.tar.gz -o /tmp/just.tar.gz \
+  && H=$(sha256sum /tmp/just.tar.gz) && test "${H%% *}" = "4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d" \
+  && tar xzf /tmp/just.tar.gz \
+  && mv just /usr/local/bin/just \
+  && chmod +x /usr/local/bin/just \
+  && rm -f /tmp/just.tar.gz
+
 
 # Home for root, so the foundryup bootstrap and the Foundry toolchain land in /root/.foundry/bin.
 ENV HOME=/root
@@ -40,6 +49,30 @@ COPY stack/container-build/cerc-armada-nitro-env/clone-sources.sh /clone-sources
 RUN set -e \
   && chmod +x /clone-sources.sh \
   && /clone-sources.sh
+# E12 slice 1: make lido's step-0135 CSM path work offline, without editing lido-core.
+# (a) Point the local CSM repo's `develop` branch at the pinned commit. After
+# clone-sources.sh the HEAD is detached at the pin, so `checkout -B develop`
+# resets the stale `develop` branch (fetched at its old HEAD) onto the pin.
+# (b) System-wide git `url.<local>.insteadOf` rewrite: lido's
+# `git clone .../community-staking-module.git` now resolves to the local copy,
+# so no network is needed at job time.
+# (c) CSM vendors its own Yarn release (.yarnrc.yml's `yarnPath: .yarn/releases/
+# yarn-4.1.1.cjs`, committed, so any clone of it carries it) and does not set
+# `enableGlobalCache`, which defaults to true as of Yarn 4 (yarnpkg.com/
+# configuration/yarnrc#enableGlobalCache): package archives land in
+# `<globalFolder>/cache`, not the project's own `.yarn/cache` (gitignored
+# there, so a fresh clone never carries it). `globalFolder` defaults to
+# `$HOME/.yarn/berry`, and `HOME=/root` is fixed image-wide (line 20), so
+# running `just deps` once now, with network, populates
+# /root/.yarn/berry/cache in the image layer; a later `just deps` in a fresh
+# clone (same lockfile, same HOME) reuses those cached archives instead of
+# fetching them again.
+RUN set -e \
+  && git -C /src/community-staking-module checkout -B develop \
+  && git config --system "url.file:///src/community-staking-module.insteadOf" \
+       "https://github.com/lidofinance/community-staking-module.git" \
+  && cd /src/community-staking-module && just deps
+
 
 # This repository: copy to /src/armada-nitro, forge build.
 COPY . /src/armada-nitro

@@ -29,6 +29,12 @@
       "repo": "ship-armada/armada-poc",
       "ref": "532bc0641443879e30c07b98970f6e11d5d9400c",
       "commit": "532bc0641443879e30c07b98970f6e11d5d9400c"
+    },
+    {
+      "name": "community-staking-module",
+      "repo": "lidofinance/community-staking-module",
+      "ref": "develop",
+      "commit": "ef4eb70640c679d0ca6ad2a5d15339f55a9b0d40"
     }
   ],
   "weth9": {
