@@ -153,17 +153,45 @@ their image IDs are available to the base-snapshot cache key below.
 A full `armada-env-reconcile` takes ~25 min, ~24 of which deploy third-party
 infrastructure that never changes unless its pinned inputs do: `weth`, `usdc`,
 `cctp`, `aave`, `lido` and the `armada` pool. Those six modules plus the chain
-itself are the **base layer**. We build it once, snapshot the whole stopped
-chain (every `data/` volume), and restore it into new deployments, so a new
-fixturenet only deploys `armada_nitro` + `funding` (~1 min) on top.
+itself are the **base layer**. We build it once, snapshot only its **execution
+layer**, and restore that into new deployments -- regenerating the consensus
+genesis at restore time -- so a new fixturenet only deploys `armada_nitro` +
+`funding` (~1 min) on top.
 
-**What is snapshotted.** The deployment's entire `data/` directory -- the
-`armada_env` manifest/keys and all chain volumes (`geth_data`, `beacon_data`,
-`validator_*_data`, `armada_fixturenet_genesis`) -- with the chain stopped so
-the snapshot is quiescent. It compresses to ~10 MB (geth's allocated space is
-mostly unwritten). Restoring it and starting resumes the same chain: blocks
-continue one per 2 s slot and Lighthouse reports `sync_distance 0` (a single
-node with no peers simply skips the empty slots it was down for).
+**What is snapshotted, and why only the execution layer.** An earlier version
+tarred the *whole* stopped chain -- every `data/` volume, consensus layer
+included -- and restored it to resume the same chain. That only works if the
+restore happens soon: a beacon restored hours later wakes up with its head slot
+frozen far behind the current wall-clock slot, and a single node with no peers
+never catches up (head stuck while `current_slot` runs ahead, late blocks
+orphaned). Since snapshots are normally restored hours or days later, that cache
+was broken.
+
+So we snapshot only the **execution layer**, which has no wall-clock notion:
+`geth_data` (geth's full data dir -- keeping all history and block numbers, which
+Lido's MiniMe DAO-token checkpoints depend on, so we must **not** bake state into
+a fresh EL genesis), the `armada_env` state (manifest/keys), the EL genesis
+(`armada_fixturenet_genesis/metadata/genesis.json` + `jwt/jwtsecret`), and the EL
+**head block** recorded as JSON (`eth_getBlockByNumber("latest", false)`) while
+block production is halted, so it is exactly geth's final on-disk head. It
+compresses to a few MB. It does **not** contain the beacon, the four validators
+or the consensus genesis (`genesis.ssz`).
+
+**How a restore avoids the slot gap.** On restore we put geth's data back and
+regenerate only the consensus genesis, as a **shadow fork** on the recorded head
+with `GENESIS_TIMESTAMP=now`: the genesis container (ethpandaops
+`ethereum-genesis-generator`) finds `genesis.json` already present so it skips EL
+generation, and finds the recorded head at `/data/shadow-fork-block.json`, which
+`fixturenet-new` points its `SHADOW_FORK_FILE` at (→ `eth-genesis-state-generator
+--shadow-fork-block`), so the new beacon genesis's `latest_execution_payload_header`
+is geth's current head. The beacon and validators start with empty data dirs; the
+new genesis has a fresh `genesis_validators_root`, so their slashing-protection
+DBs start clean (same mnemonic, same four validators). The beacon therefore
+starts at **slot 0 on geth's head** and produces geth's `head + 1` next -- no slot
+gap, however old the snapshot is. This is the same idea as stack-orchestrator's
+`cerc-fixturenet-eth-lighthouse` (`run-cl.sh` → `genesis/cl/reset_genesis_time.sh`),
+which `lcli change-genesis-time`s the beacon genesis to now on every fresh start;
+we extend it with a shadow fork because our chain already has execution history.
 
 **The base target.** `env/targets/fixturenet-base.json` names only `network` +
 the six base modules. `fixturenet-new` copies it into the `armada_env` volume
@@ -182,6 +210,11 @@ module, or a reindent of the lido 0140 TypeScript all leave the key untouched.
 
 Included, with the normalisation applied to each:
 
+- **Snapshot format version** (`snapfmt <n>`, `SNAPSHOT_FORMAT_VERSION` in
+  `base-key.py`) -- part of the key so a snapshot written in an older on-disk
+  format is never restored by a newer `fixturenet-new`. The move from the
+  whole-chain (v1) to the execution-layer-only (v2) snapshot bumped it, so the v1
+  snapshot's key no longer matches and a v2 base is rebuilt from scratch.
 - **Image IDs** (`docker image inspect`): the chain images `ethereum/client-go`,
   `sigp/lighthouse`, `ethpandaops/ethereum-genesis-generator` (read from the
   fixturenet compose); the `toolchain` env-image stage; **one `src-<name>` stage
@@ -230,9 +263,11 @@ every other `armada-fixturenet-base-*` snapshot and key file.
 stack/scripts/fixturenet-new <name>
 
 # Snapshot a deployment that reconciled ONLY the base target (its manifest must
-# name exactly the six base modules). Stops the chain, tars+zstd data/, writes
-# the key file, prunes other snapshots, restarts the chain. fixturenet-new's
-# cold path calls this for you.
+# name exactly the six base modules). Halts block production (stops the consensus
+# layer), records geth's head block, stops geth, tars+zstd the execution layer
+# only (geth data + armada_env + EL genesis + the head block), writes the key
+# file, prunes other snapshots, and restarts the chain. fixturenet-new's cold path
+# calls this for you.
 stack/scripts/fixturenet-base-snapshot <deployment-dir>
 ```
 

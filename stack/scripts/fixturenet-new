@@ -117,11 +117,14 @@ fi
 echo "fixturenet-new: tmpfs OK: $(findmnt -no SOURCE,SIZE --mountpoint "${DEP}/data")"
 
 if [ "$MODE" = warm ]; then
-  # ---- WARM: restore the base snapshot, then only armada_nitro + funding ----
-  echo "fixturenet-new: restoring ${SNAP} into ${DEP}/data ..."
+  # ---- WARM: restore the EL-only base snapshot, then only armada_nitro + funding.
+  # restore_snapshot puts geth's data + armada_env + the EL genesis back and hands
+  # the recorded head to the genesis container's shadow-fork step; `start` then
+  # regenerates the consensus genesis (slot 0 on geth's head, genesis time = now)
+  # so the beacon + validators come up fresh with no slot gap. -------------------
+  echo "fixturenet-new: restoring ${SNAP} into ${DEP}/data (EL-only; CL genesis regenerated with a shadow fork) ..."
   tr=$(now)
-  sudo find "${DEP}/data" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-  zstd -dc "$SNAP" | sudo tar -C "${DEP}/data" -xf -
+  restore_snapshot "$DEP" "$SNAP"
   echo "fixturenet-new: restore took $(secs $(($(now)-tr)))"
   "$LACONIC" deployment --dir "$DEP" start
   wait_for_blocks

@@ -7,6 +7,18 @@ services:
     command:
       - |
         export GENESIS_TIMESTAMP=$(date +%s)
+        # Warm restore (fixturenet-new EL-only snapshot): a recorded execution
+        # head block is dropped in this volume as shadow-fork-block.json. Point the
+        # generator's shadow-fork support at it so the regenerated consensus genesis
+        # anchors slot 0 on geth's existing head (its latest_execution_payload_header
+        # becomes that block) with GENESIS_TIMESTAMP=now -- no slot gap however old
+        # the snapshot is. Absent on a cold/fresh start, so el+cl genesis is
+        # generated normally from block 0. genesis.json (EL) and jwtsecret already
+        # present from the snapshot are kept; only the consensus genesis is (re)built.
+        if [ -f /data/shadow-fork-block.json ]; then
+          export SHADOW_FORK_FILE=/data/shadow-fork-block.json
+          echo "genesis: shadow-fork restore onto EL head number=$(jq -r .number /data/shadow-fork-block.json) hash=$(jq -r .hash /data/shadow-fork-block.json)"
+        fi
         exec /work/entrypoint.sh all
     environment:
       CHAIN_ID: "31337"

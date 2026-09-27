@@ -13,6 +13,11 @@ verbatim into the auditable `.key` file beside each snapshot.
 INCLUDED -- these determine the base chain's state (network + weth, usdc, cctp,
 aave, lido, armada):
 
+  snapfmt <n>
+    The snapshot format version (SNAPSHOT_FORMAT_VERSION). Bumping it alone
+    changes every key, so a snapshot written in an older on-disk format is never
+    restored by a newer fixturenet-new that expects a different layout.
+
   image <ref> <id>
     - the chain images: ethereum/client-go, sigp/lighthouse,
       ethpandaops/ethereum-genesis-generator (from the fixturenet compose);
@@ -75,6 +80,15 @@ from pathlib import Path
 # Image tags build.sh assigns to the cached stages (keep in sync with build.sh).
 TOOLCHAIN_TAG = "cerc/armada-nitro-env-toolchain:local"
 CIRCUITS_TAG = "cerc/armada-nitro-env-circuits:local"
+
+# Snapshot format version -- part of the key so a snapshot written by an older
+# format is never restored by a newer fixturenet-new (its key won't match).
+# v1: whole stopped chain tarred (every data/ volume) and resumed on restore.
+# v2: execution layer only (geth data + armada_env + the EL genesis) plus the
+#     recorded EL head block; the consensus genesis is regenerated at restore
+#     time as a shadow fork on that head with GENESIS_TIMESTAMP=now, so a restore
+#     never starts with a slot gap no matter how old the snapshot is.
+SNAPSHOT_FORMAT_VERSION = 2
 
 
 def src_tag(name: str) -> str:
@@ -183,6 +197,11 @@ def _compose_image_refs(root: Path) -> list[str]:
 def key_lines(root: Path) -> list[str]:
     lock = json.loads((root / "env/sources.lock.json").read_text())
     lines: list[str] = []
+
+    # --- snapshot format version ------------------------------------------
+    # Bumping this alone invalidates every existing key, so a snapshot in an
+    # older on-disk format is never restored by this fixturenet-new.
+    lines.append(f"snapfmt {SNAPSHOT_FORMAT_VERSION}")
 
     # --- image identities -------------------------------------------------
     image_refs = [TOOLCHAIN_TAG, CIRCUITS_TAG]

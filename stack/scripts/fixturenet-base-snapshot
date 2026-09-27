@@ -5,10 +5,20 @@
 # The deployment MUST have reconciled ONLY the base target (network + weth, usdc,
 # cctp, aave, lido, armada) -- its manifest must name exactly those modules.
 #
-# Steps: verify the manifest is base-only, stop the chain (KEEPING its volumes),
-# tar+zstd the whole data/ directory (all chain + env volumes) into
-# ~/deployments/.snapshots/, write an auditable key file alongside it, prune
-# every other base snapshot (we keep exactly one), and restart the chain.
+# The snapshot is EXECUTION-LAYER ONLY (format v2). We do NOT tar the beacon, the
+# four validators or the consensus genesis; on restore the consensus genesis is
+# regenerated as a shadow fork on the recorded execution head with
+# GENESIS_TIMESTAMP=now, so the beacon always starts at slot 0 on geth's head and
+# a restore never begins with a slot gap no matter how old the snapshot is. This
+# mirrors stack-orchestrator's fixturenet-eth (run-cl.sh + reset_genesis_time.sh),
+# which resets the beacon genesis time to now on every fresh start.
+#
+# Steps: verify the manifest is base-only; halt block production by stopping the
+# consensus layer (geth stays up so its head is final); record geth's head block
+# as the shadow-fork file; stop geth so its on-disk head equals that block;
+# tar+zstd the EL layer (geth data + armada_env + the EL genesis + the head block)
+# into ~/deployments/.snapshots/; write an auditable key file; prune every other
+# base snapshot (we keep exactly one); and restart the whole chain.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
@@ -16,7 +26,7 @@ REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
 # shellcheck source=stack/scripts/fixturenet-base-common.sh
 source "${SCRIPT_DIR}/fixturenet-base-common.sh"
 
-LACONIC="${LACONIC_SO:-${HOME}/bin/laconic-so}"
+RPC="${GETH_RPC_URL:-http://127.0.0.1:8545}"
 
 usage() { echo "usage: $0 <deployment-dir>" >&2; exit 2; }
 [ $# -eq 1 ] || usage
@@ -32,24 +42,42 @@ KEYFILE=$(key_path "$KEY")
 
 echo "fixturenet-base-snapshot: deployment=${DEP} key=${KEY}"
 
-# Stop the chain so the snapshot is of a quiescent, consistent data set. Keep
-# the volumes (no --delete-volumes) so the restart below resumes this chain.
-echo "fixturenet-base-snapshot: stopping the chain..."
-"$LACONIC" deployment --dir "$DEP" stop
+# 1. Halt block production: stop the consensus layer only. Post-merge geth needs
+#    the beacon to drive forkchoice, so with the CL down it produces no new
+#    blocks and its head is final -- but it stays up to answer the head query.
+echo "fixturenet-base-snapshot: halting block production (stopping the consensus layer)..."
+dc "$DEP" stop $CL_SERVICES
 
-# tar reads root-owned volume files (sudo); zstd writes as us into .snapshots.
+# 2. Record geth's final head block as the shadow-fork file.
+echo "fixturenet-base-snapshot: recording geth's head block from ${RPC} ..."
+headfile=$(mktemp)
+trap 'rm -f "$headfile"' EXIT
+capture_head_block "$RPC" > "$headfile"
+echo "fixturenet-base-snapshot: head: number=$(jq -r .number "$headfile") ($(( $(jq -r .number "$headfile") ))) hash=$(jq -r .hash "$headfile")"
+
+# 3. Stop geth so its on-disk head equals the block we just recorded, then tar the
+#    execution layer plus the head block (as head-block.json at the tar root). tar
+#    reads root-owned volume files (sudo); zstd writes as us into .snapshots.
+echo "fixturenet-base-snapshot: stopping geth..."
+dc "$DEP" stop armada-fixturenet-geth
+
 echo "fixturenet-base-snapshot: writing ${SNAP} ..."
+sudo cp "$headfile" "${DEP}/data/${SNAP_HEAD_FILE}"
 tmp="${SNAP}.tmp.$$"
-sudo tar -C "${DEP}/data" -cf - . | zstd -q -19 -T0 -o "$tmp"
+# shellcheck disable=SC2086
+sudo tar -C "${DEP}/data" -cf - $SNAP_EL_VOLUMES $SNAP_GENESIS_EL_PATHS "$SNAP_HEAD_FILE" \
+  | zstd -q -19 -T0 -o "$tmp"
 mv -f "$tmp" "$SNAP"
+sudo rm -f "${DEP}/data/${SNAP_HEAD_FILE}"
 
 # Auditable key file: the exact inputs the key hashes.
 {
-  echo "# armada-nitro fixturenet base-layer snapshot"
+  echo "# armada-nitro fixturenet base-layer snapshot (format v2, EL-only)"
   echo "# key:      ${KEY}"
   echo "# snapshot: $(basename "$SNAP")"
   echo "# created:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# source:   ${DEP}"
+  echo "# el-head:  number=$(jq -r .number "$headfile") hash=$(jq -r .hash "$headfile")"
   echo "#"
   echo "# sha256(this file's key-input lines, truncated to 16 hex) == key."
   _base_key_lines "$REPO_ROOT"
@@ -65,9 +93,10 @@ for f in "${SNAP_DIR}"/armada-fixturenet-base-*.tar.zst "${SNAP_DIR}"/armada-fix
 done
 shopt -u nullglob
 
-# Restart the chain we stopped.
+# 4. Restart the whole chain we stopped (fixturenet-new's cold path resumes it for
+#    the full reconcile). `start` restarts the stopped containers as they were.
 echo "fixturenet-base-snapshot: restarting the chain..."
-"$LACONIC" deployment --dir "$DEP" start
+dc "$DEP" start
 
 size=$(du -h "$SNAP" | cut -f1)
 echo "fixturenet-base-snapshot: DONE"
