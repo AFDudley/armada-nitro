@@ -1,0 +1,385 @@
+{
+  "id": "derived-arn-e98",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? A command-line tool generates a 2-of-3 FROST group (one key-share file per participant plus the group public key) and signs a 32-byte message with any two shares, without ever writing the group secret.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. `frost-signer keygen --out <dir>` writes share-1, share-2, share-3 and the group public key (X, Y); `frost-signer sign --shares <a> <b> --message <32-byte hex>` runs both FROST rounds and prints a signature the on-chain verifier accepts. No file or output contains the group scalar.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. Cargo tests cover keygen, signing with each pair {1,2}, {1,3}, {2,3}, and that a single share cannot produce a valid signature; a forge test verifies a signature produced by the tool with the frost-secp256k1-evm verifier used by HubCustodian. Uses the same pinned crate as tools/frost-fixture (frost-secp256k1-evm 3.0.0). Spec: docs/tasks/E14-hub-custodian-frost.md (Deliver, frost-signer).\nWhat are the non-goals / constraints? What must this NOT do? Networked DKG among separate machines; deploying the custodian (E14b).\nAny examples or references? (links, prior art, a similar thing you like) tools/frost-fixture/src/main.rs already does trusted-dealer keygen and both signing rounds in one process (round1::commit, SigningPackage, round2::sign, aggregate) and writes test/fixtures/frost-2of3.json.\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "A developer builds a command-line tool named frost-signer, at tools/frost-signer. The tool runs a trusted-dealer 2-of-3 FROST keygen for secp256k1. The keygen step writes one key-share file per participant, named share-1, share-2, and share-3, plus a file with the group public key (X, Y). The keygen step never writes the group secret to disk, and writes no file beyond those four. The tool signs a 32-byte message with any two of the three key shares, running both FROST rounds, and prints a signature for each of the pairs {1,2}, {1,3}, and {2,3}. For each pair, a forge test confirms the frost-secp256k1-evm verifier HubCustodian uses accepts that signature, and that test reports PASS. A single key share cannot produce an accepted signature: the sign command refuses with a non-zero exit and an error naming the threshold. A forge test confirms that changing the signed message by one byte, after signing, makes the verifier reject the signature, and that test reports PASS. Cargo tests cover keygen, signing with each pair, and the single-share refusal, and catch injected bugs rather than only passing on working code. tools/frost-signer resolves frost-secp256k1-evm at exactly version 3.0.0, the version tools/frost-fixture pins. armada-nitro developers use the tool to check reconciler and custody/channel behavior on the fixturenet, ahead of the Sepolia milestone (E8). The tool never needs network access to complete keygen or signing, so it runs no networked DKG ceremony among separate machines, and it deploys no contract, including the custodian.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The keygen command writes share-1, share-2, and share-3 files to the output directory."
+    },
+    {
+      "id": "c2",
+      "text": "The keygen command writes the group public key (X, Y) to the output directory."
+    },
+    {
+      "id": "c3",
+      "text": "No file the keygen command writes contains the group secret, and the output directory holds exactly four files: three shares and one group public key file."
+    },
+    {
+      "id": "c4",
+      "text": "The sign command runs both FROST rounds and prints a signature for shares {1,2}, {1,3}, and {2,3}."
+    },
+    {
+      "id": "c5",
+      "text": "A forge test named for each share pair (for example test_frostSignerSignatureVerifies) reports PASS, verifying that the frost-secp256k1-evm verifier HubCustodian uses accepts the signature the tool produced for that pair."
+    },
+    {
+      "id": "c6",
+      "text": "Signing with a single key-share file exits with a non-zero code and an error that names the threshold."
+    },
+    {
+      "id": "c7",
+      "text": "A forge test confirms that changing the signed message by one byte, after signing, makes the frost-secp256k1-evm verifier reject the signature, and that test reports PASS."
+    },
+    {
+      "id": "c8",
+      "text": "Cargo tests cover keygen, signing with each pair {1,2}, {1,3}, {2,3}, and the single-share failure, and the tests catch injected bugs, not only working code."
+    },
+    {
+      "id": "c9",
+      "text": "tools/frost-signer resolves frost-secp256k1-evm at exactly version 3.0.0, the version tools/frost-fixture pins."
+    },
+    {
+      "id": "c10",
+      "text": "The tool does not run a networked DKG among separate machines."
+    },
+    {
+      "id": "c11",
+      "text": "The tool does not deploy the custodian."
+    }
+  ],
+  "goal": "Give armada-nitro developers a command-line tool that creates a 2-of-3 FROST group and signs a message with any two shares, without ever writing the group secret, and whose signatures pass the same on-chain verifier HubCustodian uses.",
+  "acceptance_criteria": [
+    "After running the keygen command into a fresh empty folder, three files named share-1, share-2, and share-3 exist in it.",
+    "After running the keygen command into a fresh empty folder, the group public key file it writes contains both the X and the Y value.",
+    "After running the keygen command into a fresh empty folder, the folder holds exactly four files: no extra file, such as a secret file, appears.",
+    "Signing the same 32-byte message once with shares {1,2}, once with {1,3}, and once with {2,3} prints a signature each of the three times.",
+    "A forge test exists for each of the three share pairs, checking the on-chain FROST verifier HubCustodian uses accepts the signature the tool produced for that pair, and all three tests report PASS.",
+    "Trying to sign with only one key-share file makes the command exit with a non-zero code and print an error that names the threshold.",
+    "A forge test signs a message, changes one byte of it, and checks the verifier rejects the signature against the changed message. That test reports PASS.",
+    "The crate's own tests for keygen, for signing with each share pair, and for the single-share refusal catch bugs deliberately introduced into the code, not only pass on working code.",
+    "Asking cargo which version of frost-secp256k1-evm the frost-signer crate actually resolves to reports exactly 3.0.0.",
+    "The tool's own help text, for the main command and for keygen and sign, names no option for reaching another machine over a network.",
+    "The tool's own help text, for the main command and for keygen and sign, names no option to deploy a contract."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After running the keygen command into a fresh empty folder, three files named share-1, share-2, and share-3 exist in it."
+    },
+    {
+      "id": "c2",
+      "text": "After running the keygen command into a fresh empty folder, the group public key file it writes contains both the X and the Y value."
+    },
+    {
+      "id": "c3",
+      "text": "After running the keygen command into a fresh empty folder, the folder holds exactly four files: no extra file, such as a secret file, appears."
+    },
+    {
+      "id": "c4",
+      "text": "Signing the same 32-byte message once with shares {1,2}, once with {1,3}, and once with {2,3} prints a signature each of the three times."
+    },
+    {
+      "id": "c5",
+      "text": "A forge test exists for each of the three share pairs, checking the on-chain FROST verifier HubCustodian uses accepts the signature the tool produced for that pair, and all three tests report PASS."
+    },
+    {
+      "id": "c6",
+      "text": "Trying to sign with only one key-share file makes the command exit with a non-zero code and print an error that names the threshold."
+    },
+    {
+      "id": "c7",
+      "text": "A forge test signs a message, changes one byte of it, and checks the verifier rejects the signature against the changed message. That test reports PASS."
+    },
+    {
+      "id": "c8",
+      "text": "The crate's own tests for keygen, for signing with each share pair, and for the single-share refusal catch bugs deliberately introduced into the code, not only pass on working code."
+    },
+    {
+      "id": "c9",
+      "text": "Asking cargo which version of frost-secp256k1-evm the frost-signer crate actually resolves to reports exactly 3.0.0."
+    },
+    {
+      "id": "c10",
+      "text": "The tool's own help text, for the main command and for keygen and sign, names no option for reaching another machine over a network."
+    },
+    {
+      "id": "c11",
+      "text": "The tool's own help text, for the main command and for keygen and sign, names no option to deploy a contract."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "After running the keygen command into a fresh empty folder, three files named share-1, share-2, and share-3 exist in it.",
+      "proves": "Proves clause c1: keygen writes the three share files.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/keygen_output_check.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "share_file_count",
+          "op": "eq",
+          "value": 3
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "After running the keygen command into a fresh empty folder, the group public key file it writes contains both the X and the Y value.",
+      "proves": "Proves clause c2: keygen writes the group public key (X, Y).",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/keygen_output_check.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "pubkey_has_x",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "pubkey_has_y",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "After running the keygen command into a fresh empty folder, the folder holds exactly four files: no extra file, such as a secret file, appears.",
+      "proves": "Proves clause c3: keygen writes no group secret and no file beyond the three shares and the public key.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/keygen_output_check.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "total_file_count",
+          "op": "eq",
+          "value": 4
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "Signing the same 32-byte message once with shares {1,2}, once with {1,3}, and once with {2,3} prints a signature each of the three times.",
+      "proves": "Proves clause c4: the sign command runs both FROST rounds and prints a signature for every share pair.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/sign_pairs_check.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "signatures_printed_count",
+          "op": "eq",
+          "value": 3
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "A forge test exists for each of the three share pairs, checking the on-chain FROST verifier HubCustodian uses accepts the signature the tool produced for that pair, and all three tests report PASS.",
+      "proves": "Proves clause c5: the on-chain verifier accepts a signature from every share pair, and this is shown by three passing forge tests, not merely a zero exit code.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/forge_signature_checks.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "pair_tests_matched",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "observe": "stdout_json",
+          "field": "pair_tests_passed",
+          "op": "eq",
+          "value": 3
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "Trying to sign with only one key-share file makes the command exit with a non-zero code and print an error that names the threshold.",
+      "proves": "Proves clause c6: a single share cannot produce a signature, and the command refuses with a clear error.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/single_share_check.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "error_mentions_threshold",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "A forge test signs a message, changes one byte of it, and checks the verifier rejects the signature against the changed message. That test reports PASS.",
+      "proves": "Proves clause c7: a one-byte change to the message after signing makes the verifier reject the signature.",
+      "restatement_clause_id": "c7",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/forge_signature_checks.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "tamper_test_matched",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "observe": "stdout_json",
+          "field": "tamper_test_passed",
+          "op": "eq",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c7"
+    },
+    {
+      "type": "mutation_gated_test",
+      "description": "The crate's own tests for keygen, for signing with each share pair, and for the single-share refusal catch bugs deliberately introduced into the code, not only pass on working code.",
+      "proves": "Proves clause c8: the cargo tests are strong enough to catch injected bugs, not just exercise the happy path.",
+      "restatement_clause_id": "c8",
+      "package": "frost-signer",
+      "clause_id": "c8"
+    },
+    {
+      "type": "behavior",
+      "description": "Asking cargo which version of frost-secp256k1-evm the frost-signer crate actually resolves to reports exactly 3.0.0.",
+      "proves": "Proves clause c9: frost-signer is pinned to the same frost-secp256k1-evm version, 3.0.0, as tools/frost-fixture.",
+      "restatement_clause_id": "c9",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/dependency_version_check.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "resolved_version",
+          "op": "eq",
+          "value": "3.0.0"
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c9"
+    },
+    {
+      "type": "behavior",
+      "description": "The tool's own help text, for the main command and for keygen and sign, names no option for reaching another machine over a network.",
+      "proves": "Proves clause c10: the tool needs no networked, multi-machine key ceremony.",
+      "restatement_clause_id": "c10",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/cli_surface_check.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "network_flag_found",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c10"
+    },
+    {
+      "type": "behavior",
+      "description": "The tool's own help text, for the main command and for keygen and sign, names no option to deploy a contract.",
+      "proves": "Proves clause c11: the tool deploys no contract, including the custodian.",
+      "restatement_clause_id": "c11",
+      "when": {
+        "interpreter": "bash",
+        "script": "tools/frost-signer/scripts/cli_surface_check.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "deploy_flag_found",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c11"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "tools/frost-signer/scripts/cli_surface_check.sh",
+    "tools/frost-signer/scripts/dependency_version_check.sh",
+    "tools/frost-signer/scripts/forge_signature_checks.sh",
+    "tools/frost-signer/scripts/keygen_output_check.sh",
+    "tools/frost-signer/scripts/sign_pairs_check.sh",
+    "tools/frost-signer/scripts/single_share_check.sh"
+  ]
+}
