@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -63,6 +64,11 @@ _ENV_LIDO = Path(__file__).resolve().parents[2] / "lido"
 _SCRATCH_DEPLOY_CONFIG = _ENV_LIDO / "deploy-params-fixturenet.toml"
 _STEPS_SOURCE = _ENV_LIDO / "steps-fixturenet.json"
 
+# E12 slice 4: the staking router's expected module names, recorded with provenance by
+# env/lido/tools/capture-0140-calls.ts from a real scratch deploy (env/lido/
+# reference-staking-modules.json). verify() checks the fixturenet's router lists the same names.
+_REFERENCE_STAKING_MODULES = _ENV_LIDO / "reference-staking-modules.json"
+
 # lib/scratch.ts's loadSteps always resolves STEPS_FILE as `scripts/${STEPS_FILE}` under the
 # process's cwd (/src/lido-core here) -- unlike SCRATCH_DEPLOY_CONFIG/NETWORK_STATE_FILE, it
 # cannot be pointed at an absolute path outside the checkout, so this module's copy has to live
@@ -72,6 +78,17 @@ _STEPS_SOURCE = _ENV_LIDO / "steps-fixturenet.json"
 # reports/aave-market.json) -- never committed into lido-core, so this is not an edit to it.
 _STEPS_DEST = _LIDO_CORE / "scripts" / "env-fixturenet-steps.json"
 _STEPS_FILE_ARG = "env-fixturenet-steps.json"
+
+# The 0140-plug-staking-modules-via-vote step (env/lido/0140-plug-staking-modules-via-vote.ts)
+# replaces the original 0140-plug-staking-modules which uses hardhat_impersonateAccount.
+# The via-vote version performs the same Agent calls (grantRole, resume, revokeRole,
+# updateInitialEpoch, registerPauser) through a real DAO vote (TokenManager.forward ->
+# Voting.newVote -> vote -> executeVote -> Agent.execute) instead of impersonation.
+# lib/scratch.ts's resolveMigrationFile resolves a bare step name (no "scratch/steps/" prefix,
+# per env/lido/steps-fixturenet.json's own entry) to `scripts/${step}.ts` under lido-core's cwd
+# -- i.e. lido-core's scripts/ directory itself, not its root.
+_VIA_VOTE = _ENV_LIDO / "0140-plug-staking-modules-via-vote.ts"
+_VIA_VOTE_DEST = _LIDO_CORE / "scripts" / "0140-plug-staking-modules-via-vote.ts"
 
 # ethpandaops/ethereum-genesis-generator 6.2.1's own output layout (its entrypoint writes
 # `grep DEPOSIT_CONTRACT_ADDRESS /data/metadata/config.yaml | cut -d " " -f2 >
@@ -107,6 +124,10 @@ _SK_GAS_USED = "scratchDeployGasUsed"
 # (uint32)"; 1 is CallsScript's fixed, universal registration id across every Aragon deployment).
 _CALLS_SCRIPT_SPEC_ID = (1).to_bytes(4, "big")
 
+
+# OpenZeppelin AccessControl default admin role hash: keccak256("DEFAULT_ADMIN_ROLE").
+# Per E12: deployer holds NO DEFAULT_ADMIN_ROLE on key contracts, Agent DOES.
+DEFAULT_ADMIN_ROLE = "0x0000000000000000000000000000000000000000000000000000000000000000"
 # Vote timing is read live from Voting.voteTime() (see _resume_via_dao_vote) -- this is only a
 # poll-loop safety margin on top of it, for block-timestamp/mining jitter.
 _VOTE_POLL_BUFFER_SECONDS = 120
@@ -266,6 +287,8 @@ def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
     # unconditionally -- harmless here since apply() only reaches this point on a first deploy
     # (the "observed" guard above already returned "present" otherwise), so there is nothing to
     # lose; matches every other module's "a first run is the only run that deploys" contract.
+    _VIA_VOTE_DEST.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_VIA_VOTE, _VIA_VOTE_DEST)
 
     _STEPS_DEST.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(_STEPS_SOURCE, _STEPS_DEST)
@@ -281,6 +304,11 @@ def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
         "SCRATCH_DEPLOY_CONFIG": str(_SCRATCH_DEPLOY_CONFIG),
         "STEPS_FILE": _STEPS_FILE_ARG,
         "NETWORK_STATE_FILE": str(state_file),
+        # 0135's Curated Module v2 deploy estimates ~73.6M gas; CSM's own [profile.deploy]
+        # caps Foundry's simulated block at 60M (docs/tasks/E12-slices/s1.md). The fixturenet's
+        # real block gas limit is already 200M (ethereum-genesis-generator's GENESIS_GASLIMIT),
+        # so only Foundry's own profile cap needs raising here.
+        "FOUNDRY_BLOCK_GAS_LIMIT": "100000000",
     }
     _run_dao_deploy(env)
 
@@ -308,6 +336,8 @@ def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
         "wstETH": wsteth,
         "accountingOracle": accounting_oracle,
         "hashConsensus": hash_consensus,
+        "stakingRouter": state["stakingRouter"]["proxy"]["address"],
+        "agent": state[_SK_APP_AGENT]["proxy"]["address"],
     }
     ctx.manifest.setdefault("assets", {})["wstETH"] = wsteth
     ctx.manifest.setdefault("gasUsed", {})
@@ -338,6 +368,77 @@ def verify(ctx: Context, action: str) -> None:
         members_line = ctx.cast("call", hash_consensus, "getMembers()(address[],uint256[])").splitlines()[0].strip()
         if members_line != "[]":
             raise ctx.fail(f"HashConsensus[{hash_consensus}].getMembers() returned members {members_line}, expected none")
+
+    # E12 slice 4: staking router module list -- count and names must match a real scratch
+    # deploy's (env/lido/reference-staking-modules.json, recorded with provenance by
+    # env/lido/tools/capture-0140-calls.ts).
+    staking_router_addr = lido.get("stakingRouter", "")
+    if staking_router_addr and staking_router_addr != "0x0000000000000000000000000000000000000000":
+        reference = json.loads(_REFERENCE_STAKING_MODULES.read_text())
+        expected_modules = [m["name"] for m in reference["modules"]]
+
+        module_ids_line = ctx.cast("call", staking_router_addr, "getStakingModuleIds()(uint256[])")
+        module_id_list = [int(x) for x in module_ids_line.strip("[]").split(",") if x.strip()]
+        if len(module_id_list) != len(expected_modules):
+            raise ctx.fail(
+                f"StakingRouter has {len(module_id_list)} modules, expected {len(expected_modules)}: {expected_modules}"
+            )
+        actual_module_names = []
+        for mid in module_id_list:
+            # StakingRouter.getStakingModule returns a single `StakingModule` struct (contracts/
+            # 0.8.25/sr/SRTypes.sol) -- cast's signature needs it double-parenthesized as one
+            # tuple return, not a flat comma list of "several top-level return values" (which
+            # silently misaligns the byte offsets, since the struct's `name` is a dynamic field
+            # partway through the tuple, not first). `name` is the only string field, so a plain
+            # quoted-string search on the printed tuple line is robust regardless of position.
+            mod = ctx.cast(
+                "call",
+                staking_router_addr,
+                "getStakingModule(uint256)((uint24,address,uint16,uint16,uint16,uint8,string,"
+                "uint64,uint256,uint256,uint16,uint64,uint64,uint8,uint64))",
+                str(mid),
+            )
+            name_match = re.search(r'"([^"]*)"', mod)
+            if not name_match:
+                raise ctx.fail(f"StakingRouter.getStakingModule({mid}) did not return a quoted name: {mod}")
+            actual_module_names.append(name_match.group(1))
+        if actual_module_names != expected_modules:
+            raise ctx.fail(f"StakingRouter module list is {actual_module_names}, expected {expected_modules}")
+        print(f"lido verify: StakingRouter module list matches reference: {actual_module_names}")
+
+    # E12: Role checks - deployer holds no DEFAULT_ADMIN_ROLE on the key contracts,
+    # and the Agent does. Check on: AccountingOracle, both HashConsensus, and stakingRouter.
+    # Deployer must NOT hold DEFAULT_ADMIN_ROLE; Agent MUST. The locator itself is a plain
+    # immutable-storage contract (contracts/0.8.9/LidoLocator.sol) -- it does not extend OZ
+    # AccessControl and has no hasRole() at all (calling it reverts with no data), matching
+    # scripts/scratch/steps/0150-transfer-roles.ts's own ozAdminTransfers list, which also
+    # excludes it -- so it is not checked here.
+    deployed_state_file = ctx.state_dir / "lido-deployed.json"
+    if deployed_state_file.exists():
+        deployed_state = json.loads(deployed_state_file.read_text())
+        deployer = ctx.deployer_address
+        agent = _proxy_address(deployed_state, _SK_APP_AGENT)
+        contracts_to_check = [
+            (lido["accountingOracle"], "AccountingOracle"),
+            (lido["hashConsensus"][0], "HashConsensus (accounting)"),
+            (lido["hashConsensus"][1], "HashConsensus (validators)"),
+            (lido["stakingRouter"], "StakingRouter"),
+        ]
+        for contract_addr, name in contracts_to_check:
+            deployer_has_role = ctx.cast("call", contract_addr,
+                "hasRole(bytes32,address)(bool)", DEFAULT_ADMIN_ROLE, deployer)
+            agent_has_role = ctx.cast("call", contract_addr,
+                "hasRole(bytes32,address)(bool)", DEFAULT_ADMIN_ROLE, agent)
+            if deployer_has_role == "true":
+                raise ctx.fail(
+                    f"{name}[{contract_addr}]: deployer holds DEFAULT_ADMIN_ROLE, "
+                    f"expected only the Agent"
+                )
+            if agent_has_role != "true":
+                raise ctx.fail(
+                    f"{name}[{contract_addr}]: Agent does not hold DEFAULT_ADMIN_ROLE"
+                )
+        print(f"lido verify: Deployer holds no DEFAULT_ADMIN_ROLE on any oracle/registry; Agent does.")
 
     if action not in _FRESHLY_RECOGNIZED:
         return  # stETH()/stEthPerToken()/zero-members (just checked) already prove correctness

@@ -40,7 +40,7 @@ The pod runs four services:
   `/data/metadata/genesis.json` and `genesis.ssz` already exist)
 - `armada-fixturenet-geth` - upstream geth (EL, HTTP 8545, WS 8546, engine API 8551)
 - `armada-fixturenet-beacon` - lighthouse beacon node (CL beacon, HTTP 5052)
-- `armada-fixturenet-validator` - lighthouse validator client (64 validators)
+- `armada-fixturenet-validator` - lighthouse validator client (4 validators)
 
 Notes:
 - `armada-fixturenet-geth`'s healthcheck (`eth_blockNumber` via BusyBox `wget`) gates
@@ -52,6 +52,23 @@ Notes:
 - geth's default `--miner.gasprice` (1,000,000 wei) is above this fixturenet's single-digit-wei
   base fee, so a `cast` transaction bidding the base fee never clears it and is never mined;
   `--miner.gasprice=1` fixes that.
+- geth, the beacon and all 4 validators run under `cgroup_parent: fixturenet.slice` with a
+  `cpuset` pinning each to its own dedicated core (geth/beacon get 2 cores each, one validator
+  per remaining core). This isolates fixturenet block production from other host load; see
+  `docs/tasks/E12-lido-full-scratch.md`'s "As built" section for the full host-side setup
+  (validators cut from 64 to 4, and why) and measurements.
+- geth's HTTP server's default `IdleTimeout` (120s) closes a keep-alive connection that has
+  sat idle for that long; a Lido scratch-deploy step (0135) runs an external `forge script
+  --broadcast --slow` deploy for several minutes on a separate connection while Hardhat's own
+  connection sits idle, so without this override the next JSON-RPC call after that step can
+  fail with `EPIPE`. `armada-fixturenet-geth`'s command generates a `--config` file overriding
+  only `[Node.HTTPTimeouts] IdleTimeout` (1 hour), leaving every other timeout/flag at its
+  default.
+- **The deployment directory (`deploy create --deployment-dir <dir>`) must not live on ZFS.**
+  ZFS's own I/O path measurably increases chain reorgs and late block broadcasts under write
+  load (measured: 20 reorgs/79 late broadcasts on ZFS vs. 0 reorgs/4 late on ext4 over the same
+  10-minute window, same reserved cores) -- put deployments on an ext4 (or similar) volume
+  instead.
 
 ### Environment reconciler
 

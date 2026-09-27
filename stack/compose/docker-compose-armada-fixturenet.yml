@@ -11,7 +11,7 @@ services:
     environment:
       CHAIN_ID: "31337"
       EL_AND_CL_MNEMONIC: "test test test test test test test test test test test junk"
-      NUMBER_OF_VALIDATORS: "64"
+      NUMBER_OF_VALIDATORS: "4"
       SLOT_DURATION_MS: "2000"
       ALTAIR_FORK_EPOCH: "0"
       BELLATRIX_FORK_EPOCH: "0"
@@ -36,6 +36,8 @@ services:
       armada-fixturenet-genesis:
         condition: service_completed_successfully
     restart: unless-stopped
+    cgroup_parent: fixturenet.slice
+    cpuset: "10,26"
     volumes:
       - armada_fixturenet_genesis:/data
       - geth_data:/root/ethdata
@@ -49,7 +51,16 @@ services:
         if [ ! -d /root/ethdata/geth/chaindata ] && [ ! -d /root/ethdata/geth/ ] 2>/dev/null; then
           geth init --datadir /root/ethdata /data/metadata/genesis.json
         fi
-        exec geth           --datadir /root/ethdata           --networkid=31337           --http           --http.addr=0.0.0.0           --http.port=8545           --http.api=eth,net,web3,debug,txpool           --http.corsdomain="*"           --http.vhosts=*           --ws           --ws.addr=0.0.0.0           --ws.port=8546           --ws.api=eth,net,web3,debug,txpool           --authrpc.addr=0.0.0.0           --authrpc.port=8551           --authrpc.vhosts=*           --authrpc.jwtsecret=/data/jwt/jwtsecret           --miner.gasprice=1           --syncmode=full
+        # geth's default HTTP IdleTimeout (120s) closes a keep-alive connection that sits idle
+        # while a `forge script --broadcast --slow` external deploy runs for several minutes on a
+        # separate connection (armada-nitro's Lido 0135 step); the next write on the stale, closed
+        # socket then fails (EPIPE). Override only IdleTimeout via --config, leaving every other
+        # timeout/flag at its default.
+        cat > /tmp/geth-http-timeouts.toml <<'EOF'
+        [Node.HTTPTimeouts]
+        IdleTimeout = 3600000000000
+        EOF
+        exec geth           --config /tmp/geth-http-timeouts.toml           --datadir /root/ethdata           --networkid=31337           --http           --http.addr=0.0.0.0           --http.port=8545           --http.api=eth,net,web3,debug,txpool           --http.corsdomain="*"           --http.vhosts=*           --ws           --ws.addr=0.0.0.0           --ws.port=8546           --ws.api=eth,net,web3,debug,txpool           --authrpc.addr=0.0.0.0           --authrpc.port=8551           --authrpc.vhosts=*           --authrpc.jwtsecret=/data/jwt/jwtsecret           --miner.gasprice=1           --syncmode=full
     ports:
       - "8545"
       - "8546"
@@ -70,6 +81,8 @@ services:
       armada-fixturenet-geth:
         condition: service_healthy
     restart: unless-stopped
+    cgroup_parent: fixturenet.slice
+    cpuset: "11,27"
     volumes:
       - armada_fixturenet_genesis:/data
       - beacon_data:/root/beacon
@@ -81,7 +94,7 @@ services:
       - |
         exec lighthouse bn           --datadir /root/beacon           --testnet-dir /data/metadata           --execution-endpoint http://armada-fixturenet-geth:8551           --execution-jwt /data/jwt/jwtsecret           --http           --http-address 0.0.0.0           --http-port 5052           --port 4000           --target-peers 0           --allow-insecure-genesis-sync           --ignore-ws-check
 
-  armada-fixturenet-validator:
+  armada-fixturenet-validator-0:
     image: sigp/lighthouse:v8.2.2
     depends_on:
       armada-fixturenet-genesis:
@@ -89,17 +102,91 @@ services:
       armada-fixturenet-geth:
         condition: service_healthy
     restart: unless-stopped
+    cgroup_parent: fixturenet.slice
+    cpuset: "12"
     volumes:
       - armada_fixturenet_genesis:/data
-      - validator_data:/root
+      - validator_0_data:/root
     command:
       - sh
       - -c
       - |
-        # recover validators from the mnemonic file the generator wrote
+        # validator 0 of 4: one key (mnemonic index 0), one process, one core
         if [ ! -d /root/validators ] 2>/dev/null; then
           printf '%s' "test test test test test test test test test test test junk" > /tmp/mnemonic.txt
-          lighthouse account_manager validator recover             --datadir /root             --count 64             --first-index 0             --testnet-dir /data/metadata             --mnemonic-path /tmp/mnemonic.txt             --stdin-inputs
+          lighthouse account_manager validator recover             --datadir /root             --count 1             --first-index 0             --testnet-dir /data/metadata             --mnemonic-path /tmp/mnemonic.txt             --stdin-inputs
+        fi
+        exec lighthouse vc           --datadir /root           --testnet-dir /data/metadata           --beacon-nodes http://armada-fixturenet-beacon:5052           --init-slashing-protection           --suggested-fee-recipient 0x000000000000000000000000000000000000fEE5
+
+  armada-fixturenet-validator-1:
+    image: sigp/lighthouse:v8.2.2
+    depends_on:
+      armada-fixturenet-genesis:
+        condition: service_completed_successfully
+      armada-fixturenet-geth:
+        condition: service_healthy
+    restart: unless-stopped
+    cgroup_parent: fixturenet.slice
+    cpuset: "13"
+    volumes:
+      - armada_fixturenet_genesis:/data
+      - validator_1_data:/root
+    command:
+      - sh
+      - -c
+      - |
+        # validator 1 of 4: one key (mnemonic index 1), one process, one core
+        if [ ! -d /root/validators ] 2>/dev/null; then
+          printf '%s' "test test test test test test test test test test test junk" > /tmp/mnemonic.txt
+          lighthouse account_manager validator recover             --datadir /root             --count 1             --first-index 1             --testnet-dir /data/metadata             --mnemonic-path /tmp/mnemonic.txt             --stdin-inputs
+        fi
+        exec lighthouse vc           --datadir /root           --testnet-dir /data/metadata           --beacon-nodes http://armada-fixturenet-beacon:5052           --init-slashing-protection           --suggested-fee-recipient 0x000000000000000000000000000000000000fEE5
+
+  armada-fixturenet-validator-2:
+    image: sigp/lighthouse:v8.2.2
+    depends_on:
+      armada-fixturenet-genesis:
+        condition: service_completed_successfully
+      armada-fixturenet-geth:
+        condition: service_healthy
+    restart: unless-stopped
+    cgroup_parent: fixturenet.slice
+    cpuset: "14"
+    volumes:
+      - armada_fixturenet_genesis:/data
+      - validator_2_data:/root
+    command:
+      - sh
+      - -c
+      - |
+        # validator 2 of 4: one key (mnemonic index 2), one process, one core
+        if [ ! -d /root/validators ] 2>/dev/null; then
+          printf '%s' "test test test test test test test test test test test junk" > /tmp/mnemonic.txt
+          lighthouse account_manager validator recover             --datadir /root             --count 1             --first-index 2             --testnet-dir /data/metadata             --mnemonic-path /tmp/mnemonic.txt             --stdin-inputs
+        fi
+        exec lighthouse vc           --datadir /root           --testnet-dir /data/metadata           --beacon-nodes http://armada-fixturenet-beacon:5052           --init-slashing-protection           --suggested-fee-recipient 0x000000000000000000000000000000000000fEE5
+
+  armada-fixturenet-validator-3:
+    image: sigp/lighthouse:v8.2.2
+    depends_on:
+      armada-fixturenet-genesis:
+        condition: service_completed_successfully
+      armada-fixturenet-geth:
+        condition: service_healthy
+    restart: unless-stopped
+    cgroup_parent: fixturenet.slice
+    cpuset: "15"
+    volumes:
+      - armada_fixturenet_genesis:/data
+      - validator_3_data:/root
+    command:
+      - sh
+      - -c
+      - |
+        # validator 3 of 4: one key (mnemonic index 3), one process, one core
+        if [ ! -d /root/validators ] 2>/dev/null; then
+          printf '%s' "test test test test test test test test test test test junk" > /tmp/mnemonic.txt
+          lighthouse account_manager validator recover             --datadir /root             --count 1             --first-index 3             --testnet-dir /data/metadata             --mnemonic-path /tmp/mnemonic.txt             --stdin-inputs
         fi
         exec lighthouse vc           --datadir /root           --testnet-dir /data/metadata           --beacon-nodes http://armada-fixturenet-beacon:5052           --init-slashing-protection           --suggested-fee-recipient 0x000000000000000000000000000000000000fEE5
 
@@ -107,5 +194,8 @@ volumes:
   armada_fixturenet_genesis:
   geth_data:
   beacon_data:
-  validator_data:
+  validator_0_data:
+  validator_1_data:
+  validator_2_data:
+  validator_3_data:
   armada_env:

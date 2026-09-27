@@ -19,8 +19,9 @@ stale `cerc-io/go-ethereum@v1.11.6-statediff-v5` and `sigp/lighthouse:v5.1.2`.
 - `compose/docker-compose-armada-fixturenet.yml` with these services:
   - `armada-fixturenet-genesis`: image `ethpandaops/ethereum-genesis-generator:6.2.1`.
     - Generates EL and CL genesis into a named volume `armada_fixturenet_genesis`. Idempotent: skips if genesis exists.
-    - `CHAIN_ID=31337`; every fork epoch (Altair … Electra, Fulu) = 0; slot time 2 s; 64 validators from a fixed
-      validator mnemonic.
+    - `CHAIN_ID=31337`; every fork epoch (Altair … Electra, Fulu) = 0; slot time 2 s; 4 validators from a fixed
+      validator mnemonic (64 originally; cut to 4 in E12 to reduce per-slot validator work after blocks were
+      broadcast late and orphaned under host load).
     - Premine: accounts 0–9 of mnemonic `test test test test test test test test test test test junk` (path
       `m/44'/60'/0'/0/i`), 10,000 ETH each.
     - The deposit contract is placed where the generator places it. Record the address.
@@ -31,7 +32,7 @@ stale `cerc-io/go-ethereum@v1.11.6-statediff-v5` and `sigp/lighthouse:v5.1.2`.
       localhost-same` puts them on the host's `127.0.0.1:8545`.
   - `armada-fixturenet-beacon`: image `sigp/lighthouse:v8.2.2`, `lighthouse bn` against geth's engine API, testnet
     dir from the genesis volume, no peers needed.
-  - `armada-fixturenet-validator`: image `sigp/lighthouse:v8.2.2`, `lighthouse vc` with the 64 generated validator
+  - `armada-fixturenet-validator`: image `sigp/lighthouse:v8.2.2`, `lighthouse vc` with the 4 generated validator
     keys.
   - Healthcheck on geth: `eth_blockNumber` > 0.
 - `stacks/armada-nitro-fixturenet/stack.yml`: pod `armada-fixturenet` (later tasks add jobs).
