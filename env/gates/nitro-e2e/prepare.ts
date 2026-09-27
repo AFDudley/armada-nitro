@@ -45,90 +45,136 @@
  * relative lib/sdk imports resolve the same way scripts/capture/e2e-armada-circuits.ts's do).
  */
 
-import { ethers } from 'hardhat';
-import * as fs from 'fs';
-import * as path from 'path';
+import { ethers } from "hardhat";
+import * as fs from "fs";
+import * as path from "path";
 
-import { initializeEngine, shutdownEngine, clearDatabase, getEngine } from '../../lib/sdk/init';
-import { createWallet, DEFAULT_ENCRYPTION_KEY } from '../../lib/sdk/wallet';
+import {
+  initializeEngine,
+  shutdownEngine,
+  clearDatabase,
+  getEngine,
+} from "../../lib/sdk/init";
+import { createWallet, DEFAULT_ENCRYPTION_KEY } from "../../lib/sdk/wallet";
 import {
   initializeProver,
   createTransactionBatch,
   addUnshieldOutput,
   generateProvedTransactions,
-} from '../../lib/sdk/prover';
-import { createShieldRequest, generateShieldPrivateKey } from '../../lib/sdk/shield';
-import { loadNetworkIntoEngine, scanWalletBalances } from '../../lib/sdk/network';
-import { getSpendableBalance } from '../../lib/sdk/transfer';
-import { getChainById, getRpcUrl } from '../../lib/sdk/chain-config';
+} from "../../lib/sdk/prover";
+import {
+  createShieldRequest,
+  generateShieldPrivateKey,
+} from "../../lib/sdk/shield";
+import {
+  loadNetworkIntoEngine,
+  scanWalletBalances,
+} from "../../lib/sdk/network";
+import { getSpendableBalance } from "../../lib/sdk/transfer";
+import { getChainById, getRpcUrl } from "../../lib/sdk/chain-config";
 
-import { TXIDVersion, POI, POINodeInterface, RailgunWallet } from '@railgun-community/engine';
-import { ChainType, Chain } from '@railgun-community/shared-models';
+import {
+  TXIDVersion,
+  POI,
+  POINodeInterface,
+  RailgunWallet,
+} from "@railgun-community/engine";
+import { ChainType, Chain } from "@railgun-community/shared-models";
 
 // Same stub as scripts/capture/e2e-armada-circuits.ts -- POI is not part of this environment.
 class StubPOINodeInterface extends POINodeInterface {
-  isActive(): boolean { return false; }
-  async isRequired(): Promise<boolean> { return false; }
-  async getPOIsPerList(): Promise<Record<string, any>> { return {}; }
-  async getPOIMerkleProofs(): Promise<any[]> { return []; }
-  async validatePOIMerkleroots(): Promise<boolean> { return true; }
-  async submitPOI(): Promise<void> { /* no-op */ }
-  async submitLegacyTransactProofs(): Promise<void> { /* no-op */ }
+  isActive(): boolean {
+    return false;
+  }
+  async isRequired(): Promise<boolean> {
+    return false;
+  }
+  async getPOIsPerList(): Promise<Record<string, any>> {
+    return {};
+  }
+  async getPOIMerkleProofs(): Promise<any[]> {
+    return [];
+  }
+  async validatePOIMerkleroots(): Promise<boolean> {
+    return true;
+  }
+  async submitPOI(): Promise<void> {
+    /* no-op */
+  }
+  async submitLegacyTransactProofs(): Promise<void> {
+    /* no-op */
+  }
 }
 POI.init([], new StubPOINodeInterface());
 
-const MANIFEST_PATH = process.env.MANIFEST_PATH || '/env/manifest.json';
-const OUTPUT_PATH = process.env.DEPOSITS_OUTPUT || '/env/nitro-e2e/deposits.json';
-const CHALLENGE_DURATION = Number(process.env.CHALLENGE_DURATION || '30');
-const BAD_ADAPT_PARAMS = process.env.NITRO_E2E_BAD_ADAPT_PARAMS === '1';
-const BAD_ADAPT_CONTRACT = process.env.NITRO_E2E_BAD_ADAPT_CONTRACT === '1';
+const MANIFEST_PATH = process.env.MANIFEST_PATH || "/env/manifest.json";
+const OUTPUT_PATH =
+  process.env.DEPOSITS_OUTPUT || "/env/nitro-e2e/deposits.json";
+const CHALLENGE_DURATION = Number(process.env.CHALLENGE_DURATION || "30");
+const BAD_ADAPT_PARAMS = process.env.NITRO_E2E_BAD_ADAPT_PARAMS === "1";
+const BAD_ADAPT_CONTRACT = process.env.NITRO_E2E_BAD_ADAPT_CONTRACT === "1";
 const CHANNEL_COUNT = BAD_ADAPT_PARAMS || BAD_ADAPT_CONTRACT ? 1 : 2;
 
-const DEPOSIT_AMOUNT = ethers.parseUnits('100', 6); // 100 USDC per channel -- matches script/LocalScenario.s.sol's USER_FUNDS
-const SHIELD_AMOUNT = ethers.parseUnits('150', 6); // gross per channel; nets ~149.25 USDC after the pool's 0.5% shield fee
+const DEPOSIT_AMOUNT = ethers.parseUnits("100", 6); // 100 USDC per channel -- matches script/LocalScenario.s.sol's USER_FUNDS
+const SHIELD_AMOUNT = ethers.parseUnits("150", 6); // gross per channel; nets ~149.25 USDC after the pool's 0.5% shield fee
 const SCAN_TIMEOUT_MS = 60_000;
 
 // Minimal ABI for the two adjudicator calls this script needs: reading the binding, and encoding
 // depositFromNote's calldata. The Transaction tuple mirrors lib/sdk/yield.ts's ADAPTER_ABI (both
 // ultimately forward the same struct to PrivacyPool.transact).
 const ADJUDICATOR_ABI = [
-  'function depositBinding(bytes32 channelId, uint256 expectedHeld) view returns (bytes32)',
-  'function depositFromNote(bytes32 channelId, uint256 expectedHeld, tuple(tuple(tuple(uint256 x, uint256 y) a, tuple(uint256[2] x, uint256[2] y) b, tuple(uint256 x, uint256 y) c) proof, bytes32 merkleRoot, bytes32[] nullifiers, bytes32[] commitments, tuple(uint16 treeNumber, uint72 minGasPrice, uint8 unshield, uint64 chainID, address adaptContract, bytes32 adaptParams, tuple(bytes32[4] ciphertext, bytes32 blindedSenderViewingKey, bytes32 blindedReceiverViewingKey, bytes annotationData, bytes memo)[] commitmentCiphertext) boundParams, tuple(bytes32 npk, tuple(uint8 tokenType, address tokenAddress, uint256 tokenSubID) token, uint120 value) unshieldPreimage)[] transactions) returns ()',
+  "function depositBinding(bytes32 channelId, uint256 expectedHeld) view returns (bytes32)",
+  "function depositFromNote(bytes32 channelId, uint256 expectedHeld, tuple(tuple(tuple(uint256 x, uint256 y) a, tuple(uint256[2] x, uint256[2] y) b, tuple(uint256 x, uint256 y) c) proof, bytes32 merkleRoot, bytes32[] nullifiers, bytes32[] commitments, tuple(uint16 treeNumber, uint72 minGasPrice, uint8 unshield, uint64 chainID, address adaptContract, bytes32 adaptParams, tuple(bytes32[4] ciphertext, bytes32 blindedSenderViewingKey, bytes32 blindedReceiverViewingKey, bytes annotationData, bytes memo)[] commitmentCiphertext) boundParams, tuple(bytes32 npk, tuple(uint8 tokenType, address tokenAddress, uint256 tokenSubID) token, uint120 value) unshieldPreimage)[] transactions) returns ()",
 ];
 
 /** Normalize the proved TransactionStructV2 into the tuple the adjudicator ABI expects. Ported
  * from lib/sdk/yield.ts's normalizeTransactionForAdapter (that file's version is private to it). */
-function normalizeTransactionForAdjudicator(tx: unknown, chainId: number): unknown {
+function normalizeTransactionForAdjudicator(
+  tx: unknown,
+  chainId: number,
+): unknown {
   const toBigInt = (v: unknown): bigint => {
     if (v == null) return 0n;
-    if (typeof v === 'bigint') return v;
-    if (typeof v === 'number' || typeof v === 'string') return BigInt(v);
+    if (typeof v === "bigint") return v;
+    if (typeof v === "number" || typeof v === "string") return BigInt(v);
     return 0n;
   };
   const toHex = (v: unknown): string => {
     if (v == null) return ethers.ZeroHash;
-    if (typeof v === 'string' && v.startsWith('0x')) return v;
-    try { return ethers.hexlify(v as ethers.BytesLike); } catch { return ethers.ZeroHash; }
+    if (typeof v === "string" && v.startsWith("0x")) return v;
+    try {
+      return ethers.hexlify(v as ethers.BytesLike);
+    } catch {
+      return ethers.ZeroHash;
+    }
   };
   const t = tx as Record<string, unknown>;
   const bp = t.boundParams as Record<string, unknown> | undefined;
-  const rawCiphertext = (bp?.commitmentCiphertext ?? []) as Array<Record<string, unknown> | null | undefined>;
+  const rawCiphertext = (bp?.commitmentCiphertext ?? []) as Array<
+    Record<string, unknown> | null | undefined
+  >;
   const defaultCiphertext: [string, string, string, string] = [
-    ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash,
+    ethers.ZeroHash,
+    ethers.ZeroHash,
+    ethers.ZeroHash,
+    ethers.ZeroHash,
   ];
   const commitmentCiphertext = rawCiphertext
     .filter((c): c is Record<string, unknown> => c != null)
     .map((c) => {
       const ct = c.ciphertext as string[] | undefined;
-      const arr = Array.isArray(ct) && ct.length >= 4
-        ? [ct[0], ct[1], ct[2], ct[3]] as [string, string, string, string]
-        : defaultCiphertext;
+      const arr =
+        Array.isArray(ct) && ct.length >= 4
+          ? ([ct[0], ct[1], ct[2], ct[3]] as [string, string, string, string])
+          : defaultCiphertext;
       return {
         ciphertext: arr,
-        blindedSenderViewingKey: (c.blindedSenderViewingKey ?? ethers.ZeroHash) as string,
-        blindedReceiverViewingKey: (c.blindedReceiverViewingKey ?? ethers.ZeroHash) as string,
-        annotationData: (c.annotationData ?? '0x') as string,
-        memo: (c.memo ?? '0x') as string,
+        blindedSenderViewingKey: (c.blindedSenderViewingKey ??
+          ethers.ZeroHash) as string,
+        blindedReceiverViewingKey: (c.blindedReceiverViewingKey ??
+          ethers.ZeroHash) as string,
+        annotationData: (c.annotationData ?? "0x") as string,
+        memo: (c.memo ?? "0x") as string,
       };
     });
 
@@ -138,7 +184,9 @@ function normalizeTransactionForAdjudicator(tx: unknown, chainId: number): unkno
     npk: toHex(up?.npk) || ethers.ZeroHash,
     token: {
       tokenType: Number(token.tokenType ?? 0),
-      tokenAddress: (token.tokenAddress != null ? String(token.tokenAddress) : ethers.ZeroAddress) as string,
+      tokenAddress: (token.tokenAddress != null
+        ? String(token.tokenAddress)
+        : ethers.ZeroAddress) as string,
       tokenSubID: toBigInt(token.tokenSubID),
     },
     value: toBigInt(up?.value),
@@ -162,14 +210,20 @@ function normalizeTransactionForAdjudicator(tx: unknown, chainId: number): unkno
   return {
     proof: snarkProof,
     merkleRoot: toHex(t.merkleRoot) || ethers.ZeroHash,
-    nullifiers: ((t.nullifiers ?? []) as unknown[]).map((n) => toHex(n) || ethers.ZeroHash) as string[],
-    commitments: ((t.commitments ?? []) as unknown[]).map((c) => toHex(c) || ethers.ZeroHash) as string[],
+    nullifiers: ((t.nullifiers ?? []) as unknown[]).map(
+      (n) => toHex(n) || ethers.ZeroHash,
+    ) as string[],
+    commitments: ((t.commitments ?? []) as unknown[]).map(
+      (c) => toHex(c) || ethers.ZeroHash,
+    ) as string[],
     boundParams: {
       treeNumber: Number(bp?.treeNumber ?? 0),
       minGasPrice: toBigInt(bp?.minGasPrice),
       unshield: Number(bp?.unshield ?? 1),
       chainID: toBigInt(bp?.chainID) || BigInt(chainId),
-      adaptContract: (bp?.adaptContract != null ? String(bp.adaptContract) : ethers.ZeroAddress) as string,
+      adaptContract: (bp?.adaptContract != null
+        ? String(bp.adaptContract)
+        : ethers.ZeroAddress) as string,
       adaptParams: toHex(bp?.adaptParams) || ethers.ZeroHash,
       commitmentCiphertext,
     },
@@ -178,7 +232,12 @@ function normalizeTransactionForAdjudicator(tx: unknown, chainId: number): unkno
 }
 
 async function waitForBalance(
-  walletId: string, chain: Chain, wallet: any, tokenAddress: string, minAmount: bigint, timeoutMs: number,
+  walletId: string,
+  chain: Chain,
+  wallet: any,
+  tokenAddress: string,
+  minAmount: bigint,
+  timeoutMs: number,
 ): Promise<bigint> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -187,11 +246,13 @@ async function waitForBalance(
     if (bal >= minAmount) return bal;
     await new Promise((r) => setTimeout(r, 3000));
   }
-  throw new Error(`spendable balance didn't reach ${minAmount} within ${timeoutMs / 1000}s`);
+  throw new Error(
+    `spendable balance didn't reach ${minAmount} within ${timeoutMs / 1000}s`,
+  );
 }
 
 async function main() {
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf-8'));
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf-8"));
   const poolAddress: string = manifest.armada.pool;
   const usdcAddress: string = manifest.armada.usdc;
   const deployBlock: number = manifest.armada.deployBlock ?? 0;
@@ -200,72 +261,125 @@ async function main() {
   const custodian: string = manifest.armadaNitro.hubCustodian;
   const testAccountAddress: string = manifest.testAccounts[0].address;
 
-  console.log(`pool=${poolAddress} usdc=${usdcAddress} adjudicator=${adjudicatorAddress}`);
-  console.log(`consensusApp=${consensusApp} custodian=${custodian} testAccount=${testAccountAddress}`);
-  console.log(`channels=${CHANNEL_COUNT} challengeDuration=${CHALLENGE_DURATION}`);
-  if (BAD_ADAPT_PARAMS) console.log('DISCRIMINATION MODE: binding adaptParams to depositBinding(channelId, 1)');
-  if (BAD_ADAPT_CONTRACT) console.log('DISCRIMINATION MODE: setting adaptContract to the test account');
+  console.log(
+    `pool=${poolAddress} usdc=${usdcAddress} adjudicator=${adjudicatorAddress}`,
+  );
+  console.log(
+    `consensusApp=${consensusApp} custodian=${custodian} testAccount=${testAccountAddress}`,
+  );
+  console.log(
+    `channels=${CHANNEL_COUNT} challengeDuration=${CHALLENGE_DURATION}`,
+  );
+  if (BAD_ADAPT_PARAMS)
+    console.log(
+      "DISCRIMINATION MODE: binding adaptParams to depositBinding(channelId, 1)",
+    );
+  if (BAD_ADAPT_CONTRACT)
+    console.log(
+      "DISCRIMINATION MODE: setting adaptContract to the test account",
+    );
 
   const signers = await ethers.getSigners();
-  const user = signers.find((s) => s.address.toLowerCase() === testAccountAddress.toLowerCase());
+  const user = signers.find(
+    (s) => s.address.toLowerCase() === testAccountAddress.toLowerCase(),
+  );
   if (!user) {
     throw new Error(
       `test account ${testAccountAddress} not found among hub network signers (mnemonic-derived); ` +
-      `expected it at signers[1] (anvil mnemonic index 1)`
+        `expected it at signers[1] (anvil mnemonic index 1)`,
     );
   }
 
-  const privacyPool = await ethers.getContractAt('PrivacyPool', poolAddress);
+  const privacyPool = await ethers.getContractAt("PrivacyPool", poolAddress);
   // MockUSDCV2's ABI is an ERC20 superset (standard calls only) -- works against the real
   // FiatToken USDC too, same as scripts/capture/e2e-armada-circuits.ts relies on.
-  const usdc = await ethers.getContractAt('MockUSDCV2', usdcAddress);
-  const adjudicatorRead = new ethers.Contract(adjudicatorAddress, ADJUDICATOR_ABI, ethers.provider);
+  const usdc = await ethers.getContractAt("MockUSDCV2", usdcAddress);
+  const adjudicatorRead = new ethers.Contract(
+    adjudicatorAddress,
+    ADJUDICATOR_ABI,
+    ethers.provider,
+  );
   const depositIface = new ethers.Interface(ADJUDICATOR_ABI);
 
   clearDatabase();
-  await initializeEngine('nitroe2e');
-  const chain: Chain = getChainById(31337) ?? { type: ChainType.EVM, id: 31337 };
+  await initializeEngine("nitroe2e");
+  const chain: Chain = getChainById(31337) ?? {
+    type: ChainType.EVM,
+    id: 31337,
+  };
   const rpcUrl = getRpcUrl(chain);
-  await loadNetworkIntoEngine(chain, poolAddress, ethers.ZeroAddress, rpcUrl, deployBlock);
+  await loadNetworkIntoEngine(
+    chain,
+    poolAddress,
+    ethers.ZeroAddress,
+    rpcUrl,
+    deployBlock,
+  );
   await initializeProver();
 
   // ---- Per channel: own wallet, own shield, then a real-proof unshield bound to the adjudicator ----
   const deposits: Array<{
-    channelId: string; channelNonce: string; amount: string; calldata: string; proofTimeMs: number;
+    channelId: string;
+    channelNonce: string;
+    amount: string;
+    calldata: string;
+    proofTimeMs: number;
   }> = [];
 
   for (let i = 0; i < CHANNEL_COUNT; i++) {
     const walletInfo = await createWallet(DEFAULT_ENCRYPTION_KEY);
     const engine = getEngine();
     const wallet = engine.wallets[walletInfo.id] as unknown as RailgunWallet;
-    console.log(`\nchannel ${i}: shielding wallet ${walletInfo.railgunAddress}`);
+    console.log(
+      `\nchannel ${i}: shielding wallet ${walletInfo.railgunAddress}`,
+    );
 
     const shieldPrivateKey = generateShieldPrivateKey();
     const { shieldRequest } = await createShieldRequest(
-      { railgunAddress: walletInfo.railgunAddress, amount: SHIELD_AMOUNT, tokenAddress: usdcAddress },
+      {
+        railgunAddress: walletInfo.railgunAddress,
+        amount: SHIELD_AMOUNT,
+        tokenAddress: usdcAddress,
+      },
       shieldPrivateKey,
     );
     await (await usdc.connect(user).approve(poolAddress, SHIELD_AMOUNT)).wait();
-    const shieldTx = await privacyPool.connect(user).shield([shieldRequest], ethers.ZeroAddress);
+    const shieldTx = await privacyPool
+      .connect(user)
+      .shield([shieldRequest], ethers.ZeroAddress);
     const shieldReceipt = await shieldTx.wait();
     console.log(`channel ${i}: shield tx ${shieldReceipt!.hash}`);
 
-    const spendable = await waitForBalance(walletInfo.id, chain, wallet, usdcAddress, DEPOSIT_AMOUNT, SCAN_TIMEOUT_MS);
-    console.log(`channel ${i}: spendable after shield ${ethers.formatUnits(spendable, 6)} USDC`);
+    const spendable = await waitForBalance(
+      walletInfo.id,
+      chain,
+      wallet,
+      usdcAddress,
+      DEPOSIT_AMOUNT,
+      SCAN_TIMEOUT_MS,
+    );
+    console.log(
+      `channel ${i}: spendable after shield ${ethers.formatUnits(spendable, 6)} USDC`,
+    );
 
     const channelNonce = ethers.toBigInt(ethers.hexlify(ethers.randomBytes(8))); // uint64
     const participants = [user.address, custodian];
     const channelId = ethers.keccak256(
       ethers.AbiCoder.defaultAbiCoder().encode(
-        ['address[]', 'uint64', 'address', 'uint48'],
+        ["address[]", "uint64", "address", "uint48"],
         [participants, channelNonce, consensusApp, CHALLENGE_DURATION],
       ),
     );
 
     const expectedHeld = 0n;
     const boundExpectedHeld = BAD_ADAPT_PARAMS ? 1n : expectedHeld;
-    const adaptParams: string = await adjudicatorRead.depositBinding(channelId, boundExpectedHeld);
-    const adaptContract = BAD_ADAPT_CONTRACT ? user.address : adjudicatorAddress;
+    const adaptParams: string = await adjudicatorRead.depositBinding(
+      channelId,
+      boundExpectedHeld,
+    );
+    const adaptContract = BAD_ADAPT_CONTRACT
+      ? user.address
+      : adjudicatorAddress;
 
     const batch = createTransactionBatch(chain);
     addUnshieldOutput(batch, adjudicatorAddress, DEPOSIT_AMOUNT, usdcAddress);
@@ -273,15 +387,28 @@ async function main() {
 
     const proofStart = Date.now();
     const transactions = await generateProvedTransactions(
-      batch, wallet, TXIDVersion.V2_PoseidonMerkle, DEFAULT_ENCRYPTION_KEY,
+      batch,
+      wallet,
+      TXIDVersion.V2_PoseidonMerkle,
+      DEFAULT_ENCRYPTION_KEY,
       (p: any) => process.stdout.write(`.`),
     );
     const proofTimeMs = Date.now() - proofStart;
-    console.log(`\nchannel ${i}: channelId=${channelId} proof time=${proofTimeMs}ms`);
+    console.log(
+      `\nchannel ${i}: channelId=${channelId} proof time=${proofTimeMs}ms`,
+    );
 
-    if (!transactions.length) throw new Error(`channel ${i}: SDK returned no proved transactions`);
-    const normalized = normalizeTransactionForAdjudicator(transactions[0], chain.id);
-    const calldata = depositIface.encodeFunctionData('depositFromNote', [channelId, expectedHeld, [normalized]]);
+    if (!transactions.length)
+      throw new Error(`channel ${i}: SDK returned no proved transactions`);
+    const normalized = normalizeTransactionForAdjudicator(
+      transactions[0],
+      chain.id,
+    );
+    const calldata = depositIface.encodeFunctionData("depositFromNote", [
+      channelId,
+      expectedHeld,
+      [normalized],
+    ]);
 
     deposits.push({
       channelId,
@@ -309,20 +436,28 @@ async function main() {
       },
       null,
       2,
-    ) + '\n',
+    ) + "\n",
   );
   console.log(`\nwrote ${OUTPUT_PATH}`);
   for (const d of deposits) {
-    console.log(`  channel ${d.channelId}: amount=${ethers.formatUnits(d.amount, 6)} USDC proofTimeMs=${d.proofTimeMs}`);
+    console.log(
+      `  channel ${d.channelId}: amount=${ethers.formatUnits(d.amount, 6)} USDC proofTimeMs=${d.proofTimeMs}`,
+    );
   }
 
   await shutdownEngine();
 }
 
-main().then(() => {
-  process.exit(0);
-}).catch(async (err) => {
-  console.error('\nprepare.ts failed:', err);
-  try { await shutdownEngine(); } catch { /* ignore */ }
-  process.exit(1);
-});
+main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch(async (err) => {
+    console.error("\nprepare.ts failed:", err);
+    try {
+      await shutdownEngine();
+    } catch {
+      /* ignore */
+    }
+    process.exit(1);
+  });

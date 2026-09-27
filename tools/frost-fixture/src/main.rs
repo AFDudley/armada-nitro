@@ -87,12 +87,21 @@ fn main() -> Result<(), frost::Error> {
     let signing_package = frost::SigningPackage::new(commitments, &message);
     let mut shares = BTreeMap::new();
     for id in &signers {
-        shares.insert(*id, frost::round2::sign(&signing_package, &nonces[id], &key_packages[id])?);
+        shares.insert(
+            *id,
+            frost::round2::sign(&signing_package, &nonces[id], &key_packages[id])?,
+        );
     }
     let signature = frost::aggregate(&signing_package, &shares, &public_key_package)?;
-    public_key_package.verifying_key().verify(&message, &signature)?;
+    public_key_package
+        .verifying_key()
+        .verify(&message, &signature)?;
 
-    let group_key = public_key_package.verifying_key().to_element().to_affine().to_encoded_point(false);
+    let group_key = public_key_package
+        .verifying_key()
+        .to_element()
+        .to_affine()
+        .to_encoded_point(false);
     let commitment = signature.R().to_affine().to_encoded_point(false);
     // Serialized as R (33-byte compressed point) || z (32 bytes).
     let serialized = signature.serialize()?;

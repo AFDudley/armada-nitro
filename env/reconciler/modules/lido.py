@@ -45,6 +45,7 @@ default, ethereum-genesis-generator's GENESIS_GASLIMIT=200,000,000, and an Anvil
 started with --gas-limit 200000000); `FOUNDRY_BLOCK_GAS_LIMIT` would override it if that module
 is ever deployed here on purpose.
 """
+
 from __future__ import annotations
 
 import json
@@ -359,15 +360,21 @@ def verify(ctx: Context, action: str) -> None:
 
     rate = _uint(ctx.cast("call", wsteth, "stEthPerToken()(uint256)"))
     if rate != _ONE_ETH_WEI:
-        raise ctx.fail(f"wstETH.stEthPerToken() = {rate}, expected {_ONE_ETH_WEI} (1e18, no oracle report ever)")
+        raise ctx.fail(
+            f"wstETH.stEthPerToken() = {rate}, expected {_ONE_ETH_WEI} (1e18, no oracle report ever)"
+        )
 
     # Every HashConsensus has zero members -- checked every run (not gated by action), including
     # under --verify-only: docs/tasks/E5-lido.md's negative case is "an oracle member added in a
     # scratch deployment makes --verify-only fail on the 'zero members' postcondition".
     for hash_consensus in lido["hashConsensus"]:
-        members_line = ctx.cast("call", hash_consensus, "getMembers()(address[],uint256[])").splitlines()[0].strip()
+        members_line = (
+            ctx.cast("call", hash_consensus, "getMembers()(address[],uint256[])").splitlines()[0].strip()
+        )
         if members_line != "[]":
-            raise ctx.fail(f"HashConsensus[{hash_consensus}].getMembers() returned members {members_line}, expected none")
+            raise ctx.fail(
+                f"HashConsensus[{hash_consensus}].getMembers() returned members {members_line}, expected none"
+            )
 
     # E12 slice 4: staking router module list -- count and names must match a real scratch
     # deploy's (env/lido/reference-staking-modules.json, recorded with provenance by
@@ -425,20 +432,19 @@ def verify(ctx: Context, action: str) -> None:
             (lido["stakingRouter"], "StakingRouter"),
         ]
         for contract_addr, name in contracts_to_check:
-            deployer_has_role = ctx.cast("call", contract_addr,
-                "hasRole(bytes32,address)(bool)", DEFAULT_ADMIN_ROLE, deployer)
-            agent_has_role = ctx.cast("call", contract_addr,
-                "hasRole(bytes32,address)(bool)", DEFAULT_ADMIN_ROLE, agent)
+            deployer_has_role = ctx.cast(
+                "call", contract_addr, "hasRole(bytes32,address)(bool)", DEFAULT_ADMIN_ROLE, deployer
+            )
+            agent_has_role = ctx.cast(
+                "call", contract_addr, "hasRole(bytes32,address)(bool)", DEFAULT_ADMIN_ROLE, agent
+            )
             if deployer_has_role == "true":
                 raise ctx.fail(
-                    f"{name}[{contract_addr}]: deployer holds DEFAULT_ADMIN_ROLE, "
-                    f"expected only the Agent"
+                    f"{name}[{contract_addr}]: deployer holds DEFAULT_ADMIN_ROLE, " f"expected only the Agent"
                 )
             if agent_has_role != "true":
-                raise ctx.fail(
-                    f"{name}[{contract_addr}]: Agent does not hold DEFAULT_ADMIN_ROLE"
-                )
-        print(f"lido verify: Deployer holds no DEFAULT_ADMIN_ROLE on any oracle/registry; Agent does.")
+                raise ctx.fail(f"{name}[{contract_addr}]: Agent does not hold DEFAULT_ADMIN_ROLE")
+        print("lido verify: Deployer holds no DEFAULT_ADMIN_ROLE on any oracle/registry; Agent does.")
 
     if action not in _FRESHLY_RECOGNIZED:
         return  # stETH()/stEthPerToken()/zero-members (just checked) already prove correctness

@@ -3,6 +3,7 @@ custodian against the Armada pool (script/Deploy.s.sol), and configure the custo
 FROST group key from the target. See docs/ENVIRONMENT.md §6 (armada_nitro row) and
 docs/tasks/E6-armada-and-nitro.md.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

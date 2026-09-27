@@ -29,6 +29,7 @@ drives both, they just don't reach `deployHub()` the way one might expect):
    the job, so this re-verifies every time apply() actually deploys -- but that is only
    ever the first run, and verifying is a local SHA-256 pass, not a network fetch.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -62,10 +63,25 @@ _SEPOLIA_POOL = "0x5f3324b47b3CFf937BB67C30B362898E193e5216"
 # -- this is the exact set deploy_privacy_pool.ts registers on the pool, so it is also
 # the exact set this module must compare against Sepolia's demo3 pool.
 _TESTING_ARTIFACT_CONFIGS: list[tuple[int, int]] = [
-    (1, 1), (1, 2), (2, 2), (2, 3), (8, 4),
-    (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1),
-    (3, 2), (4, 2), (5, 2), (6, 2),
-    (1, 3), (3, 3), (4, 3),
+    (1, 1),
+    (1, 2),
+    (2, 2),
+    (2, 3),
+    (8, 4),
+    (2, 1),
+    (3, 1),
+    (4, 1),
+    (5, 1),
+    (6, 1),
+    (7, 1),
+    (8, 1),
+    (3, 2),
+    (4, 2),
+    (5, 2),
+    (6, 2),
+    (1, 3),
+    (3, 3),
+    (4, 3),
 ]
 
 
@@ -165,7 +181,9 @@ def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
     pool = deployment["contracts"]["privacyPool"]
     deployed_usdc = deployment["cctp"]["usdc"]
     if deployed_usdc.lower() != usdc["proxy"].lower():
-        raise ctx.fail(f"deployed pool's usdc = {deployed_usdc}, expected manifest usdc.proxy {usdc['proxy']}")
+        raise ctx.fail(
+            f"deployed pool's usdc = {deployed_usdc}, expected manifest usdc.proxy {usdc['proxy']}"
+        )
 
     # Copy what's needed into the reconciler state dir -- the container filesystem
     # (including /src/armada-poc/deployments) is discarded once the job exits.
@@ -204,9 +222,7 @@ def verify(ctx: Context, action: str) -> None:
         raise ctx.fail("no cctp recorded; run the cctp module first")
     pool_token_messenger = ctx.cast("call", pool, "tokenMessenger()(address)")
     if pool_token_messenger.lower() != cctp["tokenMessenger"].lower():
-        raise ctx.fail(
-            f"pool.tokenMessenger() = {pool_token_messenger}, expected {cctp['tokenMessenger']}"
-        )
+        raise ctx.fail(f"pool.tokenMessenger() = {pool_token_messenger}, expected {cctp['tokenMessenger']}")
     pool_message_transmitter = ctx.cast("call", pool, "messageTransmitter()(address)")
     if pool_message_transmitter.lower() != cctp["messageTransmitter"].lower():
         raise ctx.fail(
@@ -219,8 +235,12 @@ def verify(ctx: Context, action: str) -> None:
             "call", pool, "getVerificationKey(uint256,uint256)", str(nullifiers), str(commitments)
         )
         sepolia_vk = ctx.cast(
-            "call", _SEPOLIA_POOL, "getVerificationKey(uint256,uint256)",
-            str(nullifiers), str(commitments), rpc_url=_SEPOLIA_RPC,
+            "call",
+            _SEPOLIA_POOL,
+            "getVerificationKey(uint256,uint256)",
+            str(nullifiers),
+            str(commitments),
+            rpc_url=_SEPOLIA_RPC,
         )
         equal = fixturenet_vk.lower() == sepolia_vk.lower()
         fixturenet_hash = hashlib.sha256(bytes.fromhex(fixturenet_vk[2:])).hexdigest()

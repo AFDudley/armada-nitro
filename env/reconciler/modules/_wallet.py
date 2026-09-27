@@ -6,6 +6,7 @@ Not a reconciler module itself: the leading underscore keeps
 `importlib.import_module(f"reconciler.modules.{name}")` (env/reconciler/__main__.py,
 driven by MODULE_ORDER) from ever loading this as one (mirrors _forge.py).
 """
+
 from __future__ import annotations
 
 import subprocess

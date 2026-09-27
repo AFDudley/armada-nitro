@@ -21,6 +21,7 @@ A module (`env/reconciler/modules/<name>.py`) exposes three functions:
         transactions when `action == "present"` (idempotent re-runs, and
         the read-only `armada-env-verify` gate, both rely on this).
 """
+
 from __future__ import annotations
 
 import json

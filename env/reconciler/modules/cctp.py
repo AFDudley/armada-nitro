@@ -35,11 +35,12 @@ USDC (10,000,000 USDC = 1e13 base units, read from mainnet TokenMinterV2
 `burnLimitsPerMessage(usdc)` at 0xfd78EE919681417d192449715b2594ab58f5D002)
 sizes both here.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from reconciler.context import CastError, Context, resolve_target_mode, to_int
+from reconciler.context import Context, resolve_target_mode, to_int
 from reconciler.modules import _forge
 
 _CCTP_CONTRACTS = Path("/src/evm-cctp-contracts")
@@ -217,11 +218,19 @@ def verify(ctx: Context, action: str) -> None:
 
     usdc_proxy = ctx.manifest["usdc"]["proxy"]
     remote_usdc_bytes32 = "0x" + "00" * 12 + usdc_proxy[2:].lower()
-    local_token = ctx.cast("call", token_minter, "getLocalToken(uint32,bytes32)(address)", str(domain), remote_usdc_bytes32)
+    local_token = ctx.cast(
+        "call", token_minter, "getLocalToken(uint32,bytes32)(address)", str(domain), remote_usdc_bytes32
+    )
     if local_token.lower() != usdc_proxy.lower():
-        raise ctx.fail(f"tokenMinter.getLocalToken({domain}, usdc) = {local_token}, expected {usdc_proxy} (USDC not listed as a local token)")
+        raise ctx.fail(
+            f"tokenMinter.getLocalToken({domain}, usdc) = {local_token}, expected {usdc_proxy} (USDC not listed as a local token)"
+        )
 
     version = int(ctx.cast("call", message_transmitter, "version()(uint32)"))
-    sepolia_version = int(ctx.cast("call", _SEPOLIA_MESSAGE_TRANSMITTER, "version()(uint32)", rpc_url=_SEPOLIA_RPC))
+    sepolia_version = int(
+        ctx.cast("call", _SEPOLIA_MESSAGE_TRANSMITTER, "version()(uint32)", rpc_url=_SEPOLIA_RPC)
+    )
     if version != sepolia_version:
-        raise ctx.fail(f"messageTransmitter.version() = {version}, Sepolia v2 transmitter's version() = {sepolia_version}")
+        raise ctx.fail(
+            f"messageTransmitter.version() = {version}, Sepolia v2 transmitter's version() = {sepolia_version}"
+        )

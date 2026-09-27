@@ -30,11 +30,19 @@ import { ethers } from "hardhat";
 
 import { StakingRouter } from "typechain-types";
 
-import { applyMigrationScript, loadSteps, resolveMigrationFile } from "lib/scratch";
+import {
+  applyMigrationScript,
+  loadSteps,
+  resolveMigrationFile,
+} from "lib/scratch";
 import { loadContract } from "lib/contract";
 import { DeploymentState, readNetworkState, Sk } from "lib/state-file";
 
-import { buildAgentCalls, ExternalModuleSetup, getExternalModuleSetup } from "./0140-plug-staking-modules-via-vote";
+import {
+  buildAgentCalls,
+  ExternalModuleSetup,
+  getExternalModuleSetup,
+} from "./0140-plug-staking-modules-via-vote";
 
 type Call = { to: string; data: string };
 
@@ -58,16 +66,30 @@ function moduleSetups(
   if (state[Sk.sm_CSM]?.proxy?.address) {
     setups.push({
       label: "CSM",
-      setup: getExternalModuleSetup(state, Sk.sm_CSM, "Community Staking", "CSModule", [
-        { field: "VettedGate", label: "Community Staking VettedGate" },
-        { field: "IdentifiedDVTClusterGate", label: "Community Staking IdentifiedDVTClusterGate" },
-      ]),
+      setup: getExternalModuleSetup(
+        state,
+        Sk.sm_CSM,
+        "Community Staking",
+        "CSModule",
+        [
+          { field: "VettedGate", label: "Community Staking VettedGate" },
+          {
+            field: "IdentifiedDVTClusterGate",
+            label: "Community Staking IdentifiedDVTClusterGate",
+          },
+        ],
+      ),
     });
   }
   if (state[Sk.sm_CM]?.proxy?.address) {
     setups.push({
       label: "CMv2",
-      setup: getExternalModuleSetup(state, Sk.sm_CM, "curated-onchain-v2", "CuratedModule"),
+      setup: getExternalModuleSetup(
+        state,
+        Sk.sm_CM,
+        "curated-onchain-v2",
+        "CuratedModule",
+      ),
     });
   }
   return setups;
@@ -110,9 +132,16 @@ async function dumpReferenceStakingModules(
     const address = ethers.getAddress(m.stakingModuleAddress);
     const contractName = contractNameByAddress[address];
     if (!contractName) {
-      throw new Error(`no known contract name for staking module address ${address} (id ${id}, name ${m.name})`);
+      throw new Error(
+        `no known contract name for staking module address ${address} (id ${id}, name ${m.name})`,
+      );
     }
-    modules.push({ id: Number(id), name: m.name, stakingModuleAddress: address, contractName });
+    modules.push({
+      id: Number(id),
+      name: m.name,
+      stakingModuleAddress: address,
+      contractName,
+    });
   }
   writeFileSync(
     outPath,
@@ -155,14 +184,20 @@ async function main() {
   // "NodeOperatorsRegistry" too); CSM/CMv2's contract names come from their own deploy artifact
   // field names ("CSModule"/"CuratedModule").
   const contractNameByAddress: Record<string, string> = {
-    [ethers.getAddress(preState[Sk.appNodeOperatorsRegistry].proxy.address)]: "NodeOperatorsRegistry",
-    [ethers.getAddress(preState[Sk.appSimpleDvt].proxy.address)]: "NodeOperatorsRegistry",
+    [ethers.getAddress(preState[Sk.appNodeOperatorsRegistry].proxy.address)]:
+      "NodeOperatorsRegistry",
+    [ethers.getAddress(preState[Sk.appSimpleDvt].proxy.address)]:
+      "NodeOperatorsRegistry",
   };
   for (const { label, setup } of setups) {
-    contractNameByAddress[ethers.getAddress(setup.module)] = label === "CSM" ? "CSModule" : "CuratedModule";
+    contractNameByAddress[ethers.getAddress(setup.module)] =
+      label === "CSM" ? "CSModule" : "CuratedModule";
   }
 
-  const stakingRouter = await loadContract<StakingRouter>("StakingRouter", preState.stakingRouter.proxy.address);
+  const stakingRouter = await loadContract<StakingRouter>(
+    "StakingRouter",
+    preState.stakingRouter.proxy.address,
+  );
 
   const snapshotId = (await ethers.provider.send("evm_snapshot", [])) as string;
 
@@ -171,9 +206,17 @@ async function main() {
   const captured: Call[] = [];
   const originalSend = ethers.provider.send.bind(ethers.provider);
   ethers.provider.send = (async (method: string, params?: unknown[]) => {
-    if (method === "eth_sendTransaction" && Array.isArray(params) && params[0]) {
+    if (
+      method === "eth_sendTransaction" &&
+      Array.isArray(params) &&
+      params[0]
+    ) {
       const tx = params[0] as { from?: string; to?: string; data?: string };
-      if (tx.from && tx.to && ethers.getAddress(tx.from) === ethers.getAddress(agent)) {
+      if (
+        tx.from &&
+        tx.to &&
+        ethers.getAddress(tx.from) === ethers.getAddress(agent)
+      ) {
         captured.push({ to: tx.to, data: tx.data ?? "0x" });
       }
     }
@@ -205,14 +248,20 @@ async function main() {
     built.push(...calls.map((c) => ({ to: c.to, data: c.data as string })));
   }
 
-  console.log(`\n=== (a) upstream 0140's captured Agent calls (${captured.length}) ===`);
+  console.log(
+    `\n=== (a) upstream 0140's captured Agent calls (${captured.length}) ===`,
+  );
   captured.forEach((c, i) => console.log(`[${i}] to=${c.to} data=${c.data}`));
 
-  console.log(`\n=== (b) our via-vote script's built Agent calls (${built.length}) ===`);
+  console.log(
+    `\n=== (b) our via-vote script's built Agent calls (${built.length}) ===`,
+  );
   built.forEach((c, i) => console.log(`[${i}] to=${c.to} data=${c.data}`));
 
   const diff = diffCalls(captured, built);
-  console.log(`\n=== diff (a) vs (b): ${diff.length === 0 ? "empty" : `${diff.length} line(s)`} ===`);
+  console.log(
+    `\n=== diff (a) vs (b): ${diff.length === 0 ? "empty" : `${diff.length} line(s)`} ===`,
+  );
   diff.forEach((l) => console.log(l));
 
   if (diff.length > 0) {

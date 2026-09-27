@@ -29,6 +29,7 @@ transfers, mints and blacklist calls from that account would revert. The
 fixturenet target uses anvil account 9 for this, distinct from every other
 USDC role.
 """
+
 from __future__ import annotations
 
 import json
@@ -204,8 +205,13 @@ def verify(ctx: Context, action: str) -> None:
     # including read-only --verify-only / armada-env-verify runs.
     try:
         ctx.cast(
-            "call", "--from", _TRANSFER_RECIPIENT, proxy,
-            "mint(address,uint256)", _TRANSFER_RECIPIENT, "1000000",
+            "call",
+            "--from",
+            _TRANSFER_RECIPIENT,
+            proxy,
+            "mint(address,uint256)",
+            _TRANSFER_RECIPIENT,
+            "1000000",
         )
     except CastError as e:
         if "caller is not a minter" not in str(e):

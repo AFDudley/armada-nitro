@@ -157,7 +157,11 @@ def evaluate(arm: Arm | None, tests: tuple[str, ...]) -> dict[str, object]:
             return {"verdict": "INCONCLUSIVE", "reason": "does not compile", "stderr": build.stderr[-2000:]}
         statuses = test_statuses(tree, tests)
         if statuses is None or set(statuses) != set(tests):
-            return {"verdict": "INCONCLUSIVE", "reason": "forge did not report every named test", "statuses": statuses}
+            return {
+                "verdict": "INCONCLUSIVE",
+                "reason": "forge did not report every named test",
+                "statuses": statuses,
+            }
         if arm is None:
             verdict = "PASS" if all(s == "Success" for s in statuses.values()) else "FAIL"
         else:
@@ -180,7 +184,8 @@ def main(argv: list[str]) -> int:
 
     print(json.dumps(results, indent=2))
     ok = control["verdict"] == "PASS" and all(
-        results[a.name]["verdict"] == "KILLED" for a in selected  # type: ignore[index]
+        results[a.name]["verdict"] == "KILLED"
+        for a in selected  # type: ignore[index]
     )
     return 0 if ok else 1
 

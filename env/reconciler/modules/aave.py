@@ -7,6 +7,7 @@ list USDC through `AaveV3ConfigEngine.listAssets` at mainnet's USDC reserve para
 `waUSDC` stata token (`StataTokenFactory.createStataTokens`). See docs/ENVIRONMENT.md §6
 (aave row) and docs/tasks/E4-aave.md.
 """
+
 from __future__ import annotations
 
 import json
@@ -205,7 +206,9 @@ def verify(ctx: Context, action: str) -> None:
     if int(a_usdc, 16) == 0:
         raise ctx.fail("getReserveData(usdc).aTokenAddress = 0x0")
     if a_usdc.lower() != aave["aUSDC"].lower():
-        raise ctx.fail(f"getReserveData(usdc).aTokenAddress = {a_usdc}, manifest aave.aUSDC = {aave['aUSDC']}")
+        raise ctx.fail(
+            f"getReserveData(usdc).aTokenAddress = {a_usdc}, manifest aave.aUSDC = {aave['aUSDC']}"
+        )
 
     fixturenet_cfg = _decode_configuration(reserve_data["configuration"])
     mainnet_cfg = _reserve_target()["reserveConfiguration"]
@@ -227,7 +230,9 @@ def verify(ctx: Context, action: str) -> None:
             continue
         fixturenet_value, mainnet_value = fixturenet_cfg[name], mainnet_cfg[name]
         status = "matches" if fixturenet_value == mainnet_value else "DIFFERS"
-        print(f"aave reserve configuration bit '{name}' {status}: fixturenet={fixturenet_value} mainnet={mainnet_value}")
+        print(
+            f"aave reserve configuration bit '{name}' {status}: fixturenet={fixturenet_value} mainnet={mainnet_value}"
+        )
 
     stata_asset = ctx.cast("call", wa_usdc, "asset()(address)")
     if stata_asset.lower() != usdc.lower():
@@ -243,7 +248,9 @@ def verify(ctx: Context, action: str) -> None:
     # check rather than assume, mirroring funding.py's is_minter guard).
     deployer = ctx.deployer_address
     is_minter = ctx.cast("call", usdc, "isMinter(address)(bool)", deployer) == "true"
-    allowance = _uint(ctx.cast("call", usdc, "minterAllowance(address)(uint256)", deployer)) if is_minter else 0
+    allowance = (
+        _uint(ctx.cast("call", usdc, "minterAllowance(address)(uint256)", deployer)) if is_minter else 0
+    )
     if not is_minter or allowance < _DEPOSIT_AMOUNT:
         master_minter = usdc_manifest["masterMinter"]
         ctx.send(master_minter, "configureController(address,address)", deployer, deployer)

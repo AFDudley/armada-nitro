@@ -13,6 +13,7 @@ still durably records the modules that finished.
 The deployer key comes from --key-file or $DEPLOYER_KEY_FILE, never from
 the target file.
 """
+
 from __future__ import annotations
 
 import argparse

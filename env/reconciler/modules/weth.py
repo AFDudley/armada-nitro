@@ -4,6 +4,7 @@ wrapping the runtime in creation code that CODECOPYs and RETURNs it
 produces byte-identical deployed code -- no compiler needed.
 See docs/ENVIRONMENT.md §6 (weth row) and env/sources.lock.json (weth9).
 """
+
 from __future__ import annotations
 
 import json
@@ -34,7 +35,9 @@ def _build_creation_code(runtime_hex: str) -> str:
     """
     runtime = bytes.fromhex(runtime_hex[2:])
     length = len(runtime)
-    tail = bytes([0x60, 0, 0x60, 0, 0x39, 0x60, 0, 0xF3])  # PUSH1<off> PUSH1 0 CODECOPY PUSH1 0 RETURN, offset patched below
+    tail = bytes(
+        [0x60, 0, 0x60, 0, 0x39, 0x60, 0, 0xF3]
+    )  # PUSH1<off> PUSH1 0 CODECOPY PUSH1 0 RETURN, offset patched below
     header_len = 1 + 4 + 1 + len(tail)  # PUSH4 opcode+data, DUP1, then tail
     tail = bytes([0x60, header_len, 0x60, 0, 0x39, 0x60, 0, 0xF3])
     header = bytes([0x63]) + length.to_bytes(4, "big") + bytes([0x80]) + tail

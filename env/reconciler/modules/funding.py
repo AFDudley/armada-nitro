@@ -7,6 +7,7 @@ Idempotent by construction: apply() mints only each account's shortfall to 1,000
 (zero accounts short -> zero mint transactions), and only configures a minter role at
 all when a mint is actually about to happen.
 """
+
 from __future__ import annotations
 
 from reconciler.context import Context, resolve_target_mode, to_int
@@ -54,9 +55,7 @@ def apply(ctx: Context, observed: list | None) -> tuple[str, int]:
     if shortfalls:
         is_minter = ctx.cast("call", proxy, "isMinter(address)(bool)", deployer) == "true"
         allowance = (
-            _uint(ctx.cast("call", proxy, "minterAllowance(address)(uint256)", deployer))
-            if is_minter
-            else 0
+            _uint(ctx.cast("call", proxy, "minterAllowance(address)(uint256)", deployer)) if is_minter else 0
         )
         needed = sum(shortfalls.values())
         if not is_minter or allowance < needed:
