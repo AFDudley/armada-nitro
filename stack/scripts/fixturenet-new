@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# fixturenet-new <name>
+#
+# Bring up a new armada-nitro fixturenet at ~/deployments/<name>, reusing a
+# cached base layer (weth, usdc, cctp, aave, lido, armada + the chain) when one
+# exists for the current inputs, so only armada_nitro + funding get deployed.
+#
+# Two paths, chosen by whether a snapshot exists for the computed cache key:
+#   warm (snapshot present): restore the snapshot, start, run the full reconcile
+#         -- base modules report "present, 0"; armada_nitro + funding deploy.
+#   cold (no snapshot):      start a fresh chain, run the BASE reconcile (~24m),
+#         snapshot it, then run the full reconcile.
+#
+# The tmpfs over data/ is owned by the ops/ansible/ role, not this script: if it
+# is not mounted this script stops and tells you to run the playbook. Because
+# `deploy create` must run before the tmpfs is mounted and refuses an existing
+# dir, the script is resumable -- run it, mount the tmpfs via ansible when told,
+# then run it again to continue.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
+# shellcheck source=stack/scripts/fixturenet-base-common.sh
+source "${SCRIPT_DIR}/fixturenet-base-common.sh"
+
+LACONIC="${LACONIC_SO:-${HOME}/bin/laconic-so}"
+STACK="stack/stacks/armada-nitro-fixturenet"
+CONFIG="ops/ansible/examples/deployment-config.example.env"
+RPC="http://127.0.0.1:8545"
+
+usage() { echo "usage: $0 <name>" >&2; exit 2; }
+[ $# -eq 1 ] || usage
+NAME="$1"
+DEP="${HOME}/deployments/${NAME}"
+SPEC="${DEP}-spec.yml"
+
+now() { date +%s; }
+secs() { local s=$1; printf '%dm%02ds' $((s/60)) $((s%60)); }
+
+# Block until geth produces at least one new block (proves live block
+# production for both a fresh chain and a restored one), or time out.
+wait_for_blocks() {
+  local deadline=$(( $(now) + 180 )) b0 b1
+  echo "fixturenet-new: waiting for block production on ${RPC} ..."
+  b0=""
+  while [ "$(now)" -lt "$deadline" ]; do
+    b1=$(curl -s --max-time 3 -H 'Content-Type: application/json' \
+           --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
+           "$RPC" 2>/dev/null | jq -r '.result // empty' 2>/dev/null || true)
+    if [ -n "$b1" ]; then
+      if [ -z "$b0" ]; then b0="$b1"
+      elif [ "$b1" != "$b0" ]; then
+        echo "fixturenet-new: blocks advancing ($((b0)) -> $((b1)))"
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  echo "fixturenet-new: FAILED: no new block within 180s (last=${b1:-none})" >&2
+  return 1
+}
+
+run_reconcile() {  # run_reconcile <label> [RECONCILER_TARGET-in-container]
+  local label="$1" target="${2:-}"
+  local log="/tmp/fixturenet-new-${NAME}-${label}.log"
+  echo "fixturenet-new: ${label} reconcile ..."
+  if [ -n "$target" ]; then
+    RECONCILER_TARGET="$target" "$LACONIC" deployment --dir "$DEP" \
+      run-job armada-env-reconcile 2>&1 | tee "$log"
+  else
+    "$LACONIC" deployment --dir "$DEP" run-job armada-env-reconcile 2>&1 | tee "$log"
+  fi
+  echo "fixturenet-new: ${label} reconcile module results:"
+  grep -E '^(weth|usdc|cctp|aave|lido|armada|armada_nitro|funding), ' "$log" | sed 's/^/    /' || true
+}
+
+t0=$(now)
+KEY=$(compute_base_key "$REPO_ROOT")
+SNAP=$(snap_path "$KEY")
+if [ -f "$SNAP" ]; then MODE=warm; else MODE=cold; fi
+echo "=============================================================="
+echo "fixturenet-new: name=${NAME} key=${KEY} mode=${MODE}"
+echo "  snapshot: ${SNAP} $( [ "$MODE" = warm ] && echo '(present -> RESTORE)' || echo '(absent -> BUILD BASE)')"
+echo "=============================================================="
+
+# --- init + create (skipped on a resume where the dir already exists) --------
+if [ ! -e "$DEP" ]; then
+  echo "fixturenet-new: deploy init + create ${DEP}"
+  "$LACONIC" --stack "$STACK" deploy init \
+    --map-ports-to-host localhost-same \
+    --config-file "${REPO_ROOT}/${CONFIG}" \
+    --output "$SPEC"
+  "$LACONIC" --stack "$STACK" deploy create \
+    --spec-file "$SPEC" --deployment-dir "$DEP"
+else
+  echo "fixturenet-new: ${DEP} exists -- resuming (skipping init/create)"
+fi
+
+# --- tmpfs must be provided by the ansible role, not us ----------------------
+if ! findmnt --mountpoint "${DEP}/data" >/dev/null 2>&1; then
+  cat >&2 <<EOF
+fixturenet-new: ${DEP}/data is not a tmpfs mount.
+The capped RAM disk is owned by the ops/ansible/ role, not this script. Add it
+to your ansible vars and run the playbook, then re-run this command:
+
+  # in ops/ansible/examples/<your-vars>.yml, add under fixturenet_tmpfs_mounts:
+  #   - path: ${DEP}/data
+  #     size: 3G
+  cd ${REPO_ROOT}/ops/ansible
+  ansible-playbook -i inventory.example.ini site.yml -e @examples/<your-vars>.yml
+
+(See ops/ansible/README.md, "Bring up the fixturenet ...": the tmpfs goes on
+AFTER 'deploy create' and BEFORE 'start', which is why this script stops here.)
+EOF
+  exit 1
+fi
+echo "fixturenet-new: tmpfs OK: $(findmnt -no SOURCE,SIZE --mountpoint "${DEP}/data")"
+
+if [ "$MODE" = warm ]; then
+  # ---- WARM: restore the base snapshot, then only armada_nitro + funding ----
+  echo "fixturenet-new: restoring ${SNAP} into ${DEP}/data ..."
+  tr=$(now)
+  sudo find "${DEP}/data" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  zstd -dc "$SNAP" | sudo tar -C "${DEP}/data" -xf -
+  echo "fixturenet-new: restore took $(secs $(($(now)-tr)))"
+  "$LACONIC" deployment --dir "$DEP" start
+  wait_for_blocks
+  tf=$(now)
+  run_reconcile full
+  echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
+else
+  # ---- COLD: build the base layer, snapshot it, then finish the full run ----
+  "$LACONIC" deployment --dir "$DEP" start
+  wait_for_blocks
+  # Deliver the committed base target into the armada_env volume (seen as /env)
+  # and select it with RECONCILER_TARGET; the image's default full target is
+  # untouched for the full reconcile below.
+  echo "fixturenet-new: installing base target into armada_env volume"
+  sudo cp "${REPO_ROOT}/env/targets/fixturenet-base.json" \
+          "${DEP}/data/armada_env/${BASE_TARGET_IN_ENV}"
+  tb=$(now)
+  run_reconcile base "/env/${BASE_TARGET_IN_ENV}"
+  echo "fixturenet-new: base reconcile took $(secs $(($(now)-tb)))"
+  echo "fixturenet-new: snapshotting the base layer ..."
+  ts=$(now)
+  "${SCRIPT_DIR}/fixturenet-base-snapshot" "$DEP"
+  echo "fixturenet-new: snapshot took $(secs $(($(now)-ts)))"
+  wait_for_blocks   # the snapshot stopped/restarted the chain
+  tf=$(now)
+  run_reconcile full
+  echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
+fi
+
+echo "=============================================================="
+echo "fixturenet-new: DONE name=${NAME} mode=${MODE} key=${KEY}"
+echo "  total wall time: $(secs $(($(now)-t0)))"
+echo "  manifest modules: $(sudo jq -r '.gasUsed | keys | join(", ")' "${DEP}/data/armada_env/manifest.json")"
+echo "=============================================================="

@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# fixturenet-base-snapshot <deployment-dir>
+#
+# Snapshot the base layer of a fixturenet deployment for reuse by fixturenet-new.
+# The deployment MUST have reconciled ONLY the base target (network + weth, usdc,
+# cctp, aave, lido, armada) -- its manifest must name exactly those modules.
+#
+# Steps: verify the manifest is base-only, stop the chain (KEEPING its volumes),
+# tar+zstd the whole data/ directory (all chain + env volumes) into
+# ~/deployments/.snapshots/, write an auditable key file alongside it, prune
+# every other base snapshot (we keep exactly one), and restart the chain.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
+# shellcheck source=stack/scripts/fixturenet-base-common.sh
+source "${SCRIPT_DIR}/fixturenet-base-common.sh"
+
+LACONIC="${LACONIC_SO:-${HOME}/bin/laconic-so}"
+
+usage() { echo "usage: $0 <deployment-dir>" >&2; exit 2; }
+[ $# -eq 1 ] || usage
+DEP=$(cd -- "$1" &>/dev/null && pwd) || { echo "no such deployment dir: $1" >&2; exit 1; }
+[ -d "${DEP}/data" ] || { echo "not a deployment dir (no data/): ${DEP}" >&2; exit 1; }
+
+require_base_only_manifest "$DEP"
+
+KEY=$(compute_base_key "$REPO_ROOT")
+mkdir -p "$SNAP_DIR"
+SNAP=$(snap_path "$KEY")
+KEYFILE=$(key_path "$KEY")
+
+echo "fixturenet-base-snapshot: deployment=${DEP} key=${KEY}"
+
+# Stop the chain so the snapshot is of a quiescent, consistent data set. Keep
+# the volumes (no --delete-volumes) so the restart below resumes this chain.
+echo "fixturenet-base-snapshot: stopping the chain..."
+"$LACONIC" deployment --dir "$DEP" stop
+
+# tar reads root-owned volume files (sudo); zstd writes as us into .snapshots.
+echo "fixturenet-base-snapshot: writing ${SNAP} ..."
+tmp="${SNAP}.tmp.$$"
+sudo tar -C "${DEP}/data" -cf - . | zstd -q -19 -T0 -o "$tmp"
+mv -f "$tmp" "$SNAP"
+
+# Auditable key file: the exact inputs the key hashes.
+{
+  echo "# armada-nitro fixturenet base-layer snapshot"
+  echo "# key:      ${KEY}"
+  echo "# snapshot: $(basename "$SNAP")"
+  echo "# created:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "# source:   ${DEP}"
+  echo "#"
+  echo "# sha256(this file's key-input lines, truncated to 16 hex) == key."
+  _base_key_lines "$REPO_ROOT"
+} > "$KEYFILE"
+
+# Keep exactly one base snapshot: drop every other base snapshot + key file.
+shopt -s nullglob
+for f in "${SNAP_DIR}"/armada-fixturenet-base-*.tar.zst "${SNAP_DIR}"/armada-fixturenet-base-*.key; do
+  case "$f" in
+    "$SNAP"|"$KEYFILE") ;;
+    *) echo "fixturenet-base-snapshot: pruning old $(basename "$f")"; rm -f "$f" ;;
+  esac
+done
+shopt -u nullglob
+
+# Restart the chain we stopped.
+echo "fixturenet-base-snapshot: restarting the chain..."
+"$LACONIC" deployment --dir "$DEP" start
+
+size=$(du -h "$SNAP" | cut -f1)
+echo "fixturenet-base-snapshot: DONE"
+echo "  snapshot: ${SNAP} (${size})"
+echo "  key file: ${KEYFILE}"
+echo "  key:      ${KEY}"

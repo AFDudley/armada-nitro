@@ -115,6 +115,71 @@ A second run sends no transactions and rewrites a byte-identical manifest
 in the environment before `run-job` checks postconditions read-only, without
 deploying anything; `RECONCILER_ONLY=<module>` restricts the run to one module.
 
+### Base-layer snapshot cache
+
+A full `armada-env-reconcile` takes ~25 min, ~24 of which deploy third-party
+infrastructure that never changes unless its pinned inputs do: `weth`, `usdc`,
+`cctp`, `aave`, `lido` and the `armada` pool. Those six modules plus the chain
+itself are the **base layer**. We build it once, snapshot the whole stopped
+chain (every `data/` volume), and restore it into new deployments, so a new
+fixturenet only deploys `armada_nitro` + `funding` (~1 min) on top.
+
+**What is snapshotted.** The deployment's entire `data/` directory -- the
+`armada_env` manifest/keys and all chain volumes (`geth_data`, `beacon_data`,
+`validator_*_data`, `armada_fixturenet_genesis`) -- with the chain stopped so
+the snapshot is quiescent. It compresses to ~10 MB (geth's allocated space is
+mostly unwritten). Restoring it and starting resumes the same chain: blocks
+continue one per 2 s slot and Lighthouse reports `sync_distance 0` (a single
+node with no peers simply skips the empty slots it was down for).
+
+**The base target.** `env/targets/fixturenet-base.json` names only `network` +
+the six base modules. `fixturenet-new` copies it into the `armada_env` volume
+(seen as `/env` in the job) and selects it with the reconciler's existing
+`RECONCILER_TARGET` variable; the image's default full target
+(`env/targets/fixturenet.json`) is untouched, so the later full reconcile finds
+the base modules already `present, 0` and deploys only `armada_nitro` + `funding`.
+
+**Cache key.** A 16-hex sha256 over everything that determines the base chain:
+
+- `env/sources.lock.json` -- every upstream source pin;
+- `env/targets/fixturenet-base.json` -- the base target;
+- `env/lido/**` -- lido deploy params, steps and tooling;
+- `env/reconciler/**` -- the reconciler and every base module;
+- `stack/compose/docker-compose-armada-fixturenet.yml` -- the chain: the geth /
+  lighthouse / genesis-generator image tags **and** the genesis parameters
+  (chain id, fork epochs, mnemonic, validator count) that fix genesis;
+- `stack/compose-jobs/docker-compose-armada-env-reconcile.yml` -- the job;
+- the resolved image IDs of `cerc/armada-nitro-env`, `ethereum/client-go`,
+  `sigp/lighthouse` and `ethpandaops/ethereum-genesis-generator`.
+
+Change any one byte of those inputs (or rebuild the env image) and the key
+changes, so `fixturenet-new` takes the cold path and builds a fresh base. The
+`.key` file written next to each snapshot lists the exact input digests, so a
+key is fully auditable.
+
+**Where.** `~/deployments/.snapshots/armada-fixturenet-base-<key>.tar.zst` plus
+its `.key` file. We keep exactly one base snapshot: writing a new one deletes
+every other `armada-fixturenet-base-*` snapshot and key file.
+
+**The two commands** (`stack/scripts/`):
+
+```sh
+# Bring up ~/deployments/<name>, restoring the cached base if the key matches,
+# else building + snapshotting it first. Prints the warm/cold decision and
+# per-phase timings. The tmpfs over data/ must already be provided by the
+# ops/ansible/ role (see ops/ansible/README.md); the script refuses to mount it
+# itself and stops with instructions if it is missing. Because `deploy create`
+# runs before the tmpfs mount and refuses an existing dir, the script is
+# resumable: run it, mount the tmpfs when told, run it again.
+stack/scripts/fixturenet-new <name>
+
+# Snapshot a deployment that reconciled ONLY the base target (its manifest must
+# name exactly the six base modules). Stops the chain, tars+zstd data/, writes
+# the key file, prunes other snapshots, restarts the chain. fixturenet-new's
+# cold path calls this for you.
+stack/scripts/fixturenet-base-snapshot <deployment-dir>
+```
+
 ### Gates
 
 Two jobs whose green result on the fixturenet defines "done" for the environment
