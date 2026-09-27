@@ -1,0 +1,63 @@
+{
+  "network": {
+    "name": "fixturenet",
+    "chainId": 31337,
+    "rpcUrl": "http://armada-fixturenet-geth:8545",
+    "hostRpcUrl": "http://127.0.0.1:8545"
+  },
+  "weth": {
+    "adopt": {
+      "address": "0x5FbDB2315678afecb367f032d93F642f6D182289"
+    }
+  },
+  "usdc": {
+    "adopt": {
+      "proxy": "0x7A20C8Cc2d50C027f6011948C241d71e1C23fF0e",
+      "implementation": "0x03355523A40dD64318e32b8c2DC989Cf760E1420",
+      "masterMinter": "0x58aC7f981312B969Ec04bAEe417bf75D51C5A18e"
+    }
+  },
+  "cctp": {
+    "adopt": {
+      "tokenMessenger": "0x491970ABa01CcC082e4ee6CeCD872475e51D63b8",
+      "messageTransmitter": "0x6355ed5176Cd480274CfeC905F72b4c7Bdf3b74e",
+      "tokenMinter": "0x6E8e02fB9214C473b62347BCa7c63AB608E20788",
+      "domain": 0
+    }
+  },
+  "aave": {
+    "adopt": {
+      "poolAddressesProvider": "0x3A1e63d04DcBB7f93fD72171D5E0cA45C9C13B7D",
+      "pool": "0x77065D0277A73207e2a24aC25D75fA6d53e30d79",
+      "aUSDC": "0xE5259Fc8a79Ff52e8507C3906a13Bf7a93c8dA41",
+      "stataTokenFactory": "0x657147d63bB67Ba72BC32b767A33E68978809966",
+      "usdcPriceFeed": "0x4C0aaE290E5119F7A177C44471f9d5D3a7c61b05"
+    }
+  },
+  "lido": {
+    "adopt": {
+      "locator": "0x784E55d9f7B95c4E0A21e567a79e88Eea77a9C64",
+      "stETH": "0x086984c6A4b3F1C3D9A48e7D4a8F0F3fE8e0A3B2",
+      "wstETH": "0x23A44F6d9D3e5A4B1c8E7D9F0b2C4aE5f6D8B3C7",
+      "accountingOracle": "0x5B8E3A0F1D2C4dE6F7a8B9c0D1e2F3a4B5c6D7E8",
+      "hashConsensus": [
+        "0x9A8b7C6d5E4f3A2b1C0d9E8f7A6b5C4d3E2f1A0B",
+        "0x1A2b3C4d5E6f7A8b9C0d1E2f3A4b5C6d7E8f9A0B"
+      ]
+    }
+  },
+  "armada": {
+    "adopt": {
+      "pool": "0xDcEDF06Db2e244b7D6F7D38aE7B7b27C8e5a4F1C",
+      "usdc": "0x58aC7f981312B969Ec04bAEe417bf75D51C5A18e",
+      "deployBlock": 23456
+    }
+  },
+  "armada_nitro": {
+    "adopt": {
+      "adjudicator": "0x5FbDB2315678afecb367f032d93F642f6D182290",
+      "consensusApp": "0x7A20C8Cc2d50C027f6011948C241d71e1C23fF0f",
+      "hubCustodian": "0x03355523A4dD64318E32B8c2DC989Cf760E1421"
+    }
+  }
+}
