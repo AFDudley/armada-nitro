@@ -115,6 +115,39 @@ A second run sends no transactions and rewrites a byte-identical manifest
 in the environment before `run-job` checks postconditions read-only, without
 deploying anything; `RECONCILER_ONLY=<module>` restricts the run to one module.
 
+### Environment image
+
+`cerc/armada-nitro-env:local` (`stack/container-build/cerc-armada-nitro-env/`,
+built with BuildKit) bakes in every pinned upstream source, this repo's compiled
+contracts and Armada's circuit build, so jobs run fully offline. The Dockerfile
+is split into one BuildKit stage per input so a change invalidates only what it
+affects:
+
+- **`toolchain`** -- the shared base: Debian + git/jq/python, `just`, Foundry
+  v1.8.3, Node 22 + yarn 4.9.2.
+- **`src-<name>`** -- one stage per `env/sources.lock.json` `sources[]` entry.
+  Its repo and commit arrive as `--build-arg` (`build.sh` reads them from the
+  lock with `jq`; `clone-source.sh` fails the build if either is empty), so a
+  source's layers are keyed only by that source's pin. A byte change to
+  `env/sources.lock.json` that changes no pin rebuilds nothing; changing one
+  source's pin rebuilds only that stage. Each stage runs that project's own
+  install/build (`yarn`/`npm` + `forge build` + `hardhat compile` as needed);
+  the CSM stage additionally does `checkout -B develop` + `just deps`.
+- **`circuits`** -- Armada's circuit build, keyed only by the `armada-circuits`
+  pins (a lock file is synthesised from the ARGs), so nothing else invalidates it.
+- **`contracts`** -- only this repo's Foundry inputs (`foundry.toml`,
+  `foundry.lock`, `src/`, `script/`, `test/`, `lib/`; remappings live in
+  `foundry.toml`) + `forge build`, so `env/` churn never recompiles contracts.
+- final image -- copies each `/src/<name>`, merges the HOME caches the stages
+  populated (`~/.svm` solc, `~/.yarn/berry` Yarn global cache, hardhat
+  compilers) so job-time compiles are offline, sets the system git
+  `url.insteadOf` for CSM, copies the repo + the `contracts` build output + the
+  circuits, and verifies every `/src/<name>` HEAD equals its pin.
+
+`build.sh` also tags the `toolchain`, each `src-<name>` and the `circuits` stage
+(extra `--target` builds that reuse the shared layers, so they only add tags), so
+their image IDs are available to the base-snapshot cache key below.
+
 ### Base-layer snapshot cache
 
 A full `armada-env-reconcile` takes ~25 min, ~24 of which deploy third-party
@@ -139,23 +172,46 @@ the six base modules. `fixturenet-new` copies it into the `armada_env` volume
 (`env/targets/fixturenet.json`) is untouched, so the later full reconcile finds
 the base modules already `present, 0` and deploys only `armada_nitro` + `funding`.
 
-**Cache key.** A 16-hex sha256 over everything that determines the base chain:
+**Cache key.** A 16-hex sha256 over everything that determines the base chain,
+computed by `stack/scripts/base-key.py` (called from
+`fixturenet-base-common.sh`). Every input is **normalised** so that a commit
+which only reformats, re-comments or re-whitespaces a file does **not** change
+the key -- only a change to what the base chain actually deploys does. A trailing
+newline appended to `env/sources.lock.json`, a comment added to a reconciler
+module, or a reindent of the lido 0140 TypeScript all leave the key untouched.
 
-- `env/sources.lock.json` -- every upstream source pin;
-- `env/targets/fixturenet-base.json` -- the base target;
-- `env/lido/**` -- lido deploy params, steps and tooling;
-- `env/reconciler/**` -- the reconciler and every base module;
-- `stack/compose/docker-compose-armada-fixturenet.yml` -- the chain: the geth /
-  lighthouse / genesis-generator image tags **and** the genesis parameters
-  (chain id, fork epochs, mnemonic, validator count) that fix genesis;
-- `stack/compose-jobs/docker-compose-armada-env-reconcile.yml` -- the job;
-- the resolved image IDs of `cerc/armada-nitro-env`, `ethereum/client-go`,
-  `sigp/lighthouse` and `ethpandaops/ethereum-genesis-generator`.
+Included, with the normalisation applied to each:
 
-Change any one byte of those inputs (or rebuild the env image) and the key
-changes, so `fixturenet-new` takes the cold path and builds a fresh base. The
-`.key` file written next to each snapshot lists the exact input digests, so a
-key is fully auditable.
+- **Image IDs** (`docker image inspect`): the chain images `ethereum/client-go`,
+  `sigp/lighthouse`, `ethpandaops/ethereum-genesis-generator` (read from the
+  fixturenet compose); the `toolchain` env-image stage; **one `src-<name>` stage
+  per `sources[]` entry** -- its image ID encodes that source's pin *and* its
+  build output, so the `sources[]` pins need no separate line; and the `circuits`
+  stage. **Not** the whole env image and **not** the `contracts` stage:
+  `armada_nitro`'s own contracts are not part of the base chain, so recompiling
+  them must not invalidate the base snapshot.
+- `env/reconciler/**/*.py` -- hash of each file's **AST with docstrings
+  stripped**, so comments, formatting and docstrings do not count.
+- **Canonical JSON** (sorted keys, no whitespace): `env/targets/fixturenet-base.json`
+  (the base target); `env/lido/steps-fixturenet.json` (the lido step list); and
+  `env/sources.lock.json`'s non-`sources` entries (`weth9`, `armada-circuits` --
+  the `sources[]` pins being already covered by the stage image IDs).
+- **Parsed then canonical JSON**: `env/lido/deploy-params-fixturenet.toml`
+  (`tomllib`); the two YAML compose files
+  `stack/compose/docker-compose-armada-fixturenet.yml` (the chain: image tags
+  **and** the genesis parameters -- chain id, fork epochs, mnemonic, validator
+  count) and `stack/compose-jobs/docker-compose-armada-env-reconcile.yml` (the job).
+- **Prettier-normalised text** (the repo's own `node_modules` prettier, which the
+  helper insists on): `env/lido/0140-plug-staking-modules-via-vote.ts`, the custom
+  step lido runs during the deploy.
+- Any other (unknown-type) file inside an included directory is hashed by **raw
+  bytes** as a fail-safe, so a newly added input is never silently ignored.
+
+Excluded (present but not part of the base chain's state): `env/targets/fixturenet.json`
+(the full target -- it adds `armada_nitro` + `funding`); `env/lido/tools/**` (capture/dev
+tooling, not run by the deploy); and `env/lido/reference-staking-modules.json` (read by
+`verify()` only). The `.key` file written next to each snapshot lists the exact input
+lines, so a key is fully auditable; its header documents these rules.
 
 **Where.** `~/deployments/.snapshots/armada-fixturenet-base-<key>.tar.zst` plus
 its `.key` file. We keep exactly one base snapshot: writing a new one deletes

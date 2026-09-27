@@ -24,51 +24,19 @@ SNAP_DIR="${HOME}/deployments/.snapshots"
 # the full target) is left untouched, so a later full reconcile picks it up.
 BASE_TARGET_IN_ENV="reconciler-base-target.json"
 
-# Container image references whose IDs go into the cache key. Read from the
-# compose files so a tag bump here follows the tag bump there.
-_base_image_refs() {
-  local root="$1"
-  local compose="${root}/stack/compose/docker-compose-armada-fixturenet.yml"
-  local recon="${root}/stack/compose-jobs/docker-compose-armada-env-reconcile.yml"
-  grep -oE 'cerc/armada-nitro-env:[^ ]+' "$recon" | head -1
-  grep -oE 'ethereum/client-go:[^ ]+' "$compose" | head -1
-  grep -oE 'sigp/lighthouse:[^ ]+' "$compose" | head -1
-  grep -oE 'ethpandaops/ethereum-genesis-generator:[^ ]+' "$compose" | head -1
-}
-
-# Print the cache-key input digest lines (before final hashing). Also used to
-# write the human-readable .key file so the key is fully auditable.
+# Print the cache-key input digest lines (before final hashing). Also written
+# verbatim into the human-readable .key file so the key is fully auditable.
 #
-# The key covers everything that determines the base chain:
-#   - env/sources.lock.json            (every upstream source pin)
-#   - env/targets/fixturenet-base.json (the base target itself)
-#   - env/lido/**                      (lido deploy params, steps, tooling)
-#   - env/reconciler/**                (the reconciler + all base modules)
-#   - stack/compose/docker-compose-armada-fixturenet.yml
-#         (the chain: geth/lighthouse/genesis image tags AND the genesis
-#          generator's parameters -- chain id, forks, mnemonic, validators)
-#   - stack/compose-jobs/docker-compose-armada-env-reconcile.yml (the job)
-#   - the resolved image IDs of the four container images above
+# The lines come from stack/scripts/base-key.py, which normalises every input so
+# that a commit which only reformats, re-comments or re-whitespaces a file does
+# NOT change the key -- only a change to what the base chain actually deploys
+# does. See that script's module docstring for the full include/exclude list and
+# the normalisation applied to each file type (image IDs of the toolchain / each
+# source / circuits stage + the chain images; reconciler AST with docstrings
+# stripped; canonical JSON; parsed TOML/YAML; prettier-normalised TypeScript).
 _base_key_lines() {
   local root="$1"
-  (
-    cd "$root"
-    # File contents (relative paths -> checkout-location independent).
-    find env/reconciler env/lido -type f -not -path '*/__pycache__/*' \
-      | LC_ALL=C sort | xargs sha256sum
-    sha256sum \
-      env/sources.lock.json \
-      env/targets/fixturenet-base.json \
-      stack/compose/docker-compose-armada-fixturenet.yml \
-      stack/compose-jobs/docker-compose-armada-env-reconcile.yml
-  )
-  # Image identities.
-  local ref id
-  while read -r ref; do
-    [ -n "$ref" ] || continue
-    id=$(docker image inspect -f '{{.Id}}' "$ref" 2>/dev/null || echo "MISSING")
-    printf 'image %s %s\n' "$ref" "$id"
-  done < <(_base_image_refs "$root")
+  python3 "${root}/stack/scripts/base-key.py" --root "$root"
 }
 
 # The 16-hex cache key.
