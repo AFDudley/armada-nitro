@@ -1,0 +1,55 @@
+{
+  "network": {
+    "name": "fixturenet",
+    "chainId": 31337,
+    "rpcUrl": "http://armada-fixturenet-geth:8545",
+    "hostRpcUrl": "http://127.0.0.1:8545"
+  },
+  "assets": {
+    "weth": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+    "waUSDC": "0x1aB4DcA4e0c2b2D9C5eF3b7a8C6D0E1f2A3b4C5d",
+    "wstETH": "0xB82381A3fBD3FaFA77B3a7bE693342618240067b"
+  },
+  "usdc": {
+    "proxy": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+    "implementation": "0x2d8E5C396Fa1D8B04e730FbC6a8D9E0f1A2b3C4e",
+    "masterMinter": "0x3e9F6D4a7Eb2C9D15f841GcD7b9E0F1a2B3c4D5f"
+  },
+  "cctp": {
+    "tokenMessenger": "0x4fA07E5b8Fc3D0E26f952HdE8cA0B1F2a3C4d5E6",
+    "messageTransmitter": "0x5aB18F6c9Gd4E1F37a063IeF9dB2C3b4D5e6F7a",
+    "tokenMinter": "0x6bC29G7dA0E5F2G48b174JfG0eC3D4c5E6f7A8b",
+    "domain": 0
+  },
+  "aave": {
+    "poolAddressesProvider": "0x7cD30H8eB1F6G3H59c285KgH1fD4E5d6F7a8B9c",
+    "pool": "0x8dE41I9fC2G7H4I60d396LhI2gE5F6e7A8b9C0d",
+    "aUSDC": "0x9eF52J0gD3H8I5J71e407MiJ3hF6G7f8B9c0D1e",
+    "stataTokenFactory": "0x0fA63K1hE4I9J6K82f518NjK4iG7H8g9C0d1E2f",
+    "usdcPriceFeed": "0x1aB74L2iF5J0K7L93g629OkL5jH8I9h0D1e2F3a"
+  },
+  "lido": {
+    "locator": "0x2bC85M3jG6K1L8M04h730PlM6kI9J0i1E2f3G4b",
+    "stETH": "0x3cD96N4kH7L2M9N15i841QmN7lJ0K1j2F3g4H5c",
+    "wstETH": "0xB82381A3fBD3FaFA77B3a7bE693342618240067b",
+    "accountingOracle": "0x4dE07O5lI8M3N0O26j952RnO8mK1L2k3G4h5I6d",
+    "hashConsensus": [
+      "0x5eF18P6mJ9N4O1P37k063SoP9nL2M3l4H5i6J7e",
+      "0x6fA29Q7nK0O5P2Q48l174TpQ0oM3N4m5I6j7K8f"
+    ]
+  },
+  "armada": {
+    "pool": "0x5f3324b47b3CFf937BB67c30B362898E193e5216",
+    "usdc": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+    "deployBlock": 11588108
+  },
+  "armadaNitro": {
+    "adjudicator": "0x7gB30R8oL1P6Q3R59m285UqR1pN4O5n6J7k8L9g",
+    "consensusApp": "0x8hC41S9pM2Q7R4S60n396VrS2qO5P6o7K8l9M0h",
+    "hubCustodian": "0x9iD52T0qN3R8S5T71o407WsT3rP6Q7p8L9m0N1i",
+    "revocationDelay": 60,
+    "groupKeyScalar": "0xa4ddf31f7f32ba696f14ce50ecf3f21e3e100e83bdf47966e7b07468e9500b6e"
+  },
+  "sources": {},
+  "gasUsed": {}
+}
