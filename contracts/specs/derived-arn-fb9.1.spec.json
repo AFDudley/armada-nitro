@@ -1,0 +1,333 @@
+{
+  "id": "derived-arn-fb9.1",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? A reconcile target that adopts every module at the addresses of an existing deployment can be generated from its manifest, and adopt mode is shown never to reach any module's deploy path.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. `python3 env/reconciler/tools/adopt_target.py <manifest.json> <out.json>` writes a target with the same network and every module (weth, usdc, cctp, aave, lido, armada, armada_nitro) in `adopt` mode with addresses taken from the manifest; adopt parameters follow docs/tasks/E8-sepolia.md, and lido uses E8's relaxed postconditions (`stETH()` link, `stEthPerToken() > 0`). A test replaces each module's deploy path with one that raises and runs its adopt path: none raises. The generated `env/targets/fixturenet-adopt.json` is committed and not hand-edited.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. adopt_target.py exists and regenerates env/targets/fixturenet-adopt.json byte-identically from a committed sample manifest; the never-deploys test covers all seven modules and fails if any adopt path calls deploy (shown by temporarily routing one module's adopt to deploy). Spec: docs/tasks/E13-adopt-mode.md (Deliver, first and last bullets).\nWhat are the non-goals / constraints? What must this NOT do? Running adopt against a live chain (E13b); funding (deploy-only module); Sepolia.\nAny examples or references? (links, prior art, a similar thing you like) Each module's adopt branch: env/reconciler/modules/*.py (`if mode == \"adopt\"`); resolve_target_mode in env/reconciler/context.py; env/targets/fixturenet.json for the target shape.\nWhat priority is this? (P0\u2013P4) and why now? P2\n\nDecomposed child: Build a script at env/reconciler/tools/adopt_target.py, runnable as `python3 env/reconciler/tools/adopt_target.py <manifest.json> <out.json>`, that writes a reconcile target with the same network as the input manifest, and every module (weth, usdc, cctp, aave, lido, armada, armada_nitro) set to \"adopt\" mode with addresses taken from the manifest. Adopt parameters must follow docs/tasks/E8-sepolia.md. Lido must use E8's relaxed postconditions (`stETH()` link, `stEthPerToken() > 0`). This is for armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8). Done means: running adopt_target.py against a committed sample manifest regenerates env/targets/fixturenet-adopt.json byte-identically to the version committed in the repo, and that file is never hand-edited. Reference the target shape in env/targets/fixturenet.json and resolve_target_mode in env/reconciler/context.py. Non-goals: running adopt against a live chain (that is E13b), funding (a deploy-only concern), and Sepolia itself. Spec: docs/tasks/E13-adopt-mode.md (Deliver section, first bullet). Priority P2.",
+  "restatement": "A developer runs a script at env/reconciler/tools/adopt_target.py. The command is `python3 env/reconciler/tools/adopt_target.py <manifest.json> <out.json>`. The script reads a reconcile manifest from a full fixturenet deploy. The script writes a new reconcile target file. The target file names the same network as the manifest. The target file sets every one of seven modules -- weth, usdc, cctp, aave, lido, armada, and armada_nitro -- to adopt mode. Each module's adopt entry takes its addresses from the manifest, not from a new deploy. Each module's adopt parameter set follows the shape docs/tasks/E8-sepolia.md gives for that module's adopt entry. The lido module's adopt entry names the stETH and wstETH addresses the relaxed postcondition check needs. On success, the script prints one JSON object to stdout. This object names the output path and lists every module's adopt entry. Running the script against a committed sample manifest regenerates the committed file env/targets/fixturenet-adopt.json byte for byte. No person edits that file by hand. If the manifest lacks one of the seven modules, the script exits with a non-zero status. The error message names the missing module. The script writes no output file in that case. This tool lets armada-nitro developers exercise the reconciler's adopt code paths on the fixturenet before Sepolia (E8).",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A script exists at env/reconciler/tools/adopt_target.py, run as `python3 env/reconciler/tools/adopt_target.py <manifest.json> <out.json>`. On success it prints one JSON object to stdout: {\"out\": \"<path written>\", \"modules\": {\"weth\": {...}, \"usdc\": {...}, \"cctp\": {...}, \"aave\": {...}, \"lido\": {...}, \"armada\": {...}, \"armada_nitro\": {...}}}, where each module entry is exactly the adopt object the script wrote into the target."
+    },
+    {
+      "id": "c2",
+      "text": "The script writes a target file that names the same network as the input manifest."
+    },
+    {
+      "id": "c3",
+      "text": "The script sets every module -- weth, usdc, cctp, aave, lido, armada, armada_nitro -- to adopt mode in the written target. No module stays in deploy mode."
+    },
+    {
+      "id": "c4",
+      "text": "Every module's adopt address fields, in the written target and in the printed JSON, equal that module's addresses in the manifest."
+    },
+    {
+      "id": "c5",
+      "text": "Each module's adopt entry carries the parameter set docs/tasks/E8-sepolia.md gives for that module's adopt shape."
+    },
+    {
+      "id": "c6",
+      "text": "The lido module's adopt entry names the stETH and wstETH addresses the relaxed postcondition needs: the stETH() link and the stEthPerToken() > 0 check."
+    },
+    {
+      "id": "c7",
+      "text": "Running the script against a committed sample manifest regenerates env/targets/fixturenet-adopt.json byte-identically to the version already committed in the repo. No person hand-edits that file."
+    },
+    {
+      "id": "c8",
+      "text": "A manifest missing one of the seven modules makes the script exit non-zero. The error message names the missing module. The script prints no JSON and writes no output file."
+    }
+  ],
+  "goal": "Ship env/reconciler/tools/adopt_target.py. The script turns a fixturenet deploy manifest into an all-adopt-mode reconcile target. The target matches each module's E8 adopt shape. The script reproduces the committed env/targets/fixturenet-adopt.json byte for byte from a committed sample manifest. The script refuses a manifest that lacks a module.",
+  "acceptance_criteria": [
+    "Running the tool on a full sample manifest finishes without error and prints one line naming the file it wrote and every module's adopted addresses.",
+    "The generated target file and the sample manifest both name the fixturenet network.",
+    "The committed adopt target file sets all seven modules to adopt mode.",
+    "The committed adopt target file names no module in deploy mode.",
+    "Every address the tool writes for a module matches that module's address in the source manifest.",
+    "The committed adopt target file carries the full set of adopt settings each module needs, matching the Sepolia adopt plan's shape.",
+    "The lido module's adopt entry carries the exact stETH and wstETH addresses the relaxed check needs, taken from the manifest.",
+    "Running the tool again from the committed sample manifest reproduces the committed adopt target file byte for byte.",
+    "Running the tool on a manifest missing the lido module stops with an error naming lido, prints no success output, and leaves no output file behind."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the tool on a full sample manifest finishes without error and prints one line naming the file it wrote and every module's adopted addresses."
+    },
+    {
+      "id": "c2",
+      "text": "The generated target file and the sample manifest both name the fixturenet network."
+    },
+    {
+      "id": "c3",
+      "text": "The committed adopt target file sets all seven modules to adopt mode."
+    },
+    {
+      "id": "c4",
+      "text": "The committed adopt target file names no module in deploy mode."
+    },
+    {
+      "id": "c5",
+      "text": "Every address the tool writes for a module matches that module's address in the source manifest."
+    },
+    {
+      "id": "c6",
+      "text": "The committed adopt target file carries the full set of adopt settings each module needs, matching the Sepolia adopt plan's shape."
+    },
+    {
+      "id": "c7",
+      "text": "The lido module's adopt entry carries the exact stETH and wstETH addresses the relaxed check needs, taken from the manifest."
+    },
+    {
+      "id": "c8",
+      "text": "Running the tool again from the committed sample manifest reproduces the committed adopt target file byte for byte."
+    },
+    {
+      "id": "c9",
+      "text": "Running the tool on a manifest missing the lido module stops with an error naming lido, prints no success output, and leaves no output file behind."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Running the tool on a full sample manifest finishes without error and prints one line naming the file it wrote and every module's adopted addresses.",
+      "proves": "The script exists, runs as documented, and its success output names the target path and every module's adopt data.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/adopt_target.py",
+        "args": [
+          "env/reconciler/tests/fixtures/sample-manifest.json",
+          "/tmp/adopt-target-oracle-out.json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "out",
+          "op": "eq",
+          "value": "/tmp/adopt-target-oracle-out.json"
+        },
+        {
+          "observe": "stdout_json",
+          "field": "modules.weth.address",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "modules.usdc.proxy",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "modules.cctp.tokenMessenger",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "modules.aave.pool",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "modules.lido.wstETH",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "modules.armada.pool",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "modules.armada_nitro.adjudicator",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 3,
+      "timeout_seconds": 60,
+      "clause_id": "c1"
+    },
+    {
+      "description": "The generated target file and the sample manifest both name the fixturenet network.",
+      "proves": "The written target keeps the same network the manifest names.",
+      "restatement_clause_id": "c2",
+      "type": "grep",
+      "pattern": "\"name\":\\s*\"fixturenet\"",
+      "files": [
+        "env/reconciler/tests/fixtures/sample-manifest.json",
+        "env/targets/fixturenet-adopt.json"
+      ],
+      "count": {
+        "unit": "files_without_match",
+        "op": "eq",
+        "value": 0
+      },
+      "clause_id": "c2"
+    },
+    {
+      "description": "The committed adopt target file sets all seven modules to adopt mode.",
+      "proves": "Every module's entry in the committed target uses adopt mode.",
+      "restatement_clause_id": "c3",
+      "type": "grep",
+      "pattern": "\"adopt\":",
+      "files": [
+        "env/targets/fixturenet-adopt.json"
+      ],
+      "count": {
+        "unit": "lines",
+        "op": "ge",
+        "value": 7
+      },
+      "clause_id": "c3"
+    },
+    {
+      "description": "The committed adopt target file names no module in deploy mode.",
+      "proves": "No module is left in deploy mode in the committed target.",
+      "restatement_clause_id": "c3",
+      "type": "grep_absent",
+      "pattern": "\"deploy\":",
+      "files": [
+        "env/targets/fixturenet-adopt.json"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "description": "Every address the tool writes for a module matches that module's address in the source manifest.",
+      "proves": "The tool carries each module's addresses from the manifest into the target unchanged.",
+      "restatement_clause_id": "c4",
+      "type": "metamorphic",
+      "relation_class": "conservation",
+      "run": [
+        "python3",
+        "env/reconciler/tests/check_address_conservation.py",
+        "env/reconciler/tests/fixtures/sample-manifest.json"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "description": "The committed adopt target file carries the full set of adopt settings each module needs, matching the Sepolia adopt plan's shape.",
+      "proves": "Each module's adopt entry carries the parameter set docs/tasks/E8-sepolia.md describes for that module.",
+      "restatement_clause_id": "c5",
+      "type": "grep",
+      "pattern": "\"address\":",
+      "additional_patterns": [
+        "\"proxy\":",
+        "\"implementation\":",
+        "\"masterMinter\":",
+        "\"tokenMessenger\":",
+        "\"messageTransmitter\":",
+        "\"tokenMinter\":",
+        "\"domain\":",
+        "\"poolAddressesProvider\":",
+        "\"aUSDC\":",
+        "\"stataTokenFactory\":",
+        "\"usdcPriceFeed\":",
+        "\"waUSDC\":",
+        "\"locator\":",
+        "\"stETH\":",
+        "\"wstETH\":",
+        "\"accountingOracle\":",
+        "\"hashConsensus\":",
+        "\"deployBlock\":",
+        "\"adjudicator\":",
+        "\"consensusApp\":",
+        "\"hubCustodian\":"
+      ],
+      "files": [
+        "env/targets/fixturenet-adopt.json"
+      ],
+      "count": {
+        "unit": "patterns",
+        "op": "eq",
+        "value": 22
+      },
+      "clause_id": "c6"
+    },
+    {
+      "description": "The lido module's adopt entry carries the exact stETH and wstETH addresses the relaxed check needs, taken from the manifest.",
+      "proves": "The lido adopt entry carries the two addresses the relaxed postcondition reads.",
+      "restatement_clause_id": "c6",
+      "type": "metamorphic",
+      "relation_class": "conservation",
+      "run": [
+        "python3",
+        "env/reconciler/tests/check_lido_relaxed_fields.py",
+        "env/reconciler/tests/fixtures/sample-manifest.json"
+      ],
+      "clause_id": "c7"
+    },
+    {
+      "description": "Running the tool again from the committed sample manifest reproduces the committed adopt target file byte for byte.",
+      "proves": "The committed adopt target file is exactly what the tool produces from the committed sample manifest, so no person hand-edits it.",
+      "restatement_clause_id": "c7",
+      "type": "metamorphic",
+      "relation_class": "conservation",
+      "run": [
+        "python3",
+        "env/reconciler/tests/check_golden_regeneration.py",
+        "env/reconciler/tests/fixtures/sample-manifest.json",
+        "env/targets/fixturenet-adopt.json"
+      ],
+      "clause_id": "c8"
+    },
+    {
+      "description": "Running the tool on a manifest missing the lido module stops with an error naming lido, prints no success output, and leaves no output file behind.",
+      "proves": "A manifest missing a module makes the tool fail, name the missing module, and write nothing.",
+      "restatement_clause_id": "c8",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tests/check_missing_module_error.py",
+        "args": [
+          "env/reconciler/tests/fixtures/sample-manifest-missing-lido.json",
+          "/tmp/adopt-target-oracle-missing-out.json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "child_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "out_file_exists",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "stderr_mentions_lido",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 3,
+      "timeout_seconds": 60,
+      "clause_id": "c9"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "env/reconciler/tests/check_address_conservation.py",
+    "env/reconciler/tests/check_golden_regeneration.py",
+    "env/reconciler/tests/check_lido_relaxed_fields.py",
+    "env/reconciler/tests/check_missing_module_error.py",
+    "env/reconciler/tools/adopt_target.py"
+  ]
+}
