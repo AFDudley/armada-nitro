@@ -70,6 +70,9 @@ Notes:
   behind them caused reorgs and late blocks (measurements in `docs/tasks/E12-lido-full-scratch.md`'s
   "As built"); and the cap makes a forgotten fixturenet fill its RAM disk and die instead of growing on
   a shared filesystem. A reboot empties it; a fresh reconcile rebuilds the chain.
+  geth runs with `--datadir.minfreedisk=64` (MB): its default floor (~2 GB free) would shut it down
+  with a third of a 3 GB disk used. With the flag it uses the disk until 64 MB remain, then shuts down
+  cleanly.
 
 ### Environment reconciler
 

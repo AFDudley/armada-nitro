@@ -60,7 +60,7 @@ services:
         [Node.HTTPTimeouts]
         IdleTimeout = 3600000000000
         EOF
-        exec geth           --config /tmp/geth-http-timeouts.toml           --datadir /root/ethdata           --networkid=31337           --http           --http.addr=0.0.0.0           --http.port=8545           --http.api=eth,net,web3,debug,txpool           --http.corsdomain="*"           --http.vhosts=*           --ws           --ws.addr=0.0.0.0           --ws.port=8546           --ws.api=eth,net,web3,debug,txpool           --authrpc.addr=0.0.0.0           --authrpc.port=8551           --authrpc.vhosts=*           --authrpc.jwtsecret=/data/jwt/jwtsecret           --miner.gasprice=1           --syncmode=full
+        exec geth           --config /tmp/geth-http-timeouts.toml           --datadir /root/ethdata           --datadir.minfreedisk=64           --networkid=31337           --http           --http.addr=0.0.0.0           --http.port=8545           --http.api=eth,net,web3,debug,txpool           --http.corsdomain="*"           --http.vhosts=*           --ws           --ws.addr=0.0.0.0           --ws.port=8546           --ws.api=eth,net,web3,debug,txpool           --authrpc.addr=0.0.0.0           --authrpc.port=8551           --authrpc.vhosts=*           --authrpc.jwtsecret=/data/jwt/jwtsecret           --miner.gasprice=1           --syncmode=full
     ports:
       - "8545"
       - "8546"
