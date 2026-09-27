@@ -21,3 +21,6 @@ out/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Lint tooling (package.json devDependencies)
+node_modules/

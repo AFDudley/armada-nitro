@@ -1,0 +1,11 @@
+{
+  "name": "armada-nitro-tooling",
+  "private": true,
+  "description": "Lint and format tooling for the repo's TypeScript (env/gates, env/lido); the scripts themselves run inside armada-poc and lido-core.",
+  "devDependencies": {
+    "eslint": "9.17.0",
+    "prettier": "3.4.2",
+    "typescript": "5.7.2",
+    "typescript-eslint": "8.18.2"
+  }
+}
