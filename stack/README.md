@@ -64,11 +64,12 @@ Notes:
   fail with `EPIPE`. `armada-fixturenet-geth`'s command generates a `--config` file overriding
   only `[Node.HTTPTimeouts] IdleTimeout` (1 hour), leaving every other timeout/flag at its
   default.
-- **The deployment directory (`deploy create --deployment-dir <dir>`) must not live on ZFS.**
-  ZFS's own I/O path measurably increases chain reorgs and late block broadcasts under write
-  load (measured: 20 reorgs/79 late broadcasts on ZFS vs. 0 reorgs/4 late on ext4 over the same
-  10-minute window, same reserved cores) -- put deployments on an ext4 (or similar) volume
-  instead.
+- **Chain data lives in RAM, capped.** Mount a tmpfs over the deployment's `data/` before starting it,
+  e.g. a systemd mount unit with `Options=size=3G` on `~/deployments/<name>/data`. Two reasons: on
+  kelce every disk-backed path shares devices with other heavy writers, and the chain's fsyncs waiting
+  behind them caused reorgs and late blocks (measurements in `docs/tasks/E12-lido-full-scratch.md`'s
+  "As built"); and the cap makes a forgotten fixturenet fill its RAM disk and die instead of growing on
+  a shared filesystem. A reboot empties it; a fresh reconcile rebuilds the chain.
 
 ### Environment reconciler
 

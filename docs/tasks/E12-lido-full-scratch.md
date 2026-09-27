@@ -99,11 +99,12 @@ found and fixed in an inherited draft along the way:
 What looked at first like flaky infrastructure turned out to be three distinct, real, and fixable causes,
 found in sequence as each was ruled out:
 
-1. **64 validators overloading the host.** The fixturenet originally ran 64 validators on shared cores;
-   under host load this produced frequent chain reorgs and late block broadcasts (one measured window:
-   50 reorgs / 641 late broadcasts over 23m26s, ~7.8%). Fixed by cutting validators to 4
-   (`docker-compose-armada-fixturenet.yml`, `docs/tasks/E1-fixturenet.md`) and reserving dedicated cores
-   for the whole fixturenet under a runtime cgroup:
+1. **CPU contention on the host.** The fixturenet originally ran 64 validators in one validator client on
+   shared cores; under host load it reorged often (one measured window: 50 reorgs in 641 blocks over
+   23m26s, ~7.8%). A clean 4-validator genesis alone did not change the rate (4 reorgs in 44 blocks), so
+   the validator count was not the cause. Validators were cut to 4 anyway (4 single-key clients;
+   `docker-compose-armada-fixturenet.yml`, `docs/tasks/E1-fixturenet.md`), and the fixturenet's cores
+   were reserved under a runtime cgroup (with this, the reserved cores went from 90-96% busy to <1%):
    - `/run/systemd/system/fixturenet.slice` (`AllowedCPUs=10-15,26-31`), geth and the beacon each pinned
      to 2 cores, each of the 4 validators pinned to its own single core (`cgroup_parent`/`cpuset` in the
      compose file);
@@ -115,13 +116,17 @@ found in sequence as each was ruled out:
    rather than `/etc/systemd/system`) -- it does not survive a reboot and is not part of this repo's
    tracked config; a fresh host needs the equivalent set up by hand before running the fixturenet under
    load.
-2. **The deployment directory on ZFS.** Even with validators cut to 4 and cores reserved, reorgs and late
-   broadcasts persisted. A controlled comparison -- an identical chain, same reserved cores, same 10
-   minutes -- measured 20 reorgs / 79 late broadcasts with the deployment directory on ZFS (`kelce-qvos`,
-   shared with unrelated pool activity) versus 0 reorgs / 4 late broadcasts on ext4 (`/dev/md0`), tracking
-   the ZFS pool's own write-op bursts. Fixed by moving the deployment off ZFS entirely, to
-   `/opt/armada-deployments/armada-fixturenet-e12` (ext4). **Deployment directories for this fixturenet
-   must not live on ZFS** (also noted in `stack/README.md`).
+2. **Sync-write latency on the shared ZFS pool.** With cores reserved, reorgs and late broadcasts still
+   came in bursts. Side by side over the same 10 minutes on the same reserved cores: 20 reorgs / 79 late
+   broadcasts with the data directory on `kelce-qvos`, 0 reorgs / 4 late with it on the NVMe root. The
+   bursts tracked the pool's write operations: every dataset on `kelce-qvos` sits on the same six SATA
+   QLC disks (three mirrors, no separate log device), so the chain's fsyncs wait behind every other
+   writer on the host. That is a property of this pool's devices and load, not of ZFS. The chain's
+   data now lives in RAM: `~/deployments/armada-fixturenet-e12/data` is a tmpfs (`size=3G`), mounted by
+   the systemd unit `home-rix-deployments-armada\x2dfixturenet\x2de12-data.mount`. The cap is
+   deliberate: a fixturenet left running fills it and dies, and nothing else on the host is affected.
+   (The acceptance runs below ran from an interim directory on the NVMe root,
+   `/opt/armada-deployments`, since removed.)
 3. **geth's own HTTP `IdleTimeout`.** Even at 0 reorgs, a real, deterministic, reorg-independent failure
    remained: 0135's Curated Module v2 deploy runs `forge script --broadcast --slow` as a separate,
    several-minutes-long OS process while Hardhat's own Node.js JSON-RPC connection sits idle; the very
@@ -217,8 +222,8 @@ $ laconic-so deployment --dir /opt/armada-deployments/armada-fixturenet-e12 run-
   (617 -> 617).
 - Reorgs / late broadcasts over the full ~25-minute successful reconcile window: **2 reorgs, 9 late
   broadcasts** (`docker logs --since <start> ... | grep -c "Chain reorg detected"` /
-  case-insensitive `"too late"` on geth/beacon respectively) -- consistent with the ZFS-vs-ext4 and
-  validator-count findings above.
+  case-insensitive `"too late"` on geth/beacon respectively) -- consistent with the reserved-core and
+  storage findings above.
 - Peak CPU (`docker stats`, sampled every ~5s across the same window; percentages are relative to one
   core): geth **8.07%**, beacon **23.33%**.
 
@@ -231,7 +236,7 @@ $ laconic-so deployment --dir /opt/armada-deployments/armada-fixturenet-e12 run-
   itself).
 - Slices 3 and 4 share one commit (`f73aca1`): the verify() postconditions were inseparable from the
   deploy-path fixes needed to get slice 3's acceptance to pass at all.
-- Infra fixes (validator count, cgroup pinning, ZFS avoidance, geth IdleTimeout) went in as part of slice
+- Infra fixes (validator count, cgroup pinning, chain data placement, geth IdleTimeout) went in as part of slice
   3's commit per instruction, even though they live outside `env/lido/` and `env/reconciler/`.
 
 ## Out of scope
