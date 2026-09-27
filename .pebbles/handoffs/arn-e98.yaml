@@ -1,0 +1,65 @@
+status: completed
+pebble_id: arn-e98
+summary: >
+  Built tools/frost-signer, a Rust CLI pinned to frost-secp256k1-evm =3.0.0
+  (matching tools/frost-fixture) that runs a trusted-dealer 2-of-3
+  FROST(secp256k1, KECCAK-256) keygen and threshold signing. `keygen --out
+  <dir>` writes exactly four files (share-1, share-2, share-3, each a
+  participant's serialized KeyPackage, plus group-pubkey.json holding only X
+  and Y) and never writes the group secret. `sign --shares <a> <b> --message
+  <hex32>` runs both FROST rounds (round1::commit, SigningPackage,
+  round2::sign, aggregate) and prints the joint signature; a single share
+  refuses with a non-zero exit and an error naming the 2-of-3 threshold.
+  Added tools/frost-signer/tests/cli.rs (integration tests against the built
+  binary: keygen's file shape, each of the three share pairs verified with
+  frost_secp256k1_evm's own VerifyingKey::verify, the single-share refusal,
+  and message-tamper rejection) and test/FrostSigner.t.sol (forge tests
+  calling FROST.verifySignature, the exact function HubCustodian.execute
+  uses, against a fixture the tool's own keygen+sign produces via
+  tools/frost-signer/examples/gen_forge_fixture.rs, for each pair plus a
+  tamper test). Wrote the six spec-declared acceptance scripts under
+  tools/frost-signer/scripts/. Verified by running `cargo test` (7/7 pass,
+  and confirmed a deliberately injected threshold-check bug makes the
+  single-share test fail, then reverted), `forge test` (27/27 pass including
+  the 4 new FrostSignerTest tests), and all six acceptance scripts directly,
+  each producing the exact JSON fields and exit codes the spec's
+  acceptance_tests require. Added CLAUDE.md to each new source directory
+  (src, tests, examples, scripts) per the repo's Literate Code Principle
+  gate. Initialized the repo's git submodules (lib/frost-secp256k1-evm,
+  forge-std, openzeppelin-contracts, etc.), which were uninitialized in the
+  worktree and required for forge to build at all.
+cost: "~180k tokens"
+commits:
+  - "800b7c7"
+verify_transcript:
+  hooks:
+    - name: cargo test --manifest-path tools/frost-signer/Cargo.toml
+      outcome: passed
+      duration_s: 0.16
+    - name: forge test
+      outcome: passed
+      duration_s: 0.13
+    - name: tools/frost-signer/scripts/keygen_output_check.sh
+      outcome: passed
+      duration_s: 0.08
+    - name: tools/frost-signer/scripts/sign_pairs_check.sh
+      outcome: passed
+      duration_s: 0.11
+    - name: tools/frost-signer/scripts/single_share_check.sh
+      outcome: passed
+      duration_s: 0.10
+    - name: tools/frost-signer/scripts/dependency_version_check.sh
+      outcome: passed
+      duration_s: 0.07
+    - name: tools/frost-signer/scripts/cli_surface_check.sh
+      outcome: passed
+      duration_s: 0.06
+    - name: tools/frost-signer/scripts/forge_signature_checks.sh
+      outcome: passed
+      duration_s: 0.24
+e2e_gate:
+  spec: contracts/specs/derived-arn-e98.spec.json
+  command: "bash tools/frost-signer/scripts/keygen_output_check.sh && bash tools/frost-signer/scripts/sign_pairs_check.sh && bash tools/frost-signer/scripts/single_share_check.sh; bash tools/frost-signer/scripts/dependency_version_check.sh && bash tools/frost-signer/scripts/cli_surface_check.sh && bash tools/frost-signer/scripts/forge_signature_checks.sh"
+  result: passed
+  ran_at_sha: "800b7c7"
+  mocks_in_path: false
