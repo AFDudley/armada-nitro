@@ -1,0 +1,22 @@
+{
+  "groupKeyX": "0xd963041ff4047c2d1d02ffb98e6704935b8093299c8fe26b8c6487b75773e51a",
+  "groupKeyY": "0xc5dd6b069f76a7b59a8bffb5fc6e22cead39ed25c0ef60d34e901f3515606aa1",
+  "message": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "signatures": {
+    "pair12": {
+      "commitmentX": "0x7682aa50de39db958cb1b6d41c1156cf99c0dedc73fc33b3ef11dff1449878bc",
+      "commitmentY": "0xfadfdf690e838c1077cd1d942f24eb71f528073d8e6e710ae8b0f138bfb73aa7",
+      "z": "0x3a5f8e17f101dda90c8e0d58b8d7a04f943998801c414ce5e93525327b7a8a96"
+    },
+    "pair13": {
+      "commitmentX": "0x45a127b3241790898acbcba91f3e8fda94c423ac0bfa497d4a93273a6deec5c2",
+      "commitmentY": "0xc3643eb9f1222ff4a4723287256674a293281e3e969f520f9de35e074555d9f3",
+      "z": "0x9f3c8ce6b7cfe5b39cdf449c7905c1b33558a90ac1034e79a129523d84461a81"
+    },
+    "pair23": {
+      "commitmentX": "0x80e749d8b7e21484eadd3df31f7c5618d4a42dc26f384083e4a2267557dd52df",
+      "commitmentY": "0xdd47788550074aa5f9905b143dc93ef6fe46035fec1a70ae0e4bf745a15b303a",
+      "z": "0x893b2cf24781caa5523a5c380aa2db9407b06c157839141e4ff1880d72f6547a"
+    }
+  }
+}

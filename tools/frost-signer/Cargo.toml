@@ -1,0 +1,19 @@
+[package]
+name = "frost-signer"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "2-of-3 FROST(secp256k1, KECCAK-256) trusted-dealer keygen and threshold signing CLI"
+
+[dependencies]
+frost-secp256k1-evm = { version = "=3.0.0" }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic", "expose-field", "hash2curve"] }
+rand_chacha = "0.3"
+rand_core = "0.6"
+sha3 = { version = "0.10", default-features = false }
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+clap = { version = "4", features = ["derive"] }
+[dev-dependencies]
