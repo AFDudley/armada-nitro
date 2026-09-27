@@ -1,0 +1,91 @@
+---
+# Opt-in host-wide isolation: confine everything other than the fixturenet slice
+# to the complementary CPUs, and narrow the kernel workqueue mask, so no other
+# workload bleeds onto the fixturenet's reserved cores. Reverts the hand-made
+# "systemctl set-property --runtime" drop-ins in favour of persistent ones.
+
+# --- Always: drop any hand-made runtime set-property drop-ins ----------------
+
+- name: Remove hand-made runtime AllowedCPUs drop-ins
+  ansible.builtin.file:
+    path: "/run/systemd/system.control/{{ item }}.d/{{ _fixturenet_runtime_dropin }}"
+    state: absent
+  loop: "{{ _fixturenet_isolation_units }}"
+  register: _fixturenet_runtime_dropins
+
+# --- Isolation ENABLED ------------------------------------------------------
+
+- name: Ensure drop-in directories exist
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ _fixturenet_isolation_units }}"
+  when: fixturenet_host_isolation | bool
+
+- name: Install host-isolation AllowedCPUs drop-ins
+  ansible.builtin.template:
+    src: isolation.conf.j2
+    dest: "/etc/systemd/system/{{ item }}.d/{{ _fixturenet_isolation_dropin }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ _fixturenet_isolation_units }}"
+  register: _fixturenet_isolation_dropins
+  when: fixturenet_host_isolation | bool
+
+- name: Install the workqueue cpumask tmpfiles rule
+  ansible.builtin.copy:
+    dest: "{{ _fixturenet_workqueue_tmpfiles }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by the fixturenet_host ansible role.
+      # Narrow unbound kernel workqueues away from the fixturenet's reserved cores.
+      w {{ _fixturenet_workqueue_path }} - - - - {{ fixturenet_workqueue_cpumask }}
+  register: _fixturenet_workqueue_rule
+  when: fixturenet_host_isolation | bool
+
+# --- Isolation DISABLED: remove what this role would have installed ----------
+
+- name: Remove host-isolation AllowedCPUs drop-ins
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.d/{{ _fixturenet_isolation_dropin }}"
+    state: absent
+  loop: "{{ _fixturenet_isolation_units }}"
+  register: _fixturenet_isolation_dropins_absent
+  when: not (fixturenet_host_isolation | bool)
+
+- name: Remove the workqueue cpumask tmpfiles rule
+  ansible.builtin.file:
+    path: "{{ _fixturenet_workqueue_tmpfiles }}"
+    state: absent
+  register: _fixturenet_workqueue_rule_absent
+  when: not (fixturenet_host_isolation | bool)
+
+# --- Apply changes live -----------------------------------------------------
+
+- name: Reload systemd so drop-in AllowedCPUs are reapplied to running units
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: >-
+    _fixturenet_runtime_dropins is changed
+    or _fixturenet_isolation_dropins is changed
+    or _fixturenet_isolation_dropins_absent is changed
+
+- name: Read the current workqueue cpumask
+  ansible.builtin.slurp:
+    src: "{{ _fixturenet_workqueue_path }}"
+  register: _fixturenet_workqueue_current
+  when: fixturenet_host_isolation | bool
+
+- name: Apply the workqueue cpumask now
+  ansible.builtin.command: "systemd-tmpfiles --create {{ _fixturenet_workqueue_tmpfiles }}"
+  changed_when: true
+  when:
+    - fixturenet_host_isolation | bool
+    - (_fixturenet_workqueue_current.content | b64decode | trim | replace(',', '') | lower)
+      != (fixturenet_workqueue_cpumask | trim | replace(',', '') | lower)

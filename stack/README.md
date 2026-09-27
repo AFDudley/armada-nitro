@@ -52,11 +52,20 @@ Notes:
 - geth's default `--miner.gasprice` (1,000,000 wei) is above this fixturenet's single-digit-wei
   base fee, so a `cast` transaction bidding the base fee never clears it and is never mined;
   `--miner.gasprice=1` fixes that.
-- geth, the beacon and all 4 validators run under `cgroup_parent: fixturenet.slice` with a
-  `cpuset` pinning each to its own dedicated core (geth/beacon get 2 cores each, one validator
-  per remaining core). This isolates fixturenet block production from other host load; see
-  `docs/tasks/E12-lido-full-scratch.md`'s "As built" section for the full host-side setup
-  (validators cut from 64 to 4, and why) and measurements.
+- geth, the beacon and all 4 validators run under `cgroup_parent:
+  ${FIXTURENET_SLICE}` with a `cpuset` pinning each to its own dedicated core
+  (geth/beacon get 2 cores each, one validator per remaining core). The slice
+  name and every cpuset are read from deployment config variables
+  (`FIXTURENET_SLICE`, `GETH_CPUSET`, `BEACON_CPUSET`,
+  `VALIDATOR_0_CPUSET`…`VALIDATOR_3_CPUSET`), each defaulting to this repo's
+  reference host (kelce) values, so a different host retargets them at `deploy
+  init` time without editing the compose file. This isolates fixturenet block
+  production from other host load; the slice, its CPU reservation and the tmpfs
+  below are set up by the ansible role in `ops/ansible/` (**see
+  `ops/ansible/README.md`** for the outsider-facing setup, including how to pick
+  CPUs and pass the config vars). See `docs/tasks/E12-lido-full-scratch.md`'s
+  "As built" section for the full host-side rationale (validators cut from 64 to
+  4, and why) and measurements.
 - geth's HTTP server's default `IdleTimeout` (120s) closes a keep-alive connection that has
   sat idle for that long; a Lido scratch-deploy step (0135) runs an external `forge script
   --broadcast --slow` deploy for several minutes on a separate connection while Hardhat's own
@@ -64,8 +73,10 @@ Notes:
   fail with `EPIPE`. `armada-fixturenet-geth`'s command generates a `--config` file overriding
   only `[Node.HTTPTimeouts] IdleTimeout` (1 hour), leaving every other timeout/flag at its
   default.
-- **Chain data lives in RAM, capped.** Mount a tmpfs over the deployment's `data/` before starting it,
-  e.g. a systemd mount unit with `Options=size=3G` on `~/deployments/<name>/data`. Two reasons: on
+- **Chain data lives in RAM, capped.** A size-capped tmpfs goes over the
+  deployment's `data/` directory (the `ops/ansible/` role installs a systemd
+  mount unit with `Options=size=3G` on `~/deployments/<name>/data`; mount it
+  *after* `deploy create` and *before* `... start`). Two reasons: on
   kelce every disk-backed path shares devices with other heavy writers, and the chain's fsyncs waiting
   behind them caused reorgs and late blocks (measurements in `docs/tasks/E12-lido-full-scratch.md`'s
   "As built"); and the cap makes a forgotten fixturenet fill its RAM disk and die instead of growing on

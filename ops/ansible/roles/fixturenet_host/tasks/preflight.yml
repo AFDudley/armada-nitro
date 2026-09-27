@@ -1,0 +1,78 @@
+---
+# Assert the host can actually run the fixturenet under a systemd slice with the
+# requested CPU pinning, and that the operator supplied the required variables.
+
+- name: Require fixturenet_slice_allowed_cpus
+  ansible.builtin.assert:
+    that:
+      - fixturenet_slice_allowed_cpus | length > 0
+    fail_msg: >-
+      fixturenet_slice_allowed_cpus is required (e.g. "10-15,26-31"): the CPUs to
+      reserve for the fixturenet are host-specific and have no safe default.
+
+- name: Require a .slice name
+  ansible.builtin.assert:
+    that:
+      - fixturenet_slice_name.endswith('.slice')
+    fail_msg: "fixturenet_slice_name must end in '.slice' (got '{{ fixturenet_slice_name }}')."
+
+- name: Determine the cgroup filesystem type
+  ansible.builtin.command: stat -fc %T /sys/fs/cgroup
+  changed_when: false
+  check_mode: false
+  register: _fixturenet_cgroup_fstype
+
+- name: Require cgroup v2 (unified hierarchy)
+  ansible.builtin.assert:
+    that:
+      - _fixturenet_cgroup_fstype.stdout == 'cgroup2fs'
+    fail_msg: >-
+      This host is not on cgroup v2 (/sys/fs/cgroup is
+      '{{ _fixturenet_cgroup_fstype.stdout }}', not 'cgroup2fs'). AllowedCPUs on a
+      systemd slice needs the unified hierarchy.
+
+- name: Determine the docker cgroup driver
+  ansible.builtin.command: docker info -f "{% raw %}{{.CgroupDriver}}{% endraw %}"
+  changed_when: false
+  check_mode: false
+  register: _fixturenet_docker_driver
+
+- name: Require the systemd docker cgroup driver
+  ansible.builtin.assert:
+    that:
+      - _fixturenet_docker_driver.stdout == 'systemd'
+    fail_msg: >-
+      Docker's cgroup driver is '{{ _fixturenet_docker_driver.stdout }}', not
+      'systemd'. The compose file names a systemd slice via cgroup_parent, which
+      only works with the systemd driver. Set '"exec-opts":
+      ["native.cgroupdriver=systemd"]' in /etc/docker/daemon.json and restart
+      docker.
+
+- name: Expand the requested slice CPU ids
+  ansible.builtin.set_fact:
+    _fixturenet_allowed_cpu_ids: >-
+      {{ _fixturenet_allowed_cpu_ids | default([])
+         + range((item.split('-')[0]) | int,
+                 ((item.split('-')[1] if '-' in item else item) | int) + 1) | list }}
+  loop: "{{ fixturenet_slice_allowed_cpus.split(',') | map('trim') | list }}"
+
+- name: Require every reserved CPU to exist on this host
+  ansible.builtin.assert:
+    that:
+      - (_fixturenet_allowed_cpu_ids | max) < (ansible_facts.processor_vcpus | int)
+      - (_fixturenet_allowed_cpu_ids | min) >= 0
+    fail_msg: >-
+      fixturenet_slice_allowed_cpus ('{{ fixturenet_slice_allowed_cpus }}') names
+      CPU {{ _fixturenet_allowed_cpu_ids | max }}, but this host has only
+      {{ ansible_facts.processor_vcpus }} CPUs (0-{{ ansible_facts.processor_vcpus | int - 1 }}).
+
+- name: Require isolation variables when isolation is enabled
+  ansible.builtin.assert:
+    that:
+      - fixturenet_host_other_cpus | length > 0
+      - fixturenet_workqueue_cpumask | length > 0
+    fail_msg: >-
+      fixturenet_host_isolation is true, so fixturenet_host_other_cpus (the
+      complement CPU list, e.g. "0-9,16-25") and fixturenet_workqueue_cpumask
+      (the matching hex mask, e.g. "03ff03ff") are both required.
+  when: fixturenet_host_isolation | bool

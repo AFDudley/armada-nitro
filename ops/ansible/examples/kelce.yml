@@ -1,0 +1,22 @@
+---
+# Example vars reproducing this repo's reference host, kelce (32 CPUs; SMT
+# siblings are CPU n and n+16). Pass with:
+#   ansible-playbook -i inventory.example.ini site.yml -e @examples/kelce.yml
+#
+# Reserve physical cores 10-15 (and their SMT siblings 26-31) for the fixturenet;
+# confine everything else to the rest.
+
+fixturenet_slice_allowed_cpus: "10-15,26-31"
+
+# Host-wide isolation ON: this is a dedicated build host, so confining other
+# workloads to the complementary cores is acceptable here. Leave this off on a
+# machine you share with unrelated work.
+fixturenet_host_isolation: true
+fixturenet_host_other_cpus: "0-9,16-25"
+# Hex mask for cores 0-9,16-25 (matches fixturenet_host_other_cpus).
+fixturenet_workqueue_cpumask: "03ff03ff"
+
+# Cap the E12 deployment's chain data at a 3G RAM disk.
+fixturenet_tmpfs_mounts:
+  - path: /home/rix/deployments/armada-fixturenet-e12/data
+    size: 3G

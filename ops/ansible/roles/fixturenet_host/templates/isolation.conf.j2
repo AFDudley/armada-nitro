@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+{% if item.endswith('.scope') %}[Scope]
+{% else %}[Slice]
+{% endif %}
+AllowedCPUs={{ fixturenet_host_other_cpus }}

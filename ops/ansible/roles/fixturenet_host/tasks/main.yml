@@ -1,0 +1,16 @@
+---
+- name: Preflight checks
+  ansible.builtin.import_tasks: preflight.yml
+  tags: [preflight]
+
+- name: Install the fixturenet slice
+  ansible.builtin.import_tasks: slice.yml
+  tags: [slice]
+
+- name: Host-wide CPU isolation (opt-in)
+  ansible.builtin.import_tasks: isolation.yml
+  tags: [isolation]
+
+- name: tmpfs data mounts
+  ansible.builtin.import_tasks: tmpfs.yml
+  tags: [tmpfs]

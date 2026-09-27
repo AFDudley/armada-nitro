@@ -1,0 +1,29 @@
+---
+# Install the fixturenet slice as a persistent unit and make it active.
+
+- name: Remove any hand-made runtime slice unit
+  ansible.builtin.file:
+    path: "/run/systemd/system/{{ fixturenet_slice_name }}"
+    state: absent
+  register: _fixturenet_runtime_slice
+
+- name: Install the fixturenet slice unit
+  ansible.builtin.template:
+    src: fixturenet.slice.j2
+    dest: "/etc/systemd/system/{{ fixturenet_slice_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: _fixturenet_slice_unit
+
+- name: Reload systemd after slice changes
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: >-
+    _fixturenet_slice_unit is changed
+    or _fixturenet_runtime_slice is changed
+
+- name: Ensure the fixturenet slice is active
+  ansible.builtin.systemd_service:
+    name: "{{ fixturenet_slice_name }}"
+    state: started

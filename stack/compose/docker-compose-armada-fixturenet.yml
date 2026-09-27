@@ -36,8 +36,8 @@ services:
       armada-fixturenet-genesis:
         condition: service_completed_successfully
     restart: unless-stopped
-    cgroup_parent: fixturenet.slice
-    cpuset: "10,26"
+    cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
+    cpuset: "${GETH_CPUSET:-10,26}"
     volumes:
       - armada_fixturenet_genesis:/data
       - geth_data:/root/ethdata
@@ -81,8 +81,8 @@ services:
       armada-fixturenet-geth:
         condition: service_healthy
     restart: unless-stopped
-    cgroup_parent: fixturenet.slice
-    cpuset: "11,27"
+    cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
+    cpuset: "${BEACON_CPUSET:-11,27}"
     volumes:
       - armada_fixturenet_genesis:/data
       - beacon_data:/root/beacon
@@ -102,8 +102,8 @@ services:
       armada-fixturenet-geth:
         condition: service_healthy
     restart: unless-stopped
-    cgroup_parent: fixturenet.slice
-    cpuset: "12"
+    cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
+    cpuset: "${VALIDATOR_0_CPUSET:-12}"
     volumes:
       - armada_fixturenet_genesis:/data
       - validator_0_data:/root
@@ -126,8 +126,8 @@ services:
       armada-fixturenet-geth:
         condition: service_healthy
     restart: unless-stopped
-    cgroup_parent: fixturenet.slice
-    cpuset: "13"
+    cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
+    cpuset: "${VALIDATOR_1_CPUSET:-13}"
     volumes:
       - armada_fixturenet_genesis:/data
       - validator_1_data:/root
@@ -150,8 +150,8 @@ services:
       armada-fixturenet-geth:
         condition: service_healthy
     restart: unless-stopped
-    cgroup_parent: fixturenet.slice
-    cpuset: "14"
+    cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
+    cpuset: "${VALIDATOR_2_CPUSET:-14}"
     volumes:
       - armada_fixturenet_genesis:/data
       - validator_2_data:/root
@@ -174,8 +174,8 @@ services:
       armada-fixturenet-geth:
         condition: service_healthy
     restart: unless-stopped
-    cgroup_parent: fixturenet.slice
-    cpuset: "15"
+    cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
+    cpuset: "${VALIDATOR_3_CPUSET:-15}"
     volumes:
       - armada_fixturenet_genesis:/data
       - validator_3_data:/root

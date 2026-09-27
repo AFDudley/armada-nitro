@@ -1,0 +1,6 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description={{ fixturenet_slice_description }} ({{ fixturenet_slice_allowed_cpus }})
+
+[Slice]
+AllowedCPUs={{ fixturenet_slice_allowed_cpus }}
