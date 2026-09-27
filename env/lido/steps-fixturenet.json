@@ -1,5 +1,5 @@
 {
-  "_comment": "env/lido module's own STEPS_FILE override (docs/tasks/E5-lido.md) -- lido-core's own scripts/scratch/steps.json (tag v4.0.1), with the last three entries dropped. STEPS_FILE is itself a documented, overridable input (scripts/utils/migration-env.sh's load_env_var STEPS_FILE), so this is supplying an input, not editing lido-core (docs/ENVIRONMENT.md section 4). Dropped, and why: 0135-deploy-staking-modules clones lidofinance/community-staking-module and drives its deploy through `just`, unconditionally for any network but hardhat's in-process one (scripts/utils/staking-modules.ts's deployStakingModules); 0140-plug-staking-modules's enableExternalModule then needs to act as the Aragon Agent for the freshly-deployed Community Staking Module and Curated Module v2, and does so by calling lib/account.ts's impersonate() -- `${networkName}_impersonateAccount`, an Anvil/Hardhat cheatcode. Reproduced against this environment's own anvil-based throwaway test: HardhatError HH103 'Account ... is not managed by the node', because this environment's hardhat network config supplies an explicit deployer private key (LOCAL_DEVNET_PK, needed to sign real transactions at all) rather than 'remote' accounts, so Hardhat's LocalAccountsProvider intercepts before the node is ever asked to impersonate -- and real geth implements no such RPC method regardless. Neither Community Staking Module nor Curated Module v2 is named in docs/scratch-deploy.md or in docs/tasks/E5-lido.md's Goal (stETH, wstETH, locator, oracle contracts only); both are out of scope per that brief's own 'staking modules beyond what the scratch deploy creates' line. 0150-transfer-roles is also dropped: it only hands OZ AccessControl admin roles and OssifiableProxy admin control from the deployer to the Agent, which none of docs/ENVIRONMENT.md section 6's lido postconditions read.",
+  "_comment": "env/lido module's own STEPS_FILE override (docs/tasks/E5-lido.md) -- lido-core's own scripts/scratch/steps.json (tag v4.0.1), with steps 0135 (deploy-staking-modules) and 0150 (transfer-roles) restored, and 0140 replaced by a custom 0140-plug-staking-modules-via-vote.ts that performs the same calls as 0140-plug-staking-modules.ts but through a real Aragon DAO vote (TokenManager.forward -> Voting.newVote -> vote -> executeVote -> Agent.execute) instead of hardhat_impersonateAccount, which real geth does not support (docs/tasks/E12-lido-full-scratch.md). 0140's original calls as the Agent (grantRole, resume, revokeRole, updateInitialEpoch, registerPauser) are replicated via the DAO vote path. See docs/tasks/E12-lido-full-scratch.md for the side-by-side call comparison.",
   "steps": [
     "scratch/steps/0000-populate-deploy-artifact-from-env",
     "scratch/steps/0010-deploy-deposit-contract",
@@ -17,6 +17,9 @@
     "scratch/steps/0101-deploy-easytrack",
     "scratch/steps/0110-finalize-dao",
     "scratch/steps/0120-post-locator-initializers",
-    "scratch/steps/0130-grant-roles"
+    "scratch/steps/0130-grant-roles",
+    "scratch/steps/0135-deploy-staking-modules",
+    "0140-plug-staking-modules-via-vote",
+    "scratch/steps/0150-transfer-roles"
   ]
 }

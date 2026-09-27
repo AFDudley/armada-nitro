@@ -12,9 +12,33 @@
 # deploy-params-testnet.toml gives 76% of the initial LDO supply to a placeholder address ("Default LDO
 # whale") with no known private key -- fine for a real DAO's own testnet, where the team holds that key,
 # but unusable here. Naming the deployer instead lets env/reconciler/modules/lido.py cast one decisive
-# "yes" vote and, once the vote's fixed 360s window (voteDuration 300s + objectionPhaseDuration 60s,
-# unchanged from upstream) elapses, execute it -- the same real Aragon governance path a production
-# deploy uses, just with a voter this environment actually controls.
+# "yes" vote and, once the vote's window elapses, execute it -- the same real Aragon governance path a
+# production deploy uses, just with a voter this environment actually controls.
+#
+# voteDuration/objectionPhaseDuration (E12, cut from the upstream 300s/60s, which measurably slowed
+# the reconcile) are the minimum the chain can mechanically clear, derived from Voting.sol, not a
+# "comfortable" round number:
+# - Voting.sol's initialize() only requires voteTime > objectionPhaseTime (no floor), but
+#   lib/config-schemas.ts's own scratch-parameter schema is stricter: both voteDuration and
+#   objectionPhaseDuration are PositiveIntSchema (z.number().int().positive()), so
+#   objectionPhaseDuration cannot be 0 -- 1 is the schema's actual floor.
+# - newVote()'s own auto-cast-vote (_newVote(..., true) -> _vote(voteId, true, msg.sender) if
+#   _canVote(voteId, msg.sender)) does NOT register the deployer's "yes": called via
+#   TokenManager.forward -> runScript, msg.sender as Voting sees it is TokenManager itself (an
+#   EVMScriptRunner call, not a delegatecall preserving the original sender), and TokenManager holds
+#   no LDO balance, so _canVote is false. The separate, explicit Voting.vote(...) sent directly by the
+#   deployer (who does hold LDO) is still required -- dropping it would leave the vote at 0 yea,
+#   never reaching quorum -- and it does not change 0140's Agent calls, only the vote plumbing around
+#   them, so the slice 2 call-equivalence proof is unaffected.
+# - startDate is stamped at the block that mines newVote(), not when it is submitted, so only the gap
+#   between newVote() confirming and the following vote() tx landing counts against the window. At
+#   this fixturenet's 2s slots, that is normally one slot; voteDuration=8 (4 slots) leaves room for a
+#   missed slot plus RPC/script overhead before vote() must land inside the Main phase (which, with
+#   objectionPhaseDuration=1, is everything before the last 1s of the window -- a single 1s Objection
+#   tail changes nothing in practice at 2s block times). env/reconciler/modules/lido.py's and
+#   0140-plug-staking-modules-via-vote.ts's own canExecute() poll loops already wait out however long
+#   the window turns out to be, so voteDuration only has to be long enough for that one intervening
+#   vote() tx, not for the whole reconcile to look "comfortable".
 
 [chainSpec]
 # Ethereum consensus layer specifications - session specific values set via env vars
@@ -46,8 +70,8 @@ aragonEnsLabelName = "aragonpm"       # Aragon ENS label name
 [dao.initialSettings.voting]
 minSupportRequired = "500000000000000000"     # Minimum support required (50%)
 minAcceptanceQuorum = "50000000000000000"     # Minimum acceptance quorum (5%)
-voteDuration = 300                            # Vote duration in seconds (5 minutes)
-objectionPhaseDuration = 60                   # Objection phase duration in seconds (1 minute)
+voteDuration = 8                              # Vote duration in seconds (E12: derived minimum, see comment above)
+objectionPhaseDuration = 1                    # Objection phase duration in seconds (E12: schema floor is 1, not 0)
 
 [dao.initialSettings.fee]
 totalPercent = 10                     # Total fee percentage
