@@ -24,3 +24,10 @@ __pycache__/
 
 # Lint tooling (package.json devDependencies)
 node_modules/
+
+# exophial runtime state (config.yaml is tracked)
+.pebbles/reducer_ledger.jsonl
+.exophial/*
+!.exophial/config.yaml
+# exophial omp worker settings, written into each worker worktree
+.omp-config.yml
