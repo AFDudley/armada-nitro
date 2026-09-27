@@ -178,15 +178,12 @@ def main(argv: list[str]) -> int:
 
     all_tests = tuple(sorted({t for a in selected for t in a.tests}))
     control = evaluate(None, all_tests)
-    results: dict[str, object] = {"negative-control": control}
+    results: dict[str, dict[str, object]] = {"negative-control": control}
     for arm in selected:
         results[arm.name] = {"intent": arm.intent, **evaluate(arm, arm.tests)}
 
     print(json.dumps(results, indent=2))
-    ok = control["verdict"] == "PASS" and all(
-        results[a.name]["verdict"] == "KILLED"
-        for a in selected  # type: ignore[index]
-    )
+    ok = control["verdict"] == "PASS" and all(results[a.name]["verdict"] == "KILLED" for a in selected)
     return 0 if ok else 1
 
 

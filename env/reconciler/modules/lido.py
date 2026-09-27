@@ -48,6 +48,8 @@ is ever deployed here on purpose.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import json
 import os
 import re
@@ -171,12 +173,12 @@ def _read_deposit_contract() -> str:
     return _DEPOSIT_CONTRACT_FILE.read_text().strip()
 
 
-def _read_state(state_file: Path) -> dict:
-    return json.loads(state_file.read_text())
+def _read_state(state_file: Path) -> dict[str, Any]:
+    return cast("dict[str, Any]", json.loads(state_file.read_text()))
 
 
-def _proxy_address(state: dict, key: str) -> str:
-    return state[key]["proxy"]["address"]
+def _proxy_address(state: dict[str, Any], key: str) -> str:
+    return cast("str", state[key]["proxy"]["address"])
 
 
 def _cast_calldata(*args: str) -> str:
@@ -201,7 +203,7 @@ def _encode_calls_script(actions: list[tuple[str, bytes]]) -> str:
     return "0x" + b"".join(parts).hex()
 
 
-def _resume_via_dao_vote(ctx: Context, state: dict, lido: str) -> int:
+def _resume_via_dao_vote(ctx: Context, state: dict[str, Any], lido: str) -> int:
     """Casts and executes a real Aragon DAO vote -- through TokenManager.forward ->
     Voting.newVote -> Voting.vote -> Voting.executeVote -> Agent.execute -> Lido.resume() -- using
     the deployer's LDO holding from env/lido/deploy-params-fixturenet.toml (see module docstring).
@@ -257,11 +259,11 @@ def _resume_via_dao_vote(ctx: Context, state: dict, lido: str) -> int:
     return total_gas
 
 
-def observe(ctx: Context) -> dict | None:
+def observe(ctx: Context) -> dict[str, Any] | None:
     return ctx.manifest.get("lido")
 
 
-def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
+def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     mode, params = resolve_target_mode(ctx.target["lido"])
 
     if mode == "adopt":

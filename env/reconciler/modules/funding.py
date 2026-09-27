@@ -10,6 +10,8 @@ all when a mint is actually about to happen.
 
 from __future__ import annotations
 
+from typing import Any
+
 from reconciler.context import Context, resolve_target_mode, to_int
 from reconciler.modules import _wallet
 
@@ -26,11 +28,11 @@ def _uint(cast_output: str) -> int:
     return to_int(cast_output.split()[0])
 
 
-def observe(ctx: Context) -> list | None:
+def observe(ctx: Context) -> list[dict[str, Any]] | None:
     return ctx.manifest.get("testAccounts")
 
 
-def apply(ctx: Context, observed: list | None) -> tuple[str, int]:
+def apply(ctx: Context, observed: list[dict[str, Any]] | None) -> tuple[str, int]:
     mode, _ = resolve_target_mode(ctx.target["funding"])
     if mode != "deploy":
         raise ValueError(f"funding module only supports deploy mode, got {mode!r}")

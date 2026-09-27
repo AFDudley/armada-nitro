@@ -25,6 +25,8 @@ driven by MODULE_ORDER) from ever loading this as one (mirrors _forge.py, _walle
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import hashlib
 import json
 import tarfile
@@ -47,12 +49,12 @@ _SUMS_FILE = CIRCUITS_BUILD_DIR.parent / "SHA256SUMS"
 _LOCK_FILE = Path(__file__).resolve().parents[2] / "sources.lock.json"
 
 
-def _pins() -> dict:
+def _pins() -> dict[str, Any]:
     lock = json.loads(_LOCK_FILE.read_text())
-    return lock["armada-circuits"]
+    return cast("dict[str, Any]", lock["armada-circuits"])
 
 
-def _tarball_name(pins: dict) -> str:
+def _tarball_name(pins: dict[str, Any]) -> str:
     return f"armada-circuits-{pins['tag']}.tgz"
 
 

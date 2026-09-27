@@ -89,10 +89,10 @@ class StubPOINodeInterface extends POINodeInterface {
   async isRequired(): Promise<boolean> {
     return false;
   }
-  async getPOIsPerList(): Promise<Record<string, any>> {
+  async getPOIsPerList() {
     return {};
   }
-  async getPOIMerkleProofs(): Promise<any[]> {
+  async getPOIMerkleProofs() {
     return [];
   }
   async validatePOIMerkleroots(): Promise<boolean> {
@@ -234,7 +234,7 @@ function normalizeTransactionForAdjudicator(
 async function waitForBalance(
   walletId: string,
   chain: Chain,
-  wallet: any,
+  wallet: RailgunWallet,
   tokenAddress: string,
   minAmount: bigint,
   timeoutMs: number,
@@ -391,7 +391,7 @@ async function main() {
       wallet,
       TXIDVersion.V2_PoseidonMerkle,
       DEFAULT_ENCRYPTION_KEY,
-      (p: any) => process.stdout.write(`.`),
+      () => process.stdout.write(`.`),
     );
     const proofTimeMs = Date.now() - proofStart;
     console.log(

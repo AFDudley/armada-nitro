@@ -38,6 +38,8 @@ sizes both here.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pathlib import Path
 
 from reconciler.context import Context, resolve_target_mode, to_int
@@ -63,11 +65,11 @@ _MESSAGE_BODY_VERSION = 1
 _PLACEHOLDER_ATTESTER = "0x000000000000000000000000000000000000dEaD"
 
 
-def observe(ctx: Context) -> dict | None:
+def observe(ctx: Context) -> dict[str, Any] | None:
     return ctx.manifest.get("cctp")
 
 
-def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
+def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     mode, params = resolve_target_mode(ctx.target["cctp"])
 
     if mode == "adopt":

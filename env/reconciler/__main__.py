@@ -16,6 +16,8 @@ the target file.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import argparse
 import importlib
 import json
@@ -39,18 +41,18 @@ MODULE_ORDER = [
 ]
 
 
-def _load_target(path: Path) -> dict:
+def _load_target(path: Path) -> dict[str, Any]:
     target = json.loads(path.read_text())
     unknown = sorted(name for name in target if name != "network" and name not in MODULE_ORDER)
     if unknown:
         sys.exit(f"reconciler: target {path} names unknown module(s): {', '.join(unknown)}")
-    return target
+    return cast("dict[str, Any]", target)
 
 
-def _load_manifest(state_dir: Path, target: dict) -> dict:
+def _load_manifest(state_dir: Path, target: dict[str, Any]) -> dict[str, Any]:
     manifest_path = state_dir / "manifest.json"
     if manifest_path.exists():
-        return json.loads(manifest_path.read_text())
+        return cast("dict[str, Any]", json.loads(manifest_path.read_text()))
     return {
         "network": target.get("network", {}),
         "assets": {},
@@ -59,14 +61,14 @@ def _load_manifest(state_dir: Path, target: dict) -> dict:
     }
 
 
-def _write_manifest(state_dir: Path, manifest: dict) -> None:
+def _write_manifest(state_dir: Path, manifest: dict[str, Any]) -> None:
     manifest_path = state_dir / "manifest.json"
     tmp_path = manifest_path.with_name(manifest_path.name + ".tmp")
     tmp_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     os.replace(tmp_path, manifest_path)
 
 
-def _module_run_order(target: dict, only: str | None) -> list[str]:
+def _module_run_order(target: dict[str, Any], only: str | None) -> list[str]:
     named = [name for name in target if name != "network"]
     if only is None:
         return [name for name in MODULE_ORDER if name in named]

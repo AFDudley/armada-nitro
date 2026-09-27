@@ -65,7 +65,6 @@ import {
 import { getChainById, getRpcUrl } from "../../lib/sdk/chain-config";
 
 import {
-  TXIDVersion,
   POI,
   POINodeInterface,
   RailgunWallet,
@@ -81,10 +80,10 @@ class StubPOINodeInterface extends POINodeInterface {
   async isRequired(): Promise<boolean> {
     return false;
   }
-  async getPOIsPerList(): Promise<Record<string, any>> {
+  async getPOIsPerList() {
     return {};
   }
-  async getPOIMerkleProofs(): Promise<any[]> {
+  async getPOIMerkleProofs() {
     return [];
   }
   async validatePOIMerkleroots(): Promise<boolean> {
@@ -120,7 +119,7 @@ const eventsInterface = new ethers.Interface(EVENTS_ABI);
 
 /** Decode every log in a receipt matching `eventName` from EVENTS_ABI. Independent of lib/sdk. */
 function decodeEvents(
-  receipt: any,
+  receipt: ethers.TransactionReceipt,
   eventName: string,
 ): ethers.LogDescription[] {
   const out: ethers.LogDescription[] = [];
@@ -151,7 +150,7 @@ function inclusiveFee(
 async function waitForBalance(
   walletId: string,
   chain: Chain,
-  wallet: any,
+  wallet: RailgunWallet,
   tokenAddress: string,
   minAmount: bigint,
   timeoutMs: number,

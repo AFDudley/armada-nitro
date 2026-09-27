@@ -28,7 +28,7 @@ import json
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 class ReconcileError(Exception):
@@ -52,7 +52,7 @@ def to_int(value: Any) -> int:
     return int(value)
 
 
-def resolve_target_mode(module_config: dict) -> tuple[str, dict]:
+def resolve_target_mode(module_config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """A module's target entry is either {"deploy": {...params}} or
     {"adopt": {...params}}, never both. Returns (mode, params)."""
     has_deploy = "deploy" in module_config
@@ -76,8 +76,8 @@ class Context:
     rpc_url: str
     state_dir: Path
     key_file: Path
-    target: dict
-    manifest: dict
+    target: dict[str, Any]
+    manifest: dict[str, Any]
     verify_only: bool
     module_name: str = ""
     _deployer_key: str = field(default="", repr=False)
@@ -131,7 +131,7 @@ class Context:
             )
         return self._deployer_address
 
-    def send(self, *args: str) -> dict:
+    def send(self, *args: str) -> dict[str, Any]:
         """Sign and publish a transaction with the deployer key; returns the
         parsed JSON receipt (contractAddress, gasUsed, effectiveGasPrice, ...).
         Flags precede the positional TO/SIG/ARGS (or --create CODE) because
@@ -148,4 +148,4 @@ class Context:
                 *args,
             ]
         )
-        return json.loads(out)
+        return cast("dict[str, Any]", json.loads(out))

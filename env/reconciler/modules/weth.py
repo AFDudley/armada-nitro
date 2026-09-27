@@ -7,6 +7,8 @@ See docs/ENVIRONMENT.md §6 (weth row) and env/sources.lock.json (weth9).
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import json
 from pathlib import Path
 
@@ -24,8 +26,8 @@ _SOURCES_LOCK = Path(__file__).resolve().parents[2] / "sources.lock.json"
 _FRESHLY_RECOGNIZED = ("deployed", "adopted")
 
 
-def _weth9_source() -> dict:
-    return json.loads(_SOURCES_LOCK.read_text())["weth9"]
+def _weth9_source() -> dict[str, Any]:
+    return cast("dict[str, Any]", json.loads(_SOURCES_LOCK.read_text())["weth9"])
 
 
 def _build_creation_code(runtime_hex: str) -> str:
@@ -46,7 +48,7 @@ def _build_creation_code(runtime_hex: str) -> str:
 
 
 def observe(ctx: Context) -> str | None:
-    return ctx.manifest.get("assets", {}).get("weth")
+    return cast("str | None", ctx.manifest.get("assets", {}).get("weth"))
 
 
 def apply(ctx: Context, observed: str | None) -> tuple[str, int]:

@@ -32,6 +32,8 @@ USDC role.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import json
 from pathlib import Path
 
@@ -63,8 +65,8 @@ _TRANSFER_RECIPIENT = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 _FRESHLY_RECOGNIZED = ("deployed", "adopted")
 
 
-def _artifact() -> dict:
-    return json.loads(_ARTIFACT.read_text())
+def _artifact() -> dict[str, Any]:
+    return cast("dict[str, Any]", json.loads(_ARTIFACT.read_text()))
 
 
 def _link_reference_slices() -> list[tuple[int, int]]:
@@ -121,11 +123,11 @@ def _implementation_of(ctx: Context, proxy: str, rpc_url: str) -> str:
     return "0x" + slot[-40:]
 
 
-def observe(ctx: Context) -> dict | None:
+def observe(ctx: Context) -> dict[str, Any] | None:
     return ctx.manifest.get("usdc")
 
 
-def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
+def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     mode, params = resolve_target_mode(ctx.target["usdc"])
 
     if mode == "adopt":

@@ -10,6 +10,8 @@ list USDC through `AaveV3ConfigEngine.listAssets` at mainnet's USDC reserve para
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import json
 from pathlib import Path
 
@@ -66,15 +68,15 @@ def _uint(cast_output: str) -> int:
     return to_int(cast_output.split()[0])
 
 
-def _decode_configuration(raw: int) -> dict:
-    decoded: dict = {}
+def _decode_configuration(raw: int) -> dict[str, Any]:
+    decoded: dict[str, Any] = {}
     for name, start, length in _CONFIG_FIELDS:
         value = (raw >> start) & ((1 << length) - 1)
         decoded[name] = bool(value) if length == 1 else value
     return decoded
 
 
-def _reserve_data(ctx: Context, pool: str, asset: str) -> dict:
+def _reserve_data(ctx: Context, pool: str, asset: str) -> dict[str, Any]:
     # DataTypes.ReserveDataLegacy (IPool.getReserveData): the first field is the
     # single-uint256-field ReserveConfigurationMap struct, hence the nested `(uint256)`.
     sig = (
@@ -89,15 +91,15 @@ def _reserve_data(ctx: Context, pool: str, asset: str) -> dict:
     return {"configuration": configuration, "aTokenAddress": lines[8].strip()}
 
 
-def _reserve_target() -> dict:
-    return json.loads(_RESERVE_JSON.read_text())
+def _reserve_target() -> dict[str, Any]:
+    return cast("dict[str, Any]", json.loads(_RESERVE_JSON.read_text()))
 
 
-def observe(ctx: Context) -> dict | None:
+def observe(ctx: Context) -> dict[str, Any] | None:
     return ctx.manifest.get("aave")
 
 
-def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
+def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     mode, params = resolve_target_mode(ctx.target["aave"])
 
     if mode == "adopt":

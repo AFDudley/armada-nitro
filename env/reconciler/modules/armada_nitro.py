@@ -6,6 +6,8 @@ docs/tasks/E6-armada-and-nitro.md.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pathlib import Path
 
 from reconciler.context import Context, resolve_target_mode, to_int
@@ -23,11 +25,11 @@ def _uint(cast_output: str) -> int:
     return to_int(cast_output.split()[0])
 
 
-def observe(ctx: Context) -> dict | None:
+def observe(ctx: Context) -> dict[str, Any] | None:
     return ctx.manifest.get("armadaNitro")
 
 
-def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
+def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     mode, params = resolve_target_mode(ctx.target["armada_nitro"])
 
     if mode == "adopt":

@@ -32,6 +32,8 @@ drives both, they just don't reach `deployHub()` the way one might expect):
 
 from __future__ import annotations
 
+from typing import Any
+
 import hashlib
 import json
 import os
@@ -127,11 +129,11 @@ def _gas_used_since(ctx: Context, start_block: int) -> tuple[int, int]:
     return total, end_block
 
 
-def observe(ctx: Context) -> dict | None:
+def observe(ctx: Context) -> dict[str, Any] | None:
     return ctx.manifest.get("armada")
 
 
-def apply(ctx: Context, observed: dict | None) -> tuple[str, int]:
+def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     mode, params = resolve_target_mode(ctx.target["armada"])
 
     if mode == "adopt":

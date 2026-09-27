@@ -9,6 +9,8 @@ driven by MODULE_ORDER) from ever loading this as one.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import json
 import os
 import subprocess
@@ -25,7 +27,7 @@ def run_broadcast(
     chain_id: int,
     env: dict[str, str],
     extra_args: tuple[str, ...] = (),
-) -> dict:
+) -> dict[str, Any]:
     """Runs `forge script <script_target> --broadcast` in `project_dir`,
     with `env` merged over the reconciler process's own environment (so the
     deployer key and per-call parameters reach the script's `vm.env*`
@@ -46,23 +48,23 @@ def run_broadcast(
         )
     script_file = script_target.split(":", 1)[0]
     broadcast_path = project_dir / "broadcast" / Path(script_file).name / str(chain_id) / "run-latest.json"
-    return json.loads(broadcast_path.read_text())
+    return cast("dict[str, Any]", json.loads(broadcast_path.read_text()))
 
 
-def sum_gas_used(receipts: dict) -> int:
+def sum_gas_used(receipts: dict[str, Any]) -> int:
     return sum(to_int(r["gasUsed"]) for r in receipts.get("receipts", []))
 
 
-def created_contract_address(receipts: dict, contract_name: str) -> str:
+def created_contract_address(receipts: dict[str, Any], contract_name: str) -> str:
     """Address of the top-level CREATE (or CREATE2) transaction that
     deployed `contract_name` directly (not via a factory's internal call)."""
     for tx in receipts["transactions"]:
         if tx["transactionType"] in ("CREATE", "CREATE2") and tx["contractName"] == contract_name:
-            return tx["contractAddress"]
+            return cast("str", tx["contractAddress"])
     raise KeyError(f"no CREATE transaction for {contract_name!r} in broadcast artifact")
 
 
-def additional_contract_addresses(receipts: dict, contract_name: str) -> list[str]:
+def additional_contract_addresses(receipts: dict[str, Any], contract_name: str) -> list[str]:
     """Addresses of every `contract_name` deployed as a side effect of a
     top-level call (e.g. through a CREATE2 factory), in broadcast order."""
     addrs = []
