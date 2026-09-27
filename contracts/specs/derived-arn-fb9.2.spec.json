@@ -1,0 +1,139 @@
+{
+  "id": "derived-arn-fb9.2",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? A reconcile target that adopts every module at the addresses of an existing deployment can be generated from its manifest, and adopt mode is shown never to reach any module's deploy path.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. `python3 env/reconciler/tools/adopt_target.py <manifest.json> <out.json>` writes a target with the same network and every module (weth, usdc, cctp, aave, lido, armada, armada_nitro) in `adopt` mode with addresses taken from the manifest; adopt parameters follow docs/tasks/E8-sepolia.md, and lido uses E8's relaxed postconditions (`stETH()` link, `stEthPerToken() > 0`). A test replaces each module's deploy path with one that raises and runs its adopt path: none raises. The generated `env/targets/fixturenet-adopt.json` is committed and not hand-edited.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. adopt_target.py exists and regenerates env/targets/fixturenet-adopt.json byte-identically from a committed sample manifest; the never-deploys test covers all seven modules and fails if any adopt path calls deploy (shown by temporarily routing one module's adopt to deploy). Spec: docs/tasks/E13-adopt-mode.md (Deliver, first and last bullets).\nWhat are the non-goals / constraints? What must this NOT do? Running adopt against a live chain (E13b); funding (deploy-only module); Sepolia.\nAny examples or references? (links, prior art, a similar thing you like) Each module's adopt branch: env/reconciler/modules/*.py (`if mode == \"adopt\"`); resolve_target_mode in env/reconciler/context.py; env/targets/fixturenet.json for the target shape.\nWhat priority is this? (P0\u2013P4) and why now? P2\n\nDecomposed child: Build a test covering all seven reconciler modules (weth, usdc, cctp, aave, lido, armada, armada_nitro) that, for each module, replaces its deploy path with a stand-in that raises an error, then runs that module's adopt path. This is for armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8). Done means: the test passes when none of the seven modules raises during its adopt path, and the test is shown to fail when one module's adopt path is temporarily routed to call its deploy path instead of the raising stand-in. Reference each module's `if mode == \"adopt\"` branch in env/reconciler/modules/*.py. Non-goals: running adopt against a live chain (that is E13b), funding (a deploy-only concern), and Sepolia itself. Spec: docs/tasks/E13-adopt-mode.md (Deliver section, last bullet). Priority P2.",
+  "restatement": "Armada-nitor developers need one test for the adopt path of each reconciler module. The test must run before the team uses Sepolia. The test covers seven modules: weth, usdc, cctp, aave, lido, armada, and armada_nitro. For each module, the test replaces the module's deploy path with a stand-in. The stand-in raises an error. The test then runs the module's adopt path. The test uses each module's `if mode == \"adopt\"` branch in env/reconciler/modules/*.py. The test passes when no module raises an error during its adopt path. The test must fail when one module's adopt path calls its deploy path instead of the stand-in. The test does not run adopt against a live chain. The test does not check funding. The test does not touch Sepolia itself. Spec: docs/tasks/E13-adopt-mode.md, Deliver section, last bullet. Priority: P2.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The test covers all seven reconciler modules: weth, usdc, cctp, aave, lido, armada, and armada_nitro. For each module, the test replaces the module's deploy path with a stand-in that raises an error. The test uses each module's `if mode == \"adopt\"` branch in env/reconciler/modules/*.py."
+    },
+    {
+      "id": "c2",
+      "text": "For each module, the test then runs that module's adopt path with the stand-in in place of deploy. The test passes when no module raises an error during its adopt path."
+    },
+    {
+      "id": "c3",
+      "text": "The test must fail when one module's adopt path calls its deploy path instead of the raising stand-in."
+    },
+    {
+      "id": "c4",
+      "text": "The test does not run adopt against a live chain. The test does not check funding. The test does not target Sepolia itself."
+    }
+  ],
+  "goal": "Add one test that checks the adopt path of all seven reconciler modules. The test must catch a module whose adopt path wrongly calls deploy.",
+  "acceptance_criteria": [
+    "Running the test shows it checks all seven reconciler modules. The modules are weth, usdc, cctp, aave, lido, armada, and armada_nitro.",
+    "Running the test with the real deploy and adopt code shows every module's check passes. No module raises an error.",
+    "The check changes the weth module. Its adopt path now calls deploy instead of the stand-in. Running the test then shows the weth check fails.",
+    "The test file does not mention Sepolia. The test file does not call a funding function."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the test shows it checks all seven reconciler modules. The modules are weth, usdc, cctp, aave, lido, armada, and armada_nitro."
+    },
+    {
+      "id": "c2",
+      "text": "Running the test with the real deploy and adopt code shows every module's check passes. No module raises an error."
+    },
+    {
+      "id": "c3",
+      "text": "The check changes the weth module. Its adopt path now calls deploy instead of the stand-in. Running the test then shows the weth check fails."
+    },
+    {
+      "id": "c4",
+      "text": "The test file does not mention Sepolia. The test file does not call a funding function."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Running the test shows it checks all seven reconciler modules. The modules are weth, usdc, cctp, aave, lido, armada, and armada_nitro.",
+      "proves": "The test covers every one of the seven named modules, not a smaller set.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run_adopt_standin_suite.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "tests_run",
+          "op": "eq",
+          "value": 7
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the test with the real deploy and adopt code shows every module's check passes. No module raises an error.",
+      "proves": "The test passes end to end when no module's adopt path calls deploy.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run_adopt_standin_suite.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "all_passed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "The check changes the weth module. Its adopt path now calls deploy instead of the stand-in. Running the test then shows the weth check fails.",
+      "proves": "The test catches a module whose adopt path wrongly calls deploy.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run_adopt_standin_mutated.py",
+        "args": [
+          "weth"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "test_passed",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The test file does not mention Sepolia. The test file does not call a funding function.",
+      "proves": "The test stays inside its fixturenet scope. The test does not check funding or Sepolia.",
+      "restatement_clause_id": "c4",
+      "pattern": "(?i)sepolia",
+      "additional_patterns": [
+        "(?i)\\bfund\\("
+      ],
+      "files": [
+        "tests/reconciler/test_adopt_deploy_standin.py"
+      ],
+      "clause_id": "c4"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/run_adopt_standin_mutated.py",
+    "scripts/run_adopt_standin_suite.py"
+  ]
+}
