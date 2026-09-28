@@ -11,7 +11,6 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use frost_signer::{keygen_into, sign_shares};
-use hex;
 
 /// A 2-of-3 FROST(secp256k1, KECCAK-256) trusted-dealer keygen and threshold signing tool.
 #[derive(Parser, Debug)]
@@ -55,7 +54,7 @@ fn main() -> ExitCode {
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
-                    eprintln!("keygen failed: {}", e);
+                    eprintln!("keygen failed: {e}");
                     ExitCode::FAILURE
                 }
             }
@@ -74,7 +73,7 @@ fn main() -> ExitCode {
             let msg: Vec<u8> = match hex::decode(msg_hex) {
                 Ok(bytes) => bytes,
                 Err(e) => {
-                    eprintln!("frost-signer sign: could not decode --message hex: {}", e);
+                    eprintln!("frost-signer sign: could not decode --message hex: {e}");
                     return ExitCode::FAILURE;
                 }
             };
@@ -86,7 +85,7 @@ fn main() -> ExitCode {
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
-                    eprintln!("sign failed: {}", e);
+                    eprintln!("sign failed: {e}");
                     ExitCode::FAILURE
                 }
             }

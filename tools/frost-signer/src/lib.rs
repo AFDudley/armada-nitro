@@ -12,7 +12,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use frost_secp256k1_evm as frost;
-use hex;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
@@ -43,28 +42,22 @@ pub fn keygen_into(out_dir: &Path) -> Result<(), Error> {
     let mut rng = ChaCha20Rng::seed_from_u64(0x6e69_7472_6f72_6169);
     let result =
         frost::keys::generate_with_dealer(3, 2, frost::keys::IdentifierList::Default, &mut rng);
-    let (shares, pubkeys) = match result {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
+    let (shares, pubkeys) = result?;
 
     // Identifiers are the sequential signer indices (1, 2, 3) from IdentifierList::Default.
     let mut share_index = 1;
-    for (_, secret_share) in &shares {
+    for secret_share in shares.values() {
         let kp_res = frost::keys::KeyPackage::try_from(secret_share.clone());
-        let kp = match kp_res {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+        let kp = kp_res?;
         let serialized = kp.serialize()?;
         let hex = format!("0x{}", hex::encode(&serialized));
-        let path = out_dir.join(format!("share-{}", share_index));
+        let path = out_dir.join(format!("share-{share_index}"));
         std::fs::write(
             path,
             json::to_string_pretty(&ShareFile { key_package: hex }).unwrap() + "\n",
         )
         .unwrap();
-        share_index = share_index + 1;
+        share_index += 1;
     }
 
     // Group public key (X, Y) — the file contains X and Y; the group secret scalar is never written.
@@ -93,8 +86,8 @@ pub fn keygen_into(out_dir: &Path) -> Result<(), Error> {
 pub fn sign_shares(share_files: &[PathBuf], message: &[u8]) -> Result<frost::Signature, Error> {
     let mut key_packages: BTreeMap<frost::Identifier, frost::keys::KeyPackage> = BTreeMap::new();
     for path in share_files {
-        let raw = std::fs::read_to_string(path).map_err(|e| map_io_error(e))?;
-        let share: ShareFile = json::from_str(&raw).map_err(|e| map_json_error(e))?;
+        let raw = std::fs::read_to_string(path).map_err(map_io_error)?;
+        let share: ShareFile = json::from_str(&raw).map_err(map_json_error)?;
         let kp = deserialize_key_package(&share.key_package)?;
         key_packages.insert(*kp.identifier(), kp);
     }
@@ -129,12 +122,12 @@ pub fn sign_packages(
         nonces.insert(*id, nonce);
         commitments.insert(*id, commitment);
     }
-    let signing_package = frost::SigningPackage::new(commitments, &message);
+    let signing_package = frost::SigningPackage::new(commitments, message);
 
     // Round 2: each participant produces a signature share.
     let mut signature_shares = BTreeMap::new();
     for (id, kp) in key_packages {
-        let share = frost::round2::sign(&signing_package, &nonces[id], &kp)?;
+        let share = frost::round2::sign(&signing_package, &nonces[id], kp)?;
         signature_shares.insert(*id, share);
     }
 

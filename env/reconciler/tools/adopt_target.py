@@ -99,9 +99,7 @@ def _read_manifest(path: Path) -> dict[str, Any]:
     return cast("dict[str, Any]", json.loads(text))
 
 
-def _build_adopt_entry(
-    module_name: str, manifest: dict[str, Any]
-) -> dict[str, Any]:
+def _build_adopt_entry(module_name: str, manifest: dict[str, Any]) -> dict[str, Any]:
     """Build the adopt entry for one module from a manifest.
 
     Args:
@@ -133,9 +131,7 @@ def _build_adopt_entry(
                 found = True
                 break
         if not found:
-            raise ValueError(
-                f"module {module_name}: missing required key {key!r}"
-            )
+            raise ValueError(f"module {module_name}: missing required key {key!r}")
 
     # Special case: derive groupKeyX / groupKeyY from groupKeyScalar
     # using the same logic as the reconcile module.  We import it here
@@ -146,9 +142,7 @@ def _build_adopt_entry(
     if module_name == "armada_nitro" and "groupKeyScalar" in result:
         group_key_scalar = result.pop("groupKeyScalar")
         # Remove the 0x prefix for cast's --raw-private-key flag.
-        scalar_hex = group_key_scalar[2:] if group_key_scalar.startswith(
-            "0x"
-        ) else group_key_scalar
+        scalar_hex = group_key_scalar[2:] if group_key_scalar.startswith("0x") else group_key_scalar
         try:
             from reconciler.modules._wallet import public_key_xy
         except ImportError:
@@ -200,10 +194,7 @@ def build_adopt_target(manifest: dict[str, Any]) -> dict[str, Any]:
         target[module_name] = {"adopt": adopt_entry}
 
     if missing:
-        sys.exit(
-            "adopt_target: manifest missing required module(s):\n  "
-            + "\n  ".join(missing)
-        )
+        sys.exit("adopt_target: manifest missing required module(s):\n  " + "\n  ".join(missing))
 
     return target
 
@@ -244,9 +235,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Write the target file atomically (same pattern as _write_manifest).
     tmp_path = out_path.with_name(out_path.name + ".tmp")
-    tmp_path.write_text(
-        json.dumps(target, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    tmp_path.write_text(json.dumps(target, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os_replace(tmp_path, out_path)
 
     # Print success JSON to stdout.
