@@ -234,3 +234,5 @@
 {"type":"close","timestamp":"2026-09-28T23:03:12.475190Z","issue_id":"arn-fb9.1","payload":{}}
 {"type":"status_update","timestamp":"2026-09-28T23:03:16.647213Z","issue_id":"arn-fb9.1","payload":{"status":"open"}}
 {"type":"comment","timestamp":"2026-09-28T23:03:16.648462Z","issue_id":"arn-fb9.1","payload":{"body":"exophiald: terminal CORRECTED by situation_outcome — freshly classified as failed (Outcome.FAILURE), overriding the merged_ff close.\n\nexophial-parked: failed"}}
+{"type":"status_update","timestamp":"2026-09-28T23:03:19.649100Z","issue_id":"arn-fb9.2","payload":{"status":"open"}}
+{"type":"comment","timestamp":"2026-09-28T23:03:19.650314Z","issue_id":"arn-fb9.2","payload":{"body":"exophiald: terminal CORRECTED by situation_outcome — freshly classified as failed (Outcome.FAILURE), overriding the merged_ff close.\n\nexophial-parked: failed"}}
