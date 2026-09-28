@@ -1,23 +1,53 @@
 status: completed
 pebble_id: arn-fb9.1
 summary: >
-  Worker timed out before writing its handoff; its uncommitted work was
-  captured by exophial as 089b1fe. Operator-written handoff so the integrator
-  grades that captured work against the linked spec.
-cost: "unknown (worker timed out at 3600s)"
+  Fixed env/reconciler/tools/adopt_target.py: its per-module field lookup was
+  keyed by the target name while the required-key table was keyed by the manifest
+  name, so weth and armada_nitro produced an empty adopt entry and aave never
+  carried waUSDC. Rebuilt the mapping as explicit (out_field, manifest_key,
+  source_field) triples so every one of the seven modules carries its manifest
+  addresses into its adopt entry; armada_nitro's groupKeyX/Y are derived from the
+  scalar via cast wallet exactly as the module's adopt-verify does, and
+  groupKeyScalar/revocationDelay are optional so a lighter real deploy manifest
+  (the e12 fixturenet, which records only the three custodian addresses) also
+  converts. Regenerated env/targets/fixturenet-adopt.json from the committed
+  sample manifest with the tool (it had been hand-written and did not match the
+  tool's output). Added the four spec-declared check entrypoints under
+  env/reconciler/tests/ (check_address_conservation, check_lido_relaxed_fields,
+  check_golden_regeneration as metamorphic-conservation measurements over the
+  tool's output; check_missing_module_error as a behavior probe of the tool's
+  refusal of a manifest missing lido) plus the sample-manifest-missing-lido
+  fixture. Branch is based on the arn-fb9 epic lane tip (sibling arn-fb9.2 already
+  landed there), so this is the final leaf that carries the wave to main.
+cost: "~1 session, opus"
 commits:
-  - "089b1fe"
+  - "952178d"
 verify_transcript:
   hooks:
-    - name: python3 env/reconciler/tools/adopt_target.py env/reconciler/tests/fixtures/sample-manifest.json <out> (7 modules, stdout JSON)
+    - name: "python3 env/reconciler/tools/adopt_target.py sample-manifest.json out (exit 0, stdout modules.weth.address present, all 7 modules)"
       outcome: passed
-      duration_s: 0.3
-    - name: adopt_target.py with lido removed from the manifest (exit 1, names lido, no output file)
+      duration_s: 0.2
+    - name: "python3 env/reconciler/tools/adopt_target.py <real e12 manifest> out (exit 0, weth.adopt.address present)"
       outcome: passed
-      duration_s: 0.3
+      duration_s: 0.2
+    - name: "python3 env/reconciler/tests/check_address_conservation.py sample-manifest.json (flows sum to 0)"
+      outcome: passed
+      duration_s: 0.1
+    - name: "python3 env/reconciler/tests/check_lido_relaxed_fields.py sample-manifest.json (flows sum to 0)"
+      outcome: passed
+      duration_s: 0.1
+    - name: "python3 env/reconciler/tests/check_golden_regeneration.py sample-manifest.json fixturenet-adopt.json (flows sum to 0, byte-identical)"
+      outcome: passed
+      duration_s: 0.1
+    - name: "python3 env/reconciler/tests/check_missing_module_error.py sample-manifest-missing-lido.json out ({child_exit_code:1, out_file_exists:false, stderr_mentions_lido:true})"
+      outcome: passed
+      duration_s: 0.2
+    - name: "pre-commit run --all-files (ruff, ruff-format, mypy --strict, clippy, fmt, base hooks) -> all passed, exit 0"
+      outcome: passed
+      duration_s: 20.0
 e2e_gate:
   spec: contracts/specs/derived-arn-fb9.1.spec.json
-  command: "python3 env/reconciler/tools/adopt_target.py env/reconciler/tests/fixtures/sample-manifest.json /tmp/adopt-out.json"
+  command: "python3 env/reconciler/tools/adopt_target.py env/reconciler/tests/fixtures/sample-manifest.json /tmp/adopt-out.json && python3 env/reconciler/tests/check_golden_regeneration.py env/reconciler/tests/fixtures/sample-manifest.json env/targets/fixturenet-adopt.json"
   result: passed
-  ran_at_sha: "6965a19"
+  ran_at_sha: "952178d"
   mocks_in_path: false
