@@ -1,0 +1,9 @@
+status: completed
+pebble_id: arn-fb9.1
+summary: >
+  Worker timed out before writing its handoff; its uncommitted work was
+  captured by exophial as 089b1fe. Operator-written handoff so the integrator
+  grades that captured work against the linked spec.
+cost: "unknown (worker timed out at 3600s)"
+commits:
+  - "089b1fe"
