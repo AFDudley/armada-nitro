@@ -7,3 +7,17 @@ summary: >
 cost: "unknown (worker timed out at 3600s)"
 commits:
   - "d1d2d78"
+verify_transcript:
+  hooks:
+    - name: PYTHONPATH=env:. python3 scripts/run_adopt_standin_suite.py (7 modules pass)
+      outcome: passed
+      duration_s: 0.3
+    - name: PYTHONPATH=env:. python3 scripts/run_adopt_standin_mutated.py weth|lido|armada_nitro (each reports test_passed false)
+      outcome: passed
+      duration_s: 0.4
+e2e_gate:
+  spec: contracts/specs/derived-arn-fb9.2.spec.json
+  command: "PYTHONPATH=env:. python3 scripts/run_adopt_standin_suite.py"
+  result: passed
+  ran_at_sha: "3f2fc69"
+  mocks_in_path: false
