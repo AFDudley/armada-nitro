@@ -1,0 +1,5 @@
+# The repo's Rust tools, built and tested as one workspace so `cargo test -p <crate>`
+# and the fmt/clippy hooks work from the repo root.
+[workspace]
+resolver = "2"
+members = ["tools/frost-fixture", "tools/frost-signer"]

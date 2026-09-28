@@ -31,3 +31,6 @@ node_modules/
 !.exophial/config.yaml
 # exophial omp worker settings, written into each worker worktree
 .omp-config.yml
+
+# Rust workspace build output
+/target
