@@ -197,6 +197,6 @@ repos:
     rev: v1.0
     hooks:
       - id: fmt
-        args: [--manifest-path, tools/frost-fixture/Cargo.toml, --]
+        args: [--all, --]
       - id: clippy
-        args: [--manifest-path, tools/frost-fixture/Cargo.toml, --, -D, warnings]
+        args: [--workspace, --, -D, warnings]
