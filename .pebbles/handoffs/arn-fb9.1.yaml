@@ -7,3 +7,17 @@ summary: >
 cost: "unknown (worker timed out at 3600s)"
 commits:
   - "089b1fe"
+verify_transcript:
+  hooks:
+    - name: python3 env/reconciler/tools/adopt_target.py env/reconciler/tests/fixtures/sample-manifest.json <out> (7 modules, stdout JSON)
+      outcome: passed
+      duration_s: 0.3
+    - name: adopt_target.py with lido removed from the manifest (exit 1, names lido, no output file)
+      outcome: passed
+      duration_s: 0.3
+e2e_gate:
+  spec: contracts/specs/derived-arn-fb9.1.spec.json
+  command: "python3 env/reconciler/tools/adopt_target.py env/reconciler/tests/fixtures/sample-manifest.json /tmp/adopt-out.json"
+  result: passed
+  ran_at_sha: "6965a19"
+  mocks_in_path: false
