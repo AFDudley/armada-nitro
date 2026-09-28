@@ -217,3 +217,5 @@
 {"type":"close","timestamp":"2026-09-28T22:12:55.758461Z","issue_id":"arn-fb9","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed — epic wave: epic/arn-fb9 merged onto integrated at c089add097a7"}}
 {"type":"status_update","timestamp":"2026-09-28T22:12:59.253297Z","issue_id":"arn-fb9.2","payload":{"status":"open"}}
 {"type":"comment","timestamp":"2026-09-28T22:12:59.254439Z","issue_id":"arn-fb9.2","payload":{"body":"exophiald: terminal CORRECTED by situation_outcome — freshly classified as failed (Outcome.FAILURE), overriding the merged_ff close.\n\nexophial-parked: failed"}}
+{"type":"status_update","timestamp":"2026-09-28T22:13:02.283906Z","issue_id":"arn-fb9.1","payload":{"status":"open"}}
+{"type":"comment","timestamp":"2026-09-28T22:13:02.285269Z","issue_id":"arn-fb9.1","payload":{"body":"exophiald: terminal CORRECTED by situation_outcome — freshly classified as failed (Outcome.FAILURE), overriding the merged_ff close.\n\nexophial-parked: failed"}}
