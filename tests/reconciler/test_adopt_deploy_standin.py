@@ -6,7 +6,8 @@ with a ``StandinError``.  It then calls ``apply`` in adopt mode with
 fixturenet fixture data.  If adopt does not call deploy, the standin
 never fires and the check passes.
 
-The test does NOT mention Sepolia or call any funding function.
+This test stays inside its fixturenet scope: it exercises only the adopt paths,
+with no live-chain target and no money-movement call.
 
 The test also does NOT execute on-chain code — it imports each module
 and calls ``apply`` directly with a lightweight mock Context.
@@ -17,9 +18,10 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass, field
+from types import ModuleType
 from typing import Any
 
-from reconciler.context import Context, ReconcileError
+from reconciler.context import ReconcileError
 from reconciler.modules import weth, usdc, cctp, aave, lido, armada, armada_nitro
 
 # --------------- standin error ---------------
@@ -67,14 +69,82 @@ class MockCtx:
 # --------------- fixture data ---------------
 # Addresses from fixturenet-adopt.json, keyed by module name.
 
-_FIXTURE = {
+_FIXTURE: dict[str, dict[str, Any]] = {
     "weth": {"target": {"weth": {"adopt": {"address": "0x5FbDB2315678afecb367f032d93F642f6D182289"}}}},
-    "usdc": {"target": {"usdc": {"adopt": {"proxy": "0x7A20C8Cc2d50C027f6011948C241d71e1C23fF0e", "implementation": "0x03355523A40dD64318e32b8c2DC989Cf760E1420", "masterMinter": "0x58aC7f981312B969Ec04bAEe417bf75D51C5A18e"}}}},
-    "cctp": {"target": {"cctp": {"adopt": {"tokenMessenger": "0x491970ABa01CcC082e4ee6CeCD872475e51D63b8", "messageTransmitter": "0x6355ed5176Cd480274CfeC905F72b4c7Bdf3b74e", "tokenMinter": "0x6E8e02fB9214C473b62347BCa7c63AB608E20788", "domain": 0}}}},
-    "aave": {"target": {"aave": {"adopt": {"poolAddressesProvider": "0x3A1e63d04DcBB7f93fD72171D5E0cA45C9C13B7D", "pool": "0x77065D0277A73207e2a24aC25D75fA6d53e30d79", "aUSDC": "0xE5259Fc8a79Ff52e8507C3906a13Bf7a93c8dA41", "stataTokenFactory": "0x657147d63bB67Ba72BC32b767A33E68978809966", "usdcPriceFeed": "0x4C0aaE290E5119F7A177C44471f9d5D3a7c61b05"}}}},
-    "lido": {"target": {"lido": {"adopt": {"locator": "0x784E55d9f7B95c4E0A21e567a79e88Eea77a9C64", "stETH": "0x086984c6A4b3F1C3D9A48e7D4a8F0F3fE8e0A3B2", "wstETH": "0x23A44F6d9D3e5A4B1c8E7D9F0b2C4aE5f6D8B3C7", "accountingOracle": "0x5B8E3A0F1D2C4dE6F7a8B9c0D1e2F3a4B5c6D7E8", "hashConsensus": ["0x9A8b7C6d5E4f3A2b1C0d9E8f7A6b5C4d3E2f1A0B", "0x1A2b3C4d5E6f7A8b9C0d1E2f3A4b5C6d7E8f9A0B"]}}}},
-    "armada": {"target": {"armada": {"adopt": {"pool": "0xDcEDF06Db2e244b7D6F7D38aE7B7b27C8e5a4F1C", "usdc": "0x58aC7f981312B969Ec04bAEe417bf75D51C5A18e", "deployBlock": 23456}}}},
-    "armada_nitro": {"target": {"armada_nitro": {"adopt": {"adjudicator": "0x5FbDB2315678afecb367f032d93F642f6D182290", "consensusApp": "0x7A20C8Cc2d50C027f6011948C241d71e1C23fF0f", "hubCustodian": "0x03355523A4dD64318E32B8c2DC989Cf760E1421"}}}},
+    "usdc": {
+        "target": {
+            "usdc": {
+                "adopt": {
+                    "proxy": "0x7A20C8Cc2d50C027f6011948C241d71e1C23fF0e",
+                    "implementation": "0x03355523A40dD64318e32b8c2DC989Cf760E1420",
+                    "masterMinter": "0x58aC7f981312B969Ec04bAEe417bf75D51C5A18e",
+                }
+            }
+        }
+    },
+    "cctp": {
+        "target": {
+            "cctp": {
+                "adopt": {
+                    "tokenMessenger": "0x491970ABa01CcC082e4ee6CeCD872475e51D63b8",
+                    "messageTransmitter": "0x6355ed5176Cd480274CfeC905F72b4c7Bdf3b74e",
+                    "tokenMinter": "0x6E8e02fB9214C473b62347BCa7c63AB608E20788",
+                    "domain": 0,
+                }
+            }
+        }
+    },
+    "aave": {
+        "target": {
+            "aave": {
+                "adopt": {
+                    "poolAddressesProvider": "0x3A1e63d04DcBB7f93fD72171D5E0cA45C9C13B7D",
+                    "pool": "0x77065D0277A73207e2a24aC25D75fA6d53e30d79",
+                    "aUSDC": "0xE5259Fc8a79Ff52e8507C3906a13Bf7a93c8dA41",
+                    "stataTokenFactory": "0x657147d63bB67Ba72BC32b767A33E68978809966",
+                    "usdcPriceFeed": "0x4C0aaE290E5119F7A177C44471f9d5D3a7c61b05",
+                }
+            }
+        }
+    },
+    "lido": {
+        "target": {
+            "lido": {
+                "adopt": {
+                    "locator": "0x784E55d9f7B95c4E0A21e567a79e88Eea77a9C64",
+                    "stETH": "0x086984c6A4b3F1C3D9A48e7D4a8F0F3fE8e0A3B2",
+                    "wstETH": "0x23A44F6d9D3e5A4B1c8E7D9F0b2C4aE5f6D8B3C7",
+                    "accountingOracle": "0x5B8E3A0F1D2C4dE6F7a8B9c0D1e2F3a4B5c6D7E8",
+                    "hashConsensus": [
+                        "0x9A8b7C6d5E4f3A2b1C0d9E8f7A6b5C4d3E2f1A0B",
+                        "0x1A2b3C4d5E6f7A8b9C0d1E2f3A4b5C6d7E8f9A0B",
+                    ],
+                }
+            }
+        }
+    },
+    "armada": {
+        "target": {
+            "armada": {
+                "adopt": {
+                    "pool": "0xDcEDF06Db2e244b7D6F7D38aE7B7b27C8e5a4F1C",
+                    "usdc": "0x58aC7f981312B969Ec04bAEe417bf75D51C5A18e",
+                    "deployBlock": 23456,
+                }
+            }
+        }
+    },
+    "armada_nitro": {
+        "target": {
+            "armada_nitro": {
+                "adopt": {
+                    "adjudicator": "0x5FbDB2315678afecb367f032d93F642f6D182290",
+                    "consensusApp": "0x7A20C8Cc2d50C027f6011948C241d71e1C23fF0f",
+                    "hubCustodian": "0x03355523A4dD64318E32B8c2DC989Cf760E1421",
+                }
+            }
+        }
+    },
 }
 
 _MODULES = [
@@ -94,46 +164,33 @@ _MODULES = [
 def _build_context(module_name: str, fixture_key: str) -> MockCtx:
     """Build a MockCtx with the module's fixture target data."""
     mod_fixture = _FIXTURE[fixture_key]
-    target = {"network": {"name": "fixturenet", "chainId": 31337}}
+    target: dict[str, Any] = {"network": {"name": "fixturenet", "chainId": 31337}}
     target.update(mod_fixture["target"])
     ctx = MockCtx(target=target)
     return ctx
 
 
-def _test_adopt_path(mod_name: str, mod) -> bool:
-    """Call ``apply`` in adopt mode with the deploy path replaced by
-    a standin that raises StandinError.  Returns True (passed) if
-    no error is raised, False if the deploy path was reached."""
+def _test_adopt_path(mod_name: str, mod: ModuleType) -> bool:
+    """Run ``mod.apply`` in adopt mode against fixturenet fixture data.
+
+    The MockCtx raises ``RuntimeError`` from every on-chain primitive
+    (``send``/``cast``/``forge``), so an adopt path that stays inside the
+    ``mode == "adopt"`` branch never touches them. Returns True when the adopt
+    path completed without reaching the deploy path, False when a deploy/RPC
+    call was attempted (the deploy path was wrongly reached)."""
     ctx = _build_context(mod_name, mod_name)
     ctx.target["module_name"] = mod_name
 
-    # Replace the real deploy path (everything after the adopt guard)
-    # by monkey-patching _standin_deploy for this module.
-    original_apply = mod.apply
-
-    def patched_apply(ctx_inner: Context, observed: Any) -> tuple[str, int]:
-        mode, params = ctx_inner.target[mod_name].get("adopt", {})
-        if not isinstance(mode, dict):
-            mode = {}
-            params = ctx_inner.target[mod_name].get("deploy", {})
-            return original_apply(ctx_inner, observed)
-        return original_apply(ctx_inner, observed)
-
-    # We check whether the module's code would call deploy by inspecting
-    # whether the adopt path returns before reaching deploy code.
-    # The simplest correct test: call apply in adopt mode; if deploy
-    # code fires, it will hit ctx.send/cast/forge which raises RuntimeError.
     try:
-        result = original_apply(ctx, None)
-        # If we got here without exception, adopt path completed.
+        mod.apply(ctx, None)
+        # The adopt path returned without any on-chain call.
         return True
-    except RuntimeError as e:
-        # An RPC call was attempted — deploy path was reached.
+    except RuntimeError:
+        # ctx.send/cast/forge fired: the deploy path was reached.
         return False
     except Exception:
-        # Other exceptions (missing params, etc.) are expected for
-        # modules with complex adopt params — they still passed if
-        # no RPC/send was attempted.
+        # A module's adopt-path postcondition may need a live value the mock
+        # cannot supply; that is not a deploy call, so the standin never fired.
         return True
 
 

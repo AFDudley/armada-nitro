@@ -15,8 +15,17 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-from tests.reconciler.test_adopt_deploy_standin import _run_all_tests
+# Locate the repo so `tests.reconciler...` (repo root) and `reconciler...` (env/)
+# both import when run as `python3 scripts/run_adopt_standin_suite.py` from the
+# repo root with no PYTHONPATH set.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "env")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from tests.reconciler.test_adopt_deploy_standin import _run_all_tests  # noqa: E402
 
 
 def main() -> int:
