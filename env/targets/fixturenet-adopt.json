@@ -1,63 +1,67 @@
 {
-  "network": {
-    "name": "fixturenet",
-    "chainId": 31337,
-    "rpcUrl": "http://armada-fixturenet-geth:8545",
-    "hostRpcUrl": "http://127.0.0.1:8545"
-  },
-  "weth": {
-    "adopt": {
-      "address": "0x5FbDB2315678afecb367f032d93F642f6D182289"
-    }
-  },
-  "usdc": {
-    "adopt": {
-      "proxy": "0x7A20C8Cc2d50C027f6011948C241d71e1C23fF0e",
-      "implementation": "0x03355523A40dD64318e32b8c2DC989Cf760E1420",
-      "masterMinter": "0x58aC7f981312B969Ec04bAEe417bf75D51C5A18e"
-    }
-  },
-  "cctp": {
-    "adopt": {
-      "tokenMessenger": "0x491970ABa01CcC082e4ee6CeCD872475e51D63b8",
-      "messageTransmitter": "0x6355ed5176Cd480274CfeC905F72b4c7Bdf3b74e",
-      "tokenMinter": "0x6E8e02fB9214C473b62347BCa7c63AB608E20788",
-      "domain": 0
-    }
-  },
   "aave": {
     "adopt": {
-      "poolAddressesProvider": "0x3A1e63d04DcBB7f93fD72171D5E0cA45C9C13B7D",
-      "pool": "0x77065D0277A73207e2a24aC25D75fA6d53e30d79",
-      "aUSDC": "0xE5259Fc8a79Ff52e8507C3906a13Bf7a93c8dA41",
-      "stataTokenFactory": "0x657147d63bB67Ba72BC32b767A33E68978809966",
-      "usdcPriceFeed": "0x4C0aaE290E5119F7A177C44471f9d5D3a7c61b05"
-    }
-  },
-  "lido": {
-    "adopt": {
-      "locator": "0x784E55d9f7B95c4E0A21e567a79e88Eea77a9C64",
-      "stETH": "0x086984c6A4b3F1C3D9A48e7D4a8F0F3fE8e0A3B2",
-      "wstETH": "0x23A44F6d9D3e5A4B1c8E7D9F0b2C4aE5f6D8B3C7",
-      "accountingOracle": "0x5B8E3A0F1D2C4dE6F7a8B9c0D1e2F3a4B5c6D7E8",
-      "hashConsensus": [
-        "0x9A8b7C6d5E4f3A2b1C0d9E8f7A6b5C4d3E2f1A0B",
-        "0x1A2b3C4d5E6f7A8b9C0d1E2f3A4b5C6d7E8f9A0B"
-      ]
+      "aUSDC": "0x9eF52J0gD3H8I5J71e407MiJ3hF6G7f8B9c0D1e",
+      "pool": "0x8dE41I9fC2G7H4I60d396LhI2gE5F6e7A8b9C0d",
+      "poolAddressesProvider": "0x7cD30H8eB1F6G3H59c285KgH1fD4E5d6F7a8B9c",
+      "stataTokenFactory": "0x0fA63K1hE4I9J6K82f518NjK4iG7H8g9C0d1E2f",
+      "usdcPriceFeed": "0x1aB74L2iF5J0K7L93g629OkL5jH8I9h0D1e2F3a",
+      "waUSDC": "0x1aB4DcA4e0c2b2D9C5eF3b7a8C6D0E1f2A3b4C5d"
     }
   },
   "armada": {
     "adopt": {
-      "pool": "0xDcEDF06Db2e244b7D6F7D38aE7B7b27C8e5a4F1C",
-      "usdc": "0x58aC7f981312B969Ec04bAEe417bf75D51C5A18e",
-      "deployBlock": 23456
+      "deployBlock": 11588108,
+      "pool": "0x5f3324b47b3CFf937BB67c30B362898E193e5216",
+      "usdc": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
     }
   },
   "armada_nitro": {
     "adopt": {
-      "adjudicator": "0x5FbDB2315678afecb367f032d93F642f6D182290",
-      "consensusApp": "0x7A20C8Cc2d50C027f6011948C241d71e1C23fF0f",
-      "hubCustodian": "0x03355523A4dD64318E32B8c2DC989Cf760E1421"
+      "adjudicator": "0x7gB30R8oL1P6Q3R59m285UqR1pN4O5n6J7k8L9g",
+      "consensusApp": "0x8hC41S9pM2Q7R4S60n396VrS2qO5P6o7K8l9M0h",
+      "groupKeyX": "0x4f6340cfdd930a6f54e730188e3071d150877fa664945fb6f120c18b56ce1c09",
+      "groupKeyY": "0x802a5e67c00a70d85b9a088eac7cf5b9fb46ac5c0b2bd7d1e189fac210f6b7ef",
+      "hubCustodian": "0x9iD52T0qN3R8S5T71o407WsT3rP6Q7p8L9m0N1i",
+      "revocationDelay": 60
+    }
+  },
+  "cctp": {
+    "adopt": {
+      "domain": 0,
+      "messageTransmitter": "0x5aB18F6c9Gd4E1F37a063IeF9dB2C3b4D5e6F7a",
+      "tokenMessenger": "0x4fA07E5b8Fc3D0E26f952HdE8cA0B1F2a3C4d5E6",
+      "tokenMinter": "0x6bC29G7dA0E5F2G48b174JfG0eC3D4c5E6f7A8b"
+    }
+  },
+  "lido": {
+    "adopt": {
+      "accountingOracle": "0x4dE07O5lI8M3N0O26j952RnO8mK1L2k3G4h5I6d",
+      "hashConsensus": [
+        "0x5eF18P6mJ9N4O1P37k063SoP9nL2M3l4H5i6J7e",
+        "0x6fA29Q7nK0O5P2Q48l174TpQ0oM3N4m5I6j7K8f"
+      ],
+      "locator": "0x2bC85M3jG6K1L8M04h730PlM6kI9J0i1E2f3G4b",
+      "stETH": "0x3cD96N4kH7L2M9N15i841QmN7lJ0K1j2F3g4H5c",
+      "wstETH": "0xB82381A3fBD3FaFA77B3a7bE693342618240067b"
+    }
+  },
+  "network": {
+    "chainId": 31337,
+    "hostRpcUrl": "http://127.0.0.1:8545",
+    "name": "fixturenet",
+    "rpcUrl": "http://armada-fixturenet-geth:8545"
+  },
+  "usdc": {
+    "adopt": {
+      "implementation": "0x2d8E5C396Fa1D8B04e730FbC6a8D9E0f1A2b3C4e",
+      "masterMinter": "0x3e9F6D4a7Eb2C9D15f841GcD7b9E0F1a2B3c4D5f",
+      "proxy": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+    }
+  },
+  "weth": {
+    "adopt": {
+      "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
     }
   }
 }
