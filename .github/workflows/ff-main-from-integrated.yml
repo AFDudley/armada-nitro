@@ -1,0 +1,46 @@
+name: Integrate
+
+# exophial's reducer lands finished work on `integrated`; this fast-forwards `main`
+# onto it. Same job as exophial's own ff-main-from-integrated.yml, without the
+# release step. Direct commits to `main` reach `integrated` through the reducer's
+# mirror-down merge; if `main` is ever not an ancestor of `integrated`, this refuses
+# rather than merging or forcing.
+
+on:
+  push:
+    branches:
+      - integrated
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fast-forward:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ff-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward main onto integrated
+        run: |
+          set -euo pipefail
+          git fetch origin main integrated
+          INTEGRATED=$(git rev-parse origin/integrated)
+          MAIN=$(git rev-parse origin/main)
+          echo "integrated = ${INTEGRATED}"
+          echo "main       = ${MAIN}"
+          if [ "${INTEGRATED}" = "${MAIN}" ]; then
+            echo "Already equal; nothing to fast-forward."
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor "${MAIN}" "${INTEGRATED}"; then
+            echo "::error::main (${MAIN}) is NOT an ancestor of integrated (${INTEGRATED}). Refusing to merge or force."
+            exit 1
+          fi
+          git push origin "${INTEGRATED}:refs/heads/main"
+          echo "main fast-forwarded to ${INTEGRATED}"
