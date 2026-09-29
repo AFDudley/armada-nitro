@@ -1,0 +1,171 @@
+{
+  "id": "derived-arn-f67",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? Running the reconciler with the generated all-adopt target against a fresh, empty state directory on a reconciled fixturenet adopts every module without sending a transaction.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. On a fixturenet restored from the base snapshot and fully reconciled, the reconciler run with env/targets/fixturenet-adopt.json and `--state` pointing at an empty directory reports every module `adopted`, the deployer nonce is unchanged, the new manifest's address fields equal the source manifest's, and verify passes for every module.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. The run's output, the deployer nonce before and after (equal), and an empty diff of the two manifests' address fields, all from one run on the fixturenet. Spec: docs/tasks/E13-adopt-mode.md (Acceptance).\nWhat are the non-goals / constraints? What must this NOT do? Negative cases (E13c); Sepolia.\nAny examples or references? (links, prior art, a similar thing you like) Fixturenet creation: stack/scripts/fixturenet-new (stack/README.md). Reconcile job: stack/compose-jobs/docker-compose-armada-env-reconcile.yml (RECONCILER_TARGET, --state).\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "armada-nitro developers verifying reconciler and custody/channel behavior on the fixturenet before Sepolia (E8) need proof that the reconciler's adopt mode works end to end. On a fixturenet that was restored from the base snapshot and fully reconciled with the normal target, running the reconciler a second time with the generated all-adopt target file (env/targets/fixturenet-adopt.json, produced by env/reconciler/tools/adopt_target.py from the first run's manifest) and a fresh, empty --state directory must adopt every module rather than deploying it. Adopting must not send any blockchain transaction: the deployer's nonce must read the same before and after the run. The manifest the adopt run writes must carry the same address fields as the manifest from the first, full reconcile; comparing the two manifests' address fields must show an empty diff. The reconciler's own verify step must pass for every module in the adopt run. Together, the run's printed output, the two nonce readings, the manifest-address diff, and the verify results, all captured from one run on the fixturenet, are what 'done' means, per docs/tasks/E13-adopt-mode.md (Acceptance). This request excludes the negative-case scenarios (E13c: adopting at a wrong address, a wrong group key, a mismatched Lido pointer, and similar) and excludes running against Sepolia; those are separate and out of scope here.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "On a fresh, empty state directory on a reconciled fixturenet, running the reconciler with env/targets/fixturenet-adopt.json reports every module 'adopted'."
+    },
+    {
+      "id": "c2",
+      "text": "The deployer nonce is unchanged: the nonce before the run equals the nonce after the run."
+    },
+    {
+      "id": "c3",
+      "text": "The new manifest's address fields equal the source manifest's address fields (an empty diff)."
+    },
+    {
+      "id": "c4",
+      "text": "Verify passes for every module."
+    }
+  ],
+  "goal": "Running the reconciler with the generated all-adopt target against a fresh, empty state directory on a fully reconciled fixturenet adopts every module without sending any transaction.",
+  "acceptance_criteria": [
+    "On a fixturenet that has already been fully reconciled from the base snapshot, running the reconciler with the generated all-adopt target file and a brand-new empty state folder prints a status line for every module that says 'adopted', with no module printing any other status.",
+    "The deployer account's transaction count, read right before the adopt run and right after it finishes, is the same number both times, showing the run sent no transaction.",
+    "Comparing the address fields of the manifest written by the adopt run to the address fields of the manifest from the earlier full reconcile shows no differences at all.",
+    "After the adopt run finishes, the reconciler's own verify step reports success for every module named in the target, with no module reported as failed."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "On a fixturenet that has already been fully reconciled from the base snapshot, running the reconciler with the generated all-adopt target file and a brand-new empty state folder prints a status line for every module that says 'adopted', with no module printing any other status."
+    },
+    {
+      "id": "c2",
+      "text": "The deployer account's transaction count, read right before the adopt run and right after it finishes, is the same number both times, showing the run sent no transaction."
+    },
+    {
+      "id": "c3",
+      "text": "Comparing the address fields of the manifest written by the adopt run to the address fields of the manifest from the earlier full reconcile shows no differences at all."
+    },
+    {
+      "id": "c4",
+      "text": "After the adopt run finishes, the reconciler's own verify step reports success for every module named in the target, with no module reported as failed."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "On a fixturenet that has already been fully reconciled from the base snapshot, running the reconciler with the generated all-adopt target file and a brand-new empty state folder prints a status line for every module that says 'adopted', with no module printing any other status.",
+      "proves": "Proves the request's core outcome, that an adopt-mode run against an empty state directory adopts every module, per docs/tasks/E13-adopt-mode.md (Acceptance).",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/verify_adopt_run.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "all_modules_adopted",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 2,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "description": "The deployer account's transaction count, read right before the adopt run and right after it finishes, is the same number both times, showing the run sent no transaction.",
+      "proves": "Proves the run adopts modules without sending any transaction, matching the request and the E13 acceptance criteria.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/verify_adopt_run.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "nonce_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 2,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "description": "Comparing the address fields of the manifest written by the adopt run to the address fields of the manifest from the earlier full reconcile shows no differences at all.",
+      "proves": "Proves the adopt run's manifest points at the same addresses as the source manifest, matching the request's 'address fields equal the source manifest's' criterion.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/verify_adopt_run.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "manifest_diff_empty",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 2,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "description": "After the adopt run finishes, the reconciler's own verify step reports success for every module named in the target, with no module reported as failed.",
+      "proves": "Proves verify passes for every module, as the request and the E13 acceptance criteria both require.",
+      "restatement_clause_id": "c4",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/verify_adopt_run.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "verify_all_pass",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 2,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "env/reconciler/tools/verify_adopt_run.py"
+  ]
+}
