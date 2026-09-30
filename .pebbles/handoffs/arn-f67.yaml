@@ -1,0 +1,31 @@
+status: completed
+pebble_id: arn-f67
+summary: >
+  E13b: adopt every module on the fixturenet into an empty state dir. The
+  captured work (env/reconciler/tools/verify_adopt_run.py +
+  env/reconciler/modules/armada_nitro.py) was committed as 6c40e32; this
+  branch adds the c2 fix (7f57347): each module's verify-step live proofs
+  (weth, usdc, aave, lido) now gate on the target's mode, so the adopt run
+  sends no transactions (deployer nonce unchanged). Verified end-to-end with
+  python3 env/reconciler/tools/verify_adopt_run.py: exit 0, all modules
+  "adopted" (c1), nonce_before == nonce_after (c2, 683 == 683), manifest
+  address fields empty diff (c3), verify passes for every module (c4). The
+  linked spec (contracts/specs/derived-arn-f67.spec.json) runs this same
+  script as its four acceptance tests and checks the four JSON verdict fields
+  (all_modules_adopted / nonce_unchanged / manifest_diff_empty /
+  verify_all_pass), all true.
+cost: "~2 sessions, pool/5090"
+commits:
+  - "6c40e32"
+  - "7f57347"
+verify_transcript:
+  hooks:
+    - name: "python3 env/reconciler/tools/verify_adopt_run.py -> {all_modules_adopted:true, nonce_unchanged:true, manifest_diff_empty:true, verify_all_pass:true} exit 0"
+      outcome: passed
+      duration_s: 28
+e2e_gate:
+  spec: contracts/specs/derived-arn-f67.spec.json
+  command: "python3 env/reconciler/tools/verify_adopt_run.py"
+  result: passed
+  ran_at_sha: "7f57347"
+  mocks_in_path: false
