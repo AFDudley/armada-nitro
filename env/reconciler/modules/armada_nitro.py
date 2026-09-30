@@ -110,17 +110,29 @@ def verify(ctx: Context, action: str) -> None:
     mode, params = resolve_target_mode(ctx.target["armada_nitro"])
     if mode == "deploy":
         expected_x, expected_y = _wallet.public_key_xy(params["groupKeyScalar"])
+        group_key_x = _uint(ctx.cast("call", custodian, "groupKeyX()(uint256)"))
+        group_key_y = _uint(ctx.cast("call", custodian, "groupKeyY()(uint256)"))
+        if group_key_x != int(expected_x, 16):
+            raise ctx.fail(f"custodian.groupKeyX() = {group_key_x}, expected {int(expected_x, 16)}")
+        if group_key_y != int(expected_y, 16):
+            raise ctx.fail(f"custodian.groupKeyY() = {group_key_y}, expected {int(expected_y, 16)}")
+        if "revocationDelay" in params:
+            revocation_delay = _uint(ctx.cast("call", custodian, "revocationDelay()(uint256)"))
+            if revocation_delay != int(params["revocationDelay"]):
+                raise ctx.fail(f"custodian.revocationDelay() = {revocation_delay}, expected {params['revocationDelay']}")
     else:
-        expected_x, expected_y = params["groupKeyX"], params["groupKeyY"]
-    expected_delay = params["revocationDelay"]
-
-    group_key_x = _uint(ctx.cast("call", custodian, "groupKeyX()(uint256)"))
-    group_key_y = _uint(ctx.cast("call", custodian, "groupKeyY()(uint256)"))
-    if group_key_x != int(expected_x, 16):
-        raise ctx.fail(f"custodian.groupKeyX() = {group_key_x}, expected {int(expected_x, 16)}")
-    if group_key_y != int(expected_y, 16):
-        raise ctx.fail(f"custodian.groupKeyY() = {group_key_y}, expected {int(expected_y, 16)}")
-
-    revocation_delay = _uint(ctx.cast("call", custodian, "revocationDelay()(uint256)"))
-    if revocation_delay != int(expected_delay):
-        raise ctx.fail(f"custodian.revocationDelay() = {revocation_delay}, expected {expected_delay}")
+        # Adopt: group-key coordinates and revocation delay are optional fields,
+        # carried through by tools/adopt_target.py only when the manifest records
+        # them. A manifest that recorded just the three custodian addresses is still
+        # valid input.
+        if "groupKeyX" in params and "groupKeyY" in params:
+            group_key_x = _uint(ctx.cast("call", custodian, "groupKeyX()(uint256)"))
+            group_key_y = _uint(ctx.cast("call", custodian, "groupKeyY()(uint256)"))
+            if group_key_x != int(params["groupKeyX"], 16):
+                raise ctx.fail(f"custodian.groupKeyX() = {group_key_x}, expected {int(params['groupKeyX'], 16)}")
+            if group_key_y != int(params["groupKeyY"], 16):
+                raise ctx.fail(f"custodian.groupKeyY() = {group_key_y}, expected {int(params['groupKeyY'], 16)}")
+        if "revocationDelay" in params:
+            revocation_delay = _uint(ctx.cast("call", custodian, "revocationDelay()(uint256)"))
+            if revocation_delay != int(params["revocationDelay"]):
+                raise ctx.fail(f"custodian.revocationDelay() = {revocation_delay}, expected {params['revocationDelay']}")
