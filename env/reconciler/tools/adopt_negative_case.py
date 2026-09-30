@@ -12,15 +12,22 @@ Cases (each mutates exactly one field of the all-adopt target):
     armada-at-no-code-address     armada.pool   = an address with no code on the fixturenet
     armada-nitro-wrong-group-key  armada_nitro's groupKeyX/Y swapped (wrong coordinates)
     lido-wsteth-points-at-steth   lido.wstETH   = lido.stETH (points at stETH, not the real wstETH)
+    unmutated-target              no field changed -- the CORRECT, fully-reconciled target
+                                   (E13c refusal-arm evidence, arn-0a8: a negative-case
+                                   instrument only proves something if it can also say NO
+                                   to itself -- certifying a rejection that did not happen.
+                                   The reconciler is expected to SUCCEED on this case, so
+                                   this tool's own exit code is non-zero -- it REFUSES to
+                                   certify a negative case, because none occurred.)
 
 The tool:
   1. Ensures /src/stablecoin-evm exists (same run setup as E13b).
   2. Generates the all-adopt target from the fixturenet's full-reconcile manifest
      via adopt_target.py (the E13a target, never hand-edited).
-  3. Mutates the single field named by <case>.
+  3. Mutates the single field named by <case> (a no-op for unmutated-target).
   4. Reads the deployer's transaction count (nonce) before the run.
   5. Runs `python3 -m reconciler` (the reconcile-job invocation) against a fresh,
-     empty state dir with the mutated target on the fixturenet.
+     empty state dir with the (possibly mutated) target on the fixturenet.
   6. Reads the deployer's nonce after the run and checks it is unchanged.
 
 Prints a single-line JSON verdict to stdout:
@@ -28,7 +35,10 @@ Prints a single-line JSON verdict to stdout:
      "stderr_names_postcondition": bool, "stderr_names_armada": bool,
      "stderr_names_armada_nitro": bool, "stderr_names_group_key": bool,
      "stderr_names_lido": bool, "nonce_unchanged": bool}
-Exits 0 on success (the run behaved as a negative case), non-zero otherwise.
+Exits 0 when the reconciler genuinely rejected the target (exit_code != 0) with an
+unchanged nonce -- a certified negative case. Exits non-zero otherwise, INCLUDING
+the unmutated-target case where the reconciler succeeds: this tool refuses to
+certify a rejection that did not occur.
 """
 
 from __future__ import annotations
@@ -74,7 +84,10 @@ def _mutate_target(case: str, target: dict[str, Any]) -> None:
 
     Each case changes a single adopt field away from its correct value so the
     reconciler's adopt-mode verify fails (E13c negative cases,
-    docs/tasks/E13-adopt-mode.md)."""
+    docs/tasks/E13-adopt-mode.md). ``unmutated-target`` is the deliberate
+    exception (E13c refusal-arm evidence, arn-0a8): it changes nothing, so the
+    reconciler is expected to SUCCEED and ``main`` below is expected to REFUSE
+    to certify a negative case that did not occur."""
     if case == "usdc-at-weth-address":
         target["usdc"]["adopt"]["proxy"] = target["weth"]["adopt"]["address"]
     elif case == "armada-at-no-code-address":
@@ -89,11 +102,14 @@ def _mutate_target(case: str, target: dict[str, Any]) -> None:
         target["armada_nitro"]["adopt"]["groupKeyY"] = _GROUP_KEY_X_CORRECT
     elif case == "lido-wsteth-points-at-steth":
         target["lido"]["adopt"]["wstETH"] = target["lido"]["adopt"]["stETH"]
+    elif case == "unmutated-target":
+        pass
     else:
         raise SystemExit(
             f"unknown case {case!r}; expected one of "
             "usdc-at-weth-address, armada-at-no-code-address, "
-            "armada-nitro-wrong-group-key, lido-wsteth-points-at-steth"
+            "armada-nitro-wrong-group-key, lido-wsteth-points-at-steth, "
+            "unmutated-target"
         )
 
 
@@ -175,7 +191,10 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(verdict))
 
     # Negative case passes when the reconciler exits non-zero AND the nonce is
-    # unchanged (no transactions sent).
+    # unchanged (no transactions sent). For `unmutated-target` the reconciler is
+    # expected to exit ZERO (nothing was wrong to reject), so this correctly
+    # returns 1: the instrument REFUSES to certify a rejection that never
+    # happened, rather than rubber-stamping success (E13c refusal-arm evidence).
     return 0 if (exit_code != 0 and nonce_before == nonce_after) else 1
 
 
