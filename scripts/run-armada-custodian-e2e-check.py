@@ -18,12 +18,16 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 
 # The deployment the job runs against (operator-managed fixturenet deployed per E14b).
 DEP_DIR = os.path.expanduser("~/deployments/armada-fixturenet-e12")
-LA_CONIC_SO = os.path.expanduser("~/bin/laconic-so")
+# Resolved via PATH (not a hardcoded ~/bin path): exophial's oracle re-run sandboxes $HOME
+# and exposes the toolchain binaries it names (EXOPHIAL_ORACLE_TOOLCHAIN_BINARIES includes
+# laconic-so) on PATH there, not necessarily at ~/bin.
+LA_CONIC_SO = shutil.which("laconic-so") or os.path.expanduser("~/bin/laconic-so")
 PYTHON_312 = "/usr/bin/python3.12"
 
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))  # <repo>/scripts
