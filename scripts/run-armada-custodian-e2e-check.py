@@ -18,16 +18,20 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 
 # The deployment the job runs against (operator-managed fixturenet deployed per E14b).
 DEP_DIR = os.path.expanduser("~/deployments/armada-fixturenet-e12")
-# Resolved via PATH (not a hardcoded ~/bin path): exophial's oracle re-run sandboxes $HOME
-# and exposes the toolchain binaries it names (EXOPHIAL_ORACLE_TOOLCHAIN_BINARIES includes
-# laconic-so) on PATH there, not necessarily at ~/bin.
-LA_CONIC_SO = shutil.which("laconic-so") or os.path.expanduser("~/bin/laconic-so")
+# /home/rix/bin/laconic-so is the self-contained shiv (a bundled zipapp needing only a bare
+# python3.12, no installed packages) -- a literal absolute path, not `~`-expanded, because
+# exophial's oracle re-run sandboxes $HOME for the re-run subprocess, which would otherwise
+# resolve `~` to a scratch directory with no laconic-so at all. PATH (shutil.which) is not a
+# safe fallback: on this host it resolves first to ~/.local/bin/laconic-so, a thin pipx
+# console-script wrapper that imports `stack_orchestrator` from its own dedicated venv --
+# forcing it through a bare python3.12 (below) raises ModuleNotFoundError.
+_LITERAL_SHIV = "/home/rix/bin/laconic-so"
+LA_CONIC_SO = _LITERAL_SHIV if os.path.isfile(_LITERAL_SHIV) else os.path.expanduser("~/bin/laconic-so")
 PYTHON_312 = "/usr/bin/python3.12"
 
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))  # <repo>/scripts
