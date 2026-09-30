@@ -450,6 +450,13 @@ def verify(ctx: Context, action: str) -> None:
 
     if action not in _FRESHLY_RECOGNIZED:
         return  # stETH()/stEthPerToken()/zero-members (just checked) already prove correctness
+    # c2: the adopt run must send no transactions. In adopt mode, skip the
+    # live submit(1 ETH) proof (1 tx to stETH) -- it spends gas. The read-only
+    # checks above (stETH()/stEthPerToken()/zero-members) already proved
+    # correctness without sending any tx.
+    mode, _ = resolve_target_mode(ctx.target["lido"])
+    if mode == "adopt":
+        return
 
     # One-time live proof: submit 1 ETH, expect it to mint stETH 1:1 (stEthPerToken() == 1e18,
     # just checked, and no oracle report has ever run).

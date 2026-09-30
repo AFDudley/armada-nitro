@@ -90,6 +90,12 @@ def verify(ctx: Context, action: str) -> None:
 
     if action not in _FRESHLY_RECOGNIZED:
         return  # bytecode identity (just checked) already proves behavior; don't re-spend gas proving it again
+    # c2: the adopt run must send no transactions. In adopt mode, skip the
+    # live deposit/withdraw round-trip (it spends gas). The bytecode check
+    # above already proved weth's runtime matches mainnet's.
+    mode, _ = resolve_target_mode(ctx.target["weth"])
+    if mode == "adopt":
+        return
 
     one_eth_wei = "1000000000000000000"
     balance_before = to_int(ctx.cast("balance", ctx.deployer_address))

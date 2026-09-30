@@ -243,6 +243,13 @@ def verify(ctx: Context, action: str) -> None:
 
     if action not in _FRESHLY_RECOGNIZED:
         return  # bytecode identity + read-only checks (just run) already proved correctness
+    # c2: the adopt run must send no transactions. In adopt mode, skip the
+    # live mint/transfer round-trip (4 txs) -- it spends gas. The read-only
+    # checks above (name/symbol/decimals/masterMinter/version/bytecode)
+    # already proved correctness without sending any tx.
+    mode, _ = resolve_target_mode(ctx.target["usdc"])
+    if mode == "adopt":
+        return
 
     # One-time live proof: masterMinter can configure a minter, and that
     # minter can mint; transfer works. Uses the deployer both as the

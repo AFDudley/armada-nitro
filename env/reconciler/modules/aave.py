@@ -242,6 +242,13 @@ def verify(ctx: Context, action: str) -> None:
 
     if action not in _FRESHLY_RECOGNIZED:
         return  # config equality + asset() (just checked) already prove correctness
+    # c2: the adopt run must send no transactions. In adopt mode, skip the
+    # live mint/approve/deposit/redeem round-trip (6 txs) -- it spends gas.
+    # The read-only checks above (config equality + asset()) already proved
+    # correctness without sending any tx.
+    mode, _ = resolve_target_mode(ctx.target["aave"])
+    if mode == "adopt":
+        return
 
     # One-time live proof: deposit 100 USDC into waUSDC, redeem every share, expect exactly
     # 100 USDC back (index == 1, no interest has accrued). Mint the deployer's 100 USDC first
