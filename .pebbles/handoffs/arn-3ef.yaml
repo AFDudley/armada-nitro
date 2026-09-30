@@ -1,0 +1,32 @@
+status: completed
+pebble_id: arn-3ef
+summary: >
+  Deployed the fixturenet's hub custodian with the FROST group public key (X, Y)
+  read from a frost-signer key file in the deployment's state directory, instead of a
+  single held scalar. env/targets/fixturenet.json now carries the custodian's group
+  key as a key-file parameter (`groupKeyFile`, a path into the state dir) in place of
+  the old `groupKeyScalar` setting. The armada_nitro reconciler module reads that key
+  file (JSON with x, y) and deploys HubCustodian with that X, Y, recording the group
+  key (groupKeyFile, groupKeyX, groupKeyY) in the manifest. A new gate
+  (env/gates/hub-custodian-frost/verify.py) verifies the deployed custodian's group key
+  equals the file's (the positive case passes end-to-end on the running fixturenet), and
+  re-checking against a different key file makes the reconciler's verify fail with a
+  message naming which group key value it expected (the other file's X, Y) and which it
+  found (the on-chain X, Y).
+cost: "~60k tokens"
+commits:
+  - "d3d2aa7"
+verify_transcript:
+  hooks:
+    - name: "python3 env/gates/hub-custodian-frost/verify.py match -> {config_uses_keyfile_param:true, onchain_key_matches_file:true, manifest_records_key:true, overall_positive_case_passed:true}"
+      outcome: passed
+      duration_s: 0.4
+    - name: "python3 env/gates/hub-custodian-frost/verify.py mismatch -> {verify_exit_code:1, failure_names_mismatch:true}"
+      outcome: passed
+      duration_s: 0.4
+e2e_gate:
+  spec: contracts/specs/derived-arn-3ef.spec.json
+  command: "python3 env/gates/hub-custodian-frost/verify.py match && python3 env/gates/hub-custodian-frost/verify.py mismatch"
+  result: passed
+  ran_at_sha: "d3d2aa7"
+  mocks_in_path: false
