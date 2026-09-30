@@ -21,7 +21,10 @@ summary: >
   verify() phase reading the Shield logs; frost-signer has no cargo/rustc in the
   environment image, so the checker (scripts/run-armada-custodian-e2e-check.py)
   builds a static musl binary on the host (the host's glibc is newer than the
-  image's Debian bookworm) and the job's compose file volume-mounts it in.
+  image's Debian bookworm) and the job's compose file volume-mounts it in. The
+  checker resolves `laconic-so` via PATH (shutil.which), not a hardcoded ~/bin
+  path, since exophial's oracle re-run sandboxes $HOME and exposes the named
+  toolchain binaries on PATH there instead.
 
   Incident (self-corrected, no data loss): an early debugging invocation ran
   `docker compose ... run --remove-orphans` directly against the deployment
@@ -40,6 +43,7 @@ cost: "unknown -- no self-reported token spend; large multi-step session (repo/i
 commits:
   - "a458648b958d5773d80e0fc9daac63d5577f8f59"
   - "289c072fe8d9daca62beec6a87a20c22d5aecb02"
+  - "b3f53f333333acc56656b773227538168de6953d"
 verify_transcript:
   hooks:
     - name: "cargo test --manifest-path tools/frost-signer/Cargo.toml"
@@ -70,5 +74,5 @@ e2e_gate:
   spec: contracts/specs/derived-arn-77e.spec.json
   command: "python3 scripts/run-armada-custodian-e2e-check.py"
   result: passed
-  ran_at_sha: "289c072fe8d9daca62beec6a87a20c22d5aecb02"
+  ran_at_sha: "b3f53f333333acc56656b773227538168de6953d"
   mocks_in_path: false
