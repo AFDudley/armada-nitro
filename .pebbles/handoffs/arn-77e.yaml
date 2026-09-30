@@ -22,9 +22,11 @@ summary: >
   environment image, so the checker (scripts/run-armada-custodian-e2e-check.py)
   builds a static musl binary on the host (the host's glibc is newer than the
   image's Debian bookworm) and the job's compose file volume-mounts it in. The
-  checker resolves `laconic-so` via PATH (shutil.which), not a hardcoded ~/bin
-  path, since exophial's oracle re-run sandboxes $HOME and exposes the named
-  toolchain binaries on PATH there instead.
+  checker resolves `laconic-so` to /home/rix/bin/laconic-so (the self-contained
+  shiv) by literal absolute path, not a $HOME-relative one and not PATH lookup:
+  exophial's oracle re-run sandboxes $HOME (breaking a ~/bin-relative path), and
+  PATH resolves "laconic-so" first to ~/.local/bin/laconic-so on this host -- a
+  thin pipx wrapper needing its own venv, not the bare-python3.12 shiv.
 
   Incident (self-corrected, no data loss): an early debugging invocation ran
   `docker compose ... run --remove-orphans` directly against the deployment
@@ -44,6 +46,7 @@ commits:
   - "a458648b958d5773d80e0fc9daac63d5577f8f59"
   - "289c072fe8d9daca62beec6a87a20c22d5aecb02"
   - "b3f53f333333acc56656b773227538168de6953d"
+  - "08ce576ce69ae8f8990a02fdb3fc059f314e0d4a"
 verify_transcript:
   hooks:
     - name: "cargo test --manifest-path tools/frost-signer/Cargo.toml"
@@ -74,5 +77,5 @@ e2e_gate:
   spec: contracts/specs/derived-arn-77e.spec.json
   command: "python3 scripts/run-armada-custodian-e2e-check.py"
   result: passed
-  ran_at_sha: "b3f53f333333acc56656b773227538168de6953d"
+  ran_at_sha: "08ce576ce69ae8f8990a02fdb3fc059f314e0d4a"
   mocks_in_path: false
