@@ -1,0 +1,39 @@
+status: completed
+pebble_id: arn-0a8
+summary: >
+  Added env/reconciler/tools/adopt_negative_case.py, a negative-case tool
+  that runs the reconciler's adopt mode on the fixturenet with exactly one
+  field of the all-adopt target mutated. The all-adopt target is generated
+  from the fixturenet manifest via adopt_target.py (E13a, never hand-edited)
+  and the run setup (nonce read + reconciler invocation) is reused from
+  E13b's verify_adopt_run.py via importlib. Verified all four negative cases
+  by running the tool against the fixturenet (execution RPC
+  http://127.0.0.1:8545): each run exits non-zero, the reconciler's
+  failure line names the module and the failed check (postcondition for
+  usdc, the group key for armada_nitro, the module name for armada and
+  lido), and the deployer's on-chain nonce is unchanged (no transactions
+  sent). All four acceptance tests in contracts/specs/derived-arn-0a8.spec.json
+  pass.
+cost: "~50k tokens"
+commits:
+  - "23a35006ee6d3daf71f9276afc1f06bfb48a79"
+verify_transcript:
+  hooks:
+    - name: "python3 env/reconciler/tools/adopt_negative_case.py usdc-at-weth-address"
+      outcome: passed
+      duration_s: 3.0
+    - name: "python3 env/reconciler/tools/adopt_negative_case.py armada-at-no-code-address"
+      outcome: passed
+      duration_s: 3.0
+    - name: "python3 env/reconciler/tools/adopt_negative_case.py armada-nitro-wrong-group-key"
+      outcome: passed
+      duration_s: 3.0
+    - name: "python3 env/reconciler/tools/adopt_negative_case.py lido-wsteth-points-at-steth"
+      outcome: passed
+      duration_s: 3.0
+e2e_gate:
+  spec: contracts/specs/derived-arn-0a8.spec.json
+  command: "python3 env/reconciler/tools/adopt_negative_case.py usdc-at-weth-address && python3 env/reconciler/tools/adopt_negative_case.py armada-at-no-code-address && python3 env/reconciler/tools/adopt_negative_case.py armada-nitro-wrong-group-key && python3 env/reconciler/tools/adopt_negative_case.py lido-wsteth-points-at-steth"
+  result: passed
+  ran_at_sha: "23a35006ee6d3daf71f9276afc1f06bfb48a79"
+  mocks_in_path: false
