@@ -1,7 +1,7 @@
 {
   "id": "derived-arn-0a8",
   "original_statement": "In one sentence, what is the user-facing outcome you want? Adopt mode refuses addresses that aren't the module it claims, names the failed postcondition, and deploys nothing.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. Four runs of the adopt reconcile, each with one field of the adopt target changed: (a) usdc at the WETH address fails naming the postcondition and does not deploy; (b) armada at an address with no code fails; (c) armada_nitro with a wrong group key fails naming it; (d) lido with wstETH pointing at stETH fails. The deployer nonce is unchanged after each.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. Each of the four runs exits non-zero with the named failure line, and the deployer nonce is unchanged. Spec: docs/tasks/E13-adopt-mode.md (Negative cases).\nWhat are the non-goals / constraints? What must this NOT do? Changing deploy-mode behavior.\nAny examples or references? (links, prior art, a similar thing you like) The adopt target from E13a; the run setup from E13b.\nWhat priority is this? (P0\u2013P4) and why now? P2",
-  "restatement": "Armada-nitro developers preparing the fixturenet for Sepolia (E8) need firsthand, repeatable evidence that the reconciler's adopt mode refuses a wrong address instead of silently trusting it or deploying over it. The evidence is four adopt-reconcile runs against a fully-reconciled fixturenet, each starting from the correct adopt target with exactly one field changed away from its correct value: usdc's address swapped for WETH's address; armada's address swapped for an address with no contract code; armada_nitro's group key swapped for a wrong one; and lido's wstETH address swapped for its stETH address. In every one of the four runs the reconciler must exit non-zero, print the specific line naming what failed (the postcondition, for usdc and armada_nitro; the module, for armada and lido), and leave the deployer's on-chain transaction count exactly as it was before the run, proving no deployment transaction was sent. This work does not change what deploy mode does; it exercises and evidences adopt mode's existing rejection behavior on the fixturenet, ahead of the same code paths running for real against Sepolia.",
+  "restatement": "Armada-nitro developers preparing the fixturenet for Sepolia (E8) need firsthand, repeatable evidence that the reconciler's adopt mode refuses a wrong address instead of silently trusting it or deploying over it. The evidence is four adopt-reconcile runs against a fully-reconciled fixturenet, each starting from the correct adopt target with exactly one field changed away from its correct value: usdc's address swapped for WETH's address; armada's address swapped for an address with no contract code; armada_nitro's group key swapped for a wrong one; and lido's wstETH address swapped for its stETH address. In every one of the four runs the reconciler must exit non-zero, print the specific line naming what failed (the postcondition, for usdc and armada_nitro; the module, for armada and lido), and leave the deployer's on-chain transaction count exactly as it was before the run, proving no deployment transaction was sent. This work does not change what deploy mode does; it exercises and evidences adopt mode's existing rejection behavior on the fixturenet, ahead of the same code paths running for real against Sepolia. Because the acceptance evidence IS the deliverable (the rejection behavior itself already exists), the instrument that certifies a negative case must also be shown able to say NO to itself: given the unmutated, fully-correct adopt target, the reconciler succeeds and the instrument refuses to certify a rejection that did not occur, rather than reporting a negative case unconditionally.",
   "restatement_clauses": [
     {
       "id": "c_a",
@@ -18,14 +18,19 @@
     {
       "id": "c_d",
       "text": "Adopt `lido` with `wstETH` pointing at stETH fails, and the deployer nonce is unchanged."
+    },
+    {
+      "id": "c_e",
+      "text": "Given the unmutated, fully-correct adopt target, the reconciler succeeds and the negative-case instrument (adopt_negative_case.py) itself refuses -- exits non-zero -- rather than certifying a rejection that did not occur."
     }
   ],
-  "goal": "Show that the reconciler's adopt mode rejects each of four specific wrong-address misconfigurations, on the fixturenet, without sending any transaction.",
+  "goal": "Show that the reconciler's adopt mode rejects each of four specific wrong-address misconfigurations, on the fixturenet, without sending any transaction -- and that the instrument certifying those rejections can itself refuse when nothing is wrong.",
   "acceptance_criteria": [
     "Point the usdc entry of the adopt target at the already-deployed WETH contract's address and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit, the printed failure line names usdc and states which check failed, and the deployer's transaction count is the same before and after the run.",
     "Point the armada entry of the adopt target at an address that has no deployed contract code and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names armada, and the deployer's transaction count is the same before and after the run.",
     "Give the armada_nitro entry of the adopt target a wrong group key and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit, the printed failure line names the group key as the failed check, and the deployer's transaction count is the same before and after the run.",
-    "Set the lido entry's wstETH address to the stETH address instead of the real wstETH contract, and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names lido, and the deployer's transaction count is the same before and after the run."
+    "Set the lido entry's wstETH address to the stETH address instead of the real wstETH contract, and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names lido, and the deployer's transaction count is the same before and after the run.",
+    "Run the adopt reconcile on the fixturenet with the all-adopt target completely unmutated (every field correct). The reconciler itself succeeds (exits zero), and the instrument that certifies negative cases -- env/reconciler/tools/adopt_negative_case.py -- refuses to certify a rejection: it exits non-zero rather than reporting that a negative case occurred."
   ],
   "request_clauses": [
     {
@@ -43,6 +48,10 @@
     {
       "id": "c4",
       "text": "Set the lido entry's wstETH address to the stETH address instead of the real wstETH contract, and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names lido, and the deployer's transaction count is the same before and after the run."
+    },
+    {
+      "id": "c5",
+      "text": "Run the adopt reconcile on the fixturenet with the all-adopt target completely unmutated (every field correct). The reconciler itself succeeds (exits zero), and the instrument that certifies negative cases -- env/reconciler/tools/adopt_negative_case.py -- refuses to certify a rejection: it exits non-zero rather than reporting that a negative case occurred."
     }
   ],
   "acceptance_tests": [
@@ -205,6 +214,37 @@
       "max_runs": 1,
       "timeout_seconds": 180,
       "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "Run the adopt reconcile on the fixturenet with the all-adopt target completely unmutated (every field correct). The reconciler itself succeeds (exits zero), and the instrument that certifies negative cases -- env/reconciler/tools/adopt_negative_case.py -- refuses to certify a rejection: it exits non-zero rather than reporting that a negative case occurred.",
+      "proves": "The negative-case instrument does not certify a rejection when none occurred: given the unmutated (correct) adopt target, the reconciler succeeds and the instrument itself refuses (exits non-zero) rather than reporting a negative case.",
+      "restatement_clause_id": "c_e",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/adopt_negative_case.py",
+        "args": [
+          "unmutated-target"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "reconciler_exit_code",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c5"
     }
   ],
   "criticality": "marginal",
