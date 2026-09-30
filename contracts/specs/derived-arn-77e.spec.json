@@ -1,0 +1,273 @@
+{
+  "id": "derived-arn-77e",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? On the fixturenet, two of the three FROST signers authorize a delegate, and that delegate's signature closes a channel funded by a real-proof deposit.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. A gate job armada-custodian-e2e: (1) signers {1,3} sign operationHash for execute(authorizeDelegate) and the call succeeds; (2) the delegate signs a channel state that HubCustodian validates through isValidSignature (EIP-1271), and a cooperative close of a channel funded by a real-proof deposit pays out. The job prints each step's transaction hash and check.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. `laconic-so deployment --dir <dep> run-job armada-custodian-e2e` exits 0 with steps 1 and 2 passing on a fixturenet deployed per E14b. Spec: docs/tasks/E14-hub-custodian-frost.md (gate steps 1-2).\nWhat are the non-goals / constraints? What must this NOT do? Revocation, rotation and negative cases (E14d).\nAny examples or references? (links, prior art, a similar thing you like) src/HubCustodian.sol (operationHash, execute, authorizeDelegate, isValidSignature); existing gate armada-nitro-e2e (stack/compose-jobs, env/gates/nitro-e2e) for the real-proof deposit and cooperative close.\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "This request adds a new fixturenet gate job named armada-custodian-e2e. Armada-nitro developers run this job before the team deploys to Sepolia under task E8. The job proves two custody steps against a real fixturenet chain. In the first step, signer 1 and signer 3, two of the three FROST signers, sign the operationHash for the execute(authorizeDelegate) call. The HubCustodian contract accepts this call. After the call, isActiveDelegate(delegate) returns true. In the second step, the newly authorized delegate signs a channel state. HubCustodian validates that signature through the isValidSignature (EIP-1271) function. A cooperative close then pays out a channel that a real zero-knowledge-proof deposit funded. The Shield logs of the close transaction show payout note values. These values equal the closed channel state's allocations, minus the shield fee. The job reads the shield fee from the shieldFee() function. The job prints a transaction hash for each step. The job prints a pass or fail check for each step. A developer runs the job with the command `laconic-so deployment --dir <dep> run-job armada-custodian-e2e`. The developer runs this command against a fixturenet that task E14b deployed. The job exits with code 0 only when both steps pass. This gate does not cover delegate revocation. This gate does not cover delegate rotation. This gate does not cover negative-path cases. Task E14d covers those cases separately.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Signer 1 and signer 3, two of the three FROST signers, sign the operationHash for execute(authorizeDelegate), and the call succeeds."
+    },
+    {
+      "id": "c2",
+      "text": "The delegate signs a channel state, and HubCustodian validates that signature through isValidSignature (EIP-1271)."
+    },
+    {
+      "id": "c3",
+      "text": "A cooperative close of a channel funded by a real-proof deposit pays out."
+    },
+    {
+      "id": "c4",
+      "text": "The job prints each step's transaction hash and check."
+    },
+    {
+      "id": "c5",
+      "text": "Running `laconic-so deployment --dir <dep> run-job armada-custodian-e2e` against a fixturenet deployed per E14b exits 0 with steps 1 and 2 passing."
+    },
+    {
+      "id": "c6",
+      "text": "The job's output shows isActiveDelegate(delegate) returns true after the authorizeDelegate execute transaction."
+    },
+    {
+      "id": "c7",
+      "text": "From the Shield logs of the cooperative-close transaction, the payout note values equal the closed channel state's allocations net of the shield fee read from shieldFee()."
+    }
+  ],
+  "goal": "Prove, through one fixturenet gate job, that two of three FROST signers can authorize a delegate, and that the delegate can then close a real-proof-funded channel for a correct payout.",
+  "acceptance_criteria": [
+    "After signer 1 and signer 3 sign the delegate-authorization message, the authorizeDelegate call on the fixturenet succeeds and prints a transaction hash.",
+    "The channel closes successfully after the delegate signs the channel state, showing the custodian contract accepted the delegate's signature.",
+    "Closing the channel cooperatively pays out funds and prints a transaction hash, from a channel that a real proof funded.",
+    "The job's output shows one transaction hash for the delegate-authorization step and one transaction hash for the channel-close step.",
+    "Running the gate job against a fixturenet deployed under task E14b finishes with a success code, and both the delegate-authorization step and the channel-close step pass.",
+    "After the authorizeDelegate transaction, the job's output shows isActiveDelegate for the delegate returns true.",
+    "The Shield logs from the channel-close transaction show payout note values that equal the closed channel's allocations, minus the shield fee."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After signer 1 and signer 3 sign the delegate-authorization message, the authorizeDelegate call on the fixturenet succeeds and prints a transaction hash."
+    },
+    {
+      "id": "c2",
+      "text": "The channel closes successfully after the delegate signs the channel state, showing the custodian contract accepted the delegate's signature."
+    },
+    {
+      "id": "c3",
+      "text": "Closing the channel cooperatively pays out funds and prints a transaction hash, from a channel that a real proof funded."
+    },
+    {
+      "id": "c4",
+      "text": "The job's output shows one transaction hash for the delegate-authorization step and one transaction hash for the channel-close step."
+    },
+    {
+      "id": "c5",
+      "text": "Running the gate job against a fixturenet deployed under task E14b finishes with a success code, and both the delegate-authorization step and the channel-close step pass."
+    },
+    {
+      "id": "c6",
+      "text": "After the authorizeDelegate transaction, the job's output shows isActiveDelegate for the delegate returns true."
+    },
+    {
+      "id": "c7",
+      "text": "The Shield logs from the channel-close transaction show payout note values that equal the closed channel's allocations, minus the shield fee."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "After signer 1 and signer 3 sign the delegate-authorization message, the authorizeDelegate call on the fixturenet succeeds and prints a transaction hash.",
+      "proves": "Two of the three FROST signers can jointly authorize a delegate on the fixturenet.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "authorize_delegate_success",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "authorize_delegate_tx_hash",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c1"
+    },
+    {
+      "description": "The channel closes successfully after the delegate signs the channel state, showing the custodian contract accepted the delegate's signature.",
+      "proves": "HubCustodian validates the delegate's signature through its EIP-1271 check.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "close_success",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c2"
+    },
+    {
+      "description": "Closing the channel cooperatively pays out funds and prints a transaction hash, from a channel that a real proof funded.",
+      "proves": "A cooperative close of a real-proof-funded channel pays out.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "payout_matches_allocations",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "close_tx_hash",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c3"
+    },
+    {
+      "description": "The job's output shows one transaction hash for the delegate-authorization step and one transaction hash for the channel-close step.",
+      "proves": "The job reports a transaction hash for each of its two steps.",
+      "restatement_clause_id": "c4",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "authorize_delegate_tx_hash",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "close_tx_hash",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c4"
+    },
+    {
+      "description": "Running the gate job against a fixturenet deployed under task E14b finishes with a success code, and both the delegate-authorization step and the channel-close step pass.",
+      "proves": "The whole gate job succeeds end-to-end on a real fixturenet, not just that the process exits cleanly.",
+      "restatement_clause_id": "c5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "exit_code",
+          "observe": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "authorize_delegate_success",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "close_success",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c5"
+    },
+    {
+      "description": "After the authorizeDelegate transaction, the job's output shows isActiveDelegate for the delegate returns true.",
+      "proves": "The fixturenet contract now recognizes the delegate as active.",
+      "restatement_clause_id": "c6",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "is_active_delegate",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c6"
+    },
+    {
+      "description": "The Shield logs from the channel-close transaction show payout note values that equal the closed channel's allocations, minus the shield fee.",
+      "proves": "The payout amounts are correct, not just that a close happened.",
+      "restatement_clause_id": "c7",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "payout_matches_allocations",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c7"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/run-armada-custodian-e2e-check.py"
+  ]
+}
