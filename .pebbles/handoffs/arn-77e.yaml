@@ -1,0 +1,74 @@
+status: completed
+pebble_id: arn-77e
+summary: >
+  Added the armada-custodian-e2e gate job (E14c, steps 1-2). tools/frost-signer's
+  `sign` subcommand gained a `--format json` option printing the group commitment's
+  uncompressed coordinates (commitmentX, commitmentY, z) alongside the existing
+  compact hex, without changing the default output any existing caller relies on.
+  A new forge script, script/CustodianFrostScenario.s.sol, deploys a fresh
+  HubCustodian under a real 2-of-3 FROST group (frost-signer's deterministic
+  trusted-dealer keygen -- the fixturenet's shared custodian uses
+  FixturenetScenario.s.sol's well-known single scalar, simulated by
+  FrostTestSigner, so there are no real shares for it), signs every
+  group-authorized `execute` with real FROST shares {1,3} via `vm.ffi` calling
+  `frost-signer sign`, authorizes a delegate, funds a channel from a real-proof
+  deposit (env/gates/nitro-e2e/prepare.ts, given a one-line HUB_CUSTODIAN_OVERRIDE
+  env var so it binds to this gate's own custodian instead of the manifest's
+  shared one -- unset for every other caller, unchanged behavior), and has the
+  delegate cooperatively close it, shielding the payout to the user. The gate job
+  itself (stack/compose-jobs/docker-compose-armada-custodian-e2e.yml) orchestrates
+  funding, keygen, both forge script phases, the real-proof deposit, and a final
+  verify() phase reading the Shield logs; frost-signer has no cargo/rustc in the
+  environment image, so the checker (scripts/run-armada-custodian-e2e-check.py)
+  builds a static musl binary on the host (the host's glibc is newer than the
+  image's Debian bookworm) and the job's compose file volume-mounts it in.
+
+  Incident (self-corrected, no data loss): an early debugging invocation ran
+  `docker compose ... run --remove-orphans` directly against the deployment
+  (bypassing the checker script) to silence an orphan-container warning;
+  --remove-orphans tore down the fixturenet pod's own containers (genesis, geth,
+  beacon, 4 validators) because they are not declared in the single-service job
+  compose file. Chain data volumes were untouched (Docker only removes containers,
+  not named volumes, without -v); `laconic-so deployment start` recreated the
+  containers against the same volumes and geth resumed from its existing block
+  height (confirmed: block 4409, manifest and the E14b custodian's on-chain code
+  all intact after restart). No further `--remove-orphans` or raw `docker compose`
+  invocations were used for the rest of this work; every later run went through
+  the checker script's plain `laconic-so run-job` call, which never touches the
+  pod's own containers.
+cost: "unknown -- no self-reported token spend; large multi-step session (repo/image investigation, a Rust CLI change, a new forge script, the gate job, and one self-corrected fixturenet pod restart described above)"
+commits:
+  - "a458648b958d5773d80e0fc9daac63d5577f8f59"
+  - "289c072fe8d9daca62beec6a87a20c22d5aecb02"
+verify_transcript:
+  hooks:
+    - name: "cargo test --manifest-path tools/frost-signer/Cargo.toml"
+      outcome: passed
+      duration_s: 6.0
+    - name: "cargo clippy --workspace --all-targets -- -D warnings"
+      outcome: passed
+      duration_s: 1.0
+    - name: "cargo fmt --all -- --check"
+      outcome: passed
+      duration_s: 0.5
+    - name: "forge build"
+      outcome: passed
+      duration_s: 34.0
+    - name: "uv run ruff check --fix / ruff format (scripts/run-armada-custodian-e2e-check.py)"
+      outcome: passed
+      duration_s: 0.5
+    - name: "mypy --strict --ignore-missing-imports (scripts/run-armada-custodian-e2e-check.py)"
+      outcome: passed
+      duration_s: 1.5
+    - name: "eslint --fix --max-warnings=0 / prettier --write (env/gates/nitro-e2e/prepare.ts)"
+      outcome: passed
+      duration_s: 2.0
+    - name: "pre-commit (all repo hooks, both commits)"
+      outcome: passed
+      duration_s: 3.0
+e2e_gate:
+  spec: contracts/specs/derived-arn-77e.spec.json
+  command: "python3 scripts/run-armada-custodian-e2e-check.py"
+  result: passed
+  ran_at_sha: "289c072fe8d9daca62beec6a87a20c22d5aecb02"
+  mocks_in_path: false
