@@ -133,6 +133,9 @@ if [ "$MODE" = warm ]; then
   echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
 else
   # ---- COLD: build the base layer, snapshot it, then finish the full run ----
+  # The tmpfs was mounted over data/ after `deploy create`, hiding the volume dirs
+  # create made; recreate them so the bind-mounted volumes can populate.
+  for v in armada_env $SNAP_ALL_VOLUMES; do sudo mkdir -p "${DEP}/data/${v}"; done
   "$LACONIC" deployment --dir "$DEP" start
   wait_for_blocks
   # Deliver the committed base target into the armada_env volume (seen as /env)

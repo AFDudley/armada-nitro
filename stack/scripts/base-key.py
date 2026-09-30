@@ -62,6 +62,8 @@ EXCLUDED -- present but not part of the base chain's state:
     reconciler package is executed as a unit; but the FULL target
     (env/targets/fixturenet.json), which adds armada_nitro + funding, is excluded --
     only the base target determines the base chain.
+  - env/reconciler/tools/**, env/reconciler/tests/**  operator tooling and test
+                                               fixtures, never imported by a reconcile run;
   - env/lido/tools/**                          capture/dev tooling, not run by the deploy;
   - env/lido/reference-staking-modules.json    read by verify() only, not the deploy.
 """
@@ -211,13 +213,17 @@ def key_lines(root: Path) -> list[str]:
         lines.append(f"image {ref} {_image_id(ref)}")
 
     # --- reconciler: AST with docstrings stripped -------------------------
+    def _reconciler_excluded(p: Path) -> bool:
+        rel = p.relative_to(root / "env/reconciler").parts
+        return "__pycache__" in p.parts or rel[0] in ("tools", "tests")
+
     for py in sorted((root / "env/reconciler").rglob("*.py")):
-        if "__pycache__" in py.parts:
+        if _reconciler_excluded(py):
             continue
         lines.append(f"pyast {py.relative_to(root)} {_ast_digest(py.read_text())}")
     # any non-.py file inside env/reconciler -> raw bytes (fail-safe)
     for f in sorted((root / "env/reconciler").rglob("*")):
-        if not f.is_file() or f.suffix == ".py" or "__pycache__" in f.parts:
+        if not f.is_file() or f.suffix == ".py" or _reconciler_excluded(f):
             continue
         lines.append(f"raw {f.relative_to(root)} {_sha(f.read_bytes())}")
 
