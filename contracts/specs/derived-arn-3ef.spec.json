@@ -1,0 +1,223 @@
+{
+  "id": "derived-arn-3ef",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? The fixturenet's hub custodian is deployed with the group public key produced by frost-signer, read from a key file in the deployment's state directory.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. env/targets/fixturenet.json takes the custodian's group key as a parameter pointing at a key file in the state dir; armada_nitro.py reads it and deploys HubCustodian with that X, Y; the manifest records the group key; verify checks the deployed custodian's group key equals the file's.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. A reconcile on a fixturenet with a frost-signer key file deploys the custodian with that group key (verify passes); a reconcile with a different key file fails verify naming the mismatch. Spec: docs/tasks/E14-hub-custodian-frost.md (Deliver, second bullet).\nWhat are the non-goals / constraints? What must this NOT do? Delegate authorization and signing flows (E14c).\nAny examples or references? (links, prior art, a similar thing you like) env/reconciler/modules/armada_nitro.py; src/HubCustodian.sol constructor; script/FixturenetScenario.s.sol setUpHub (single fixed scalar today).\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "The fixturenet reconciler must source the hub custodian's FROST group public key from a key file that frost-signer produces, instead of deriving it from a single held scalar. env/targets/fixturenet.json takes the custodian's group key as a parameter pointing at a key file in the state dir. armada_nitro.py reads it and deploys HubCustodian with that X, Y. The manifest records the group key. Verify checks the deployed custodian's group key equals the file's. A reconcile on a fixturenet with a frost-signer key file deploys the custodian with that group key, and verify passes. A reconcile with a different key file fails verify, naming the mismatch. This work is scoped to the second Deliver bullet of docs/tasks/E14-hub-custodian-frost.md; it excludes delegate authorization and signing flows, which belong to E14c.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "env/targets/fixturenet.json takes the custodian's group key as a parameter pointing at a key file in the state dir"
+    },
+    {
+      "id": "c2",
+      "text": "armada_nitro.py reads it and deploys HubCustodian with that X, Y"
+    },
+    {
+      "id": "c3",
+      "text": "the manifest records the group key"
+    },
+    {
+      "id": "c4",
+      "text": "verify checks the deployed custodian's group key equals the file's"
+    },
+    {
+      "id": "c5",
+      "text": "a reconcile on a fixturenet with a frost-signer key file deploys the custodian with that group key (verify passes)"
+    },
+    {
+      "id": "c6",
+      "text": "a reconcile with a different key file fails verify naming the mismatch"
+    }
+  ],
+  "goal": "Deploy the fixturenet's hub custodian using the FROST group public key read from a frost-signer key file in the deployment's state directory, instead of a single held scalar.",
+  "acceptance_criteria": [
+    "Setting up a fixturenet whose configuration names a frost-signer key file (a path in the deployment's state directory) is accepted and actually used, rather than the old single-number setting.",
+    "After a fixturenet setup runs with a frost-signer group-key file, the deployed hub custodian's on-chain group key exactly matches the X and Y values written in that file.",
+    "After the same fixturenet setup, the recorded deployment manifest shows the group key that was actually deployed.",
+    "Re-checking the deployment against a key file whose group key differs from the one already deployed reports a failure instead of silently passing.",
+    "Setting up a fixturenet with a frost-signer key file results in a working hub custodian deployed with that file's group key, and the follow-up check reports success.",
+    "Re-checking the deployment against a different key file produces a failure message stating which group key value it expected and which one it found, not a generic error."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Setting up a fixturenet whose configuration names a frost-signer key file (a path in the deployment's state directory) is accepted and actually used, rather than the old single-number setting."
+    },
+    {
+      "id": "c2",
+      "text": "After a fixturenet setup runs with a frost-signer group-key file, the deployed hub custodian's on-chain group key exactly matches the X and Y values written in that file."
+    },
+    {
+      "id": "c3",
+      "text": "After the same fixturenet setup, the recorded deployment manifest shows the group key that was actually deployed."
+    },
+    {
+      "id": "c4",
+      "text": "Re-checking the deployment against a key file whose group key differs from the one already deployed reports a failure instead of silently passing."
+    },
+    {
+      "id": "c5",
+      "text": "Setting up a fixturenet with a frost-signer key file results in a working hub custodian deployed with that file's group key, and the follow-up check reports success."
+    },
+    {
+      "id": "c6",
+      "text": "Re-checking the deployment against a different key file produces a failure message stating which group key value it expected and which one it found, not a generic error."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Setting up a fixturenet whose configuration names a frost-signer key file (a path in the deployment's state directory) is accepted and actually used, rather than the old single-number setting.",
+      "proves": "The fixturenet target configuration takes the custodian's group key as a file-path parameter into the state directory, and that parameter is what the setup actually uses.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/gates/hub-custodian-frost/verify.py",
+        "args": [
+          "match"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "config_uses_keyfile_param",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "After a fixturenet setup runs with a frost-signer group-key file, the deployed hub custodian's on-chain group key exactly matches the X and Y values written in that file.",
+      "proves": "armada_nitro.py reads the group-key file and deploys the hub custodian using its X and Y values.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/gates/hub-custodian-frost/verify.py",
+        "args": [
+          "match"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "onchain_key_matches_file",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "After the same fixturenet setup, the recorded deployment manifest shows the group key that was actually deployed.",
+      "proves": "The manifest records the deployed group key.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/gates/hub-custodian-frost/verify.py",
+        "args": [
+          "match"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "manifest_records_key",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "Re-checking the deployment against a key file whose group key differs from the one already deployed reports a failure instead of silently passing.",
+      "proves": "The verify step actually compares the deployed custodian's group key against the file's value, rather than always passing.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/gates/hub-custodian-frost/verify.py",
+        "args": [
+          "mismatch"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "verify_exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "Setting up a fixturenet with a frost-signer key file results in a working hub custodian deployed with that file's group key, and the follow-up check reports success.",
+      "proves": "A reconcile on a fixturenet with a frost-signer key file deploys the custodian with that group key and verify passes.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/gates/hub-custodian-frost/verify.py",
+        "args": [
+          "match"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "overall_positive_case_passed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "Re-checking the deployment against a different key file produces a failure message stating which group key value it expected and which one it found, not a generic error.",
+      "proves": "A reconcile with a different key file fails verify, and the failure names the mismatch.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/gates/hub-custodian-frost/verify.py",
+        "args": [
+          "mismatch"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "failure_names_mismatch",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "env/gates/hub-custodian-frost/verify.py"
+  ]
+}
