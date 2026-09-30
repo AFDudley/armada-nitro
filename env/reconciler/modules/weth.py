@@ -23,7 +23,7 @@ _SOURCES_LOCK = Path(__file__).resolve().parents[2] / "sources.lock.json"
 # module would send transactions on every run, breaking idempotency (and
 # the read-only armada-env-verify gate) -- so it runs once, the first time
 # this run recognizes the address, and never again.
-_FRESHLY_RECOGNIZED = ("deployed", "adopted")
+_FRESHLY_RECOGNIZED = "deployed"
 
 
 def _weth9_source() -> dict[str, Any]:

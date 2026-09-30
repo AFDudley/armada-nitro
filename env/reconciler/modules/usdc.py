@@ -62,7 +62,7 @@ _TRANSFER_RECIPIENT = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 # on an already-reconciled module would break idempotency, so it runs once,
 # the first time this run recognizes the address, and never again. Mirrors
 # weth.py's _FRESHLY_RECOGNIZED.
-_FRESHLY_RECOGNIZED = ("deployed", "adopted")
+_FRESHLY_RECOGNIZED = "deployed"
 
 
 def _artifact() -> dict[str, Any]:

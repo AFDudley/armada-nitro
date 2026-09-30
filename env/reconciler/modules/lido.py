@@ -138,7 +138,7 @@ _VOTE_POLL_INTERVAL_SECONDS = 10
 
 # Live proof (submit 1 ETH -> mints stETH) runs once, the first time this run recognizes the
 # deployment -- mirrors weth.py/usdc.py/aave.py's _FRESHLY_RECOGNIZED.
-_FRESHLY_RECOGNIZED = ("deployed", "adopted")
+_FRESHLY_RECOGNIZED = "deployed"
 _ONE_ETH_WEI = 10**18
 
 

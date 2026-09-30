@@ -33,7 +33,7 @@ _MINTER_ALLOWANCE = 1_000_000_000_000  # 1,000,000 USDC; mirrors funding.py's he
 # just by reading state. Re-running that proof on an already-reconciled module would break
 # idempotency, so it runs once, the first time this run recognizes the pool. Mirrors
 # weth.py/usdc.py's _FRESHLY_RECOGNIZED.
-_FRESHLY_RECOGNIZED = ("deployed", "adopted")
+_FRESHLY_RECOGNIZED = "deployed"
 
 # ReserveConfiguration.sol bit layout (/src/aave-v3-origin, tag v3.7.0,
 # src/contracts/protocol/libraries/configuration/ReserveConfiguration.sol) -- (field name,
