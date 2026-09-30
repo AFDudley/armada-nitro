@@ -1,0 +1,215 @@
+{
+  "id": "derived-arn-0a8",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? Adopt mode refuses addresses that aren't the module it claims, names the failed postcondition, and deploys nothing.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. Four runs of the adopt reconcile, each with one field of the adopt target changed: (a) usdc at the WETH address fails naming the postcondition and does not deploy; (b) armada at an address with no code fails; (c) armada_nitro with a wrong group key fails naming it; (d) lido with wstETH pointing at stETH fails. The deployer nonce is unchanged after each.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. Each of the four runs exits non-zero with the named failure line, and the deployer nonce is unchanged. Spec: docs/tasks/E13-adopt-mode.md (Negative cases).\nWhat are the non-goals / constraints? What must this NOT do? Changing deploy-mode behavior.\nAny examples or references? (links, prior art, a similar thing you like) The adopt target from E13a; the run setup from E13b.\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "Armada-nitro developers preparing the fixturenet for Sepolia (E8) need firsthand, repeatable evidence that the reconciler's adopt mode refuses a wrong address instead of silently trusting it or deploying over it. The evidence is four adopt-reconcile runs against a fully-reconciled fixturenet, each starting from the correct adopt target with exactly one field changed away from its correct value: usdc's address swapped for WETH's address; armada's address swapped for an address with no contract code; armada_nitro's group key swapped for a wrong one; and lido's wstETH address swapped for its stETH address. In every one of the four runs the reconciler must exit non-zero, print the specific line naming what failed (the postcondition, for usdc and armada_nitro; the module, for armada and lido), and leave the deployer's on-chain transaction count exactly as it was before the run, proving no deployment transaction was sent. This work does not change what deploy mode does; it exercises and evidences adopt mode's existing rejection behavior on the fixturenet, ahead of the same code paths running for real against Sepolia.",
+  "restatement_clauses": [
+    {
+      "id": "c_a",
+      "text": "Adopt `usdc` at the WETH address fails, naming the postcondition, does not deploy, and the deployer nonce is unchanged."
+    },
+    {
+      "id": "c_b",
+      "text": "Adopt `armada` at an address with no code fails, and the deployer nonce is unchanged."
+    },
+    {
+      "id": "c_c",
+      "text": "Adopt `armada_nitro` with a wrong group key fails, naming it, and the deployer nonce is unchanged."
+    },
+    {
+      "id": "c_d",
+      "text": "Adopt `lido` with `wstETH` pointing at stETH fails, and the deployer nonce is unchanged."
+    }
+  ],
+  "goal": "Show that the reconciler's adopt mode rejects each of four specific wrong-address misconfigurations, on the fixturenet, without sending any transaction.",
+  "acceptance_criteria": [
+    "Point the usdc entry of the adopt target at the already-deployed WETH contract's address and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit, the printed failure line names usdc and states which check failed, and the deployer's transaction count is the same before and after the run.",
+    "Point the armada entry of the adopt target at an address that has no deployed contract code and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names armada, and the deployer's transaction count is the same before and after the run.",
+    "Give the armada_nitro entry of the adopt target a wrong group key and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit, the printed failure line names the group key as the failed check, and the deployer's transaction count is the same before and after the run.",
+    "Set the lido entry's wstETH address to the stETH address instead of the real wstETH contract, and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names lido, and the deployer's transaction count is the same before and after the run."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Point the usdc entry of the adopt target at the already-deployed WETH contract's address and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit, the printed failure line names usdc and states which check failed, and the deployer's transaction count is the same before and after the run."
+    },
+    {
+      "id": "c2",
+      "text": "Point the armada entry of the adopt target at an address that has no deployed contract code and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names armada, and the deployer's transaction count is the same before and after the run."
+    },
+    {
+      "id": "c3",
+      "text": "Give the armada_nitro entry of the adopt target a wrong group key and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit, the printed failure line names the group key as the failed check, and the deployer's transaction count is the same before and after the run."
+    },
+    {
+      "id": "c4",
+      "text": "Set the lido entry's wstETH address to the stETH address instead of the real wstETH contract, and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names lido, and the deployer's transaction count is the same before and after the run."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Point the usdc entry of the adopt target at the already-deployed WETH contract's address and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit, the printed failure line names usdc and states which check failed, and the deployer's transaction count is the same before and after the run.",
+      "proves": "Adopt mode refuses to treat WETH's address as USDC's, states which check failed, and sends no transaction while doing so.",
+      "restatement_clause_id": "c_a",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/adopt_negative_case.py",
+        "args": [
+          "usdc-at-weth-address"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "reconciler_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "stderr_names_usdc",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "stderr_names_postcondition",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "nonce_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Point the armada entry of the adopt target at an address that has no deployed contract code and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names armada, and the deployer's transaction count is the same before and after the run.",
+      "proves": "Adopt mode refuses an armada address with no contract behind it, and sends no transaction while doing so.",
+      "restatement_clause_id": "c_b",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/adopt_negative_case.py",
+        "args": [
+          "armada-at-no-code-address"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "reconciler_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "stderr_names_armada",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "nonce_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "Give the armada_nitro entry of the adopt target a wrong group key and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit, the printed failure line names the group key as the failed check, and the deployer's transaction count is the same before and after the run.",
+      "proves": "Adopt mode refuses a custodian whose group key does not match the target, names the group key as the failing check, and sends no transaction while doing so.",
+      "restatement_clause_id": "c_c",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/adopt_negative_case.py",
+        "args": [
+          "armada-nitro-wrong-group-key"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "reconciler_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "stderr_names_armada_nitro",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "stderr_names_group_key",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "nonce_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "Set the lido entry's wstETH address to the stETH address instead of the real wstETH contract, and run the adopt reconcile on the fixturenet. The run ends with a non-zero exit whose printed failure line names lido, and the deployer's transaction count is the same before and after the run.",
+      "proves": "Adopt mode refuses a wstETH address that is really the stETH address, and sends no transaction while doing so.",
+      "restatement_clause_id": "c_d",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/reconciler/tools/adopt_negative_case.py",
+        "args": [
+          "lido-wsteth-points-at-steth"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "reconciler_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "stderr_names_lido",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "nonce_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c4"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "env/reconciler/tools/adopt_negative_case.py"
+  ]
+}
