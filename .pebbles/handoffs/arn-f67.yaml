@@ -1,0 +1,29 @@
+status: completed
+pebble_id: arn-f67
+summary: >
+  Ran the reconciler in adopt-mode against a fresh empty state directory on
+  the fully reconciled fixturenet (armada-fixturenet-e12). Committed the four
+  module files (aave, lido, usdc, weth) narrowing _FRESHLY_RECOGNIZED to
+  ('deployed') so adopt-mode modules are not treated as freshly recognized.
+  Verified all four E13b acceptance clauses by running
+  `python3 env/reconciler/tools/verify_adopt_run.py` (exit 0, all four
+  verdict fields true): every module (weth, usdc, cctp, aave, lido, armada,
+  armada_nitro) reports 'adopted' on a fresh empty state dir, the deployer
+  nonce read before and after the run is identical (767 = 767, no transaction
+  sent), the adopt run's manifest address fields show an empty diff against
+  the source manifest, and the reconciler's verify step passes for every
+  module (reconciler exit code 0).
+cost: "~60k tokens"
+commits:
+  - "f76f8d0"
+verify_transcript:
+  hooks:
+    - name: "python3 env/reconciler/tools/verify_adopt_run.py (all four E13b clauses)"
+      outcome: passed
+      duration_s: 7.6
+e2e_gate:
+  spec: contracts/specs/derived-arn-f67.spec.json
+  command: "python3 env/reconciler/tools/verify_adopt_run.py"
+  result: passed
+  ran_at_sha: "f76f8d0"
+  mocks_in_path: false
