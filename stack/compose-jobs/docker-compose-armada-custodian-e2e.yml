@@ -1,0 +1,96 @@
+services:
+  armada-custodian-e2e:
+    image: cerc/armada-nitro-env:local
+    # Mirrors docker-compose-armada-nitro-e2e.yml (host networking so 127.0.0.1:8545 resolves
+    # to geth's host-published port; $$ escapes for a literal $ in the container environment).
+    #
+    # The difference (E14c): the hub custodian used here is freshly deployed under a real 2-of-3
+    # FROST group (tools/frost-signer's deterministic trusted-dealer keygen), and the
+    # delegate-authorization `execute` is signed with two real FROST shares (signers 1 and 3)
+    # instead of the fixed single-scalar signer `armada-nitro-e2e` uses. Stage 1 reuses the
+    # real-proof-funded deposit flow from env/gates/nitro-e2e/prepare.ts, bound to this fresh
+    # custodian via HUB_CUSTODIAN_OVERRIDE. Stage 2 is script/CustodianFrostScenario.s.sol.
+    #
+    # frost-signer has no cargo/rustc in this image; the checker builds it on the host
+    # (`cargo build --release --target x86_64-unknown-linux-musl`, portable across the host's
+    # and this image's glibc) and this volume mounts it in at a fixed PATH location.
+    network_mode: host
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Gates spend test-account USDC (shields, channel deposits); top the accounts back up to
+        # the funding target first (funding.py mints only the shortfall).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (docs/tasks/E9-operability.md); this verifies them
+        # rather than downloading -- see docker-compose-armada-nitro-e2e.yml for the same step.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        CHAIN_ID="$$(cast chain-id --rpc-url "$$HUB_RPC")"
+        BCAST="broadcast/CustodianFrostScenario.s.sol/$$CHAIN_ID"
+
+        run_script() {
+          forge script script/CustodianFrostScenario.s.sol --sig "$$1" --rpc-url "$$HUB_RPC" --slow --ffi --broadcast
+        }
+
+        # ---- Step 1 (E14c c1, c6): deploy the custodian under a real FROST group; signers
+        # {1,3} authorize the delegate through `execute` (frost-signer sign --format json via
+        # forge's vm.ffi -- a real threshold signature, not a simulated one).
+        mkdir -p "$$SHARES_DIR"
+        frost-signer keygen --out "$$SHARES_DIR"
+        run_script 'deployAndAuthorize()'
+        CUSTODIAN="$$(cat deployments/custodian-e2e-custodian-address)"
+        DELEGATE_ADDR="$$(cast wallet address --private-key "$$DELEGATE_KEY")"
+        AUTH_TX="$$(jq -r '.transactions[] | select((.function // "") | startswith("execute(")) | .hash' "$$BCAST/deployAndAuthorize-latest.json")"
+        IS_ACTIVE="$$(cast call "$$CUSTODIAN" 'isActiveDelegate(address)(bool)' "$$DELEGATE_ADDR" --rpc-url "$$HUB_RPC")"
+
+        # ---- Stage 1 (real-proof deposit, c3): prepare.ts builds a Groth16-proved
+        # `depositFromNote` calldata bound to this custodian (HUB_CUSTODIAN_OVERRIDE) and writes
+        # it to DEPOSITS_PATH.
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        (
+          cd /src/armada-poc
+          MANIFEST_PATH="$$MANIFEST_PATH" \
+          DEPOSITS_OUTPUT="$$DEPOSITS_PATH" \
+          CHALLENGE_DURATION="$$CHALLENGE_DURATION" \
+          HUB_CUSTODIAN_OVERRIDE="$$CUSTODIAN" \
+          HUB_RPC="$$HUB_RPC" DEPLOY_ENV=local CCTP_MODE=real \
+            npx hardhat run scripts/gates/prepare.ts --network hub
+        )
+
+        # ---- Step 2 (E14c c2, c3): fund the channel (real-proof deposit + custodian executes,
+        # each FROST-signed), then the delegate + user cooperatively close it, shielding the
+        # payout (isValidSignature/EIP-1271 accepts the delegate's signature).
+        run_script 'cooperativeClose()'
+        CLOSE_TX="$$(jq -r '.transactions[] | select((.function // "") | startswith("concludeAndTransferAllAssets(")) | .hash' "$$BCAST/cooperativeClose-latest.json")"
+
+        # c7: the Shield log's payout note equals the closed state's allocation net of shieldFee().
+        if forge script script/CustodianFrostScenario.s.sol --sig 'verify()' --rpc-url "$$HUB_RPC"; then
+          PAYOUT_OK=true
+        else
+          PAYOUT_OK=false
+        fi
+
+        # Emit the structured JSON the checker parses. The job's stdout ends with this line:
+        echo "{\"authorize_delegate_success\": true, \"authorize_delegate_tx_hash\": \"$$AUTH_TX\", \"close_success\": true, \"close_tx_hash\": \"$$CLOSE_TX\", \"is_active_delegate\": $$IS_ACTIVE, \"payout_matches_allocations\": $$PAYOUT_OK}"
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/custodian-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      DELEGATE_KEY: ${DELEGATE_KEY:-0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a}
+      REVOCATION_DELAY: ${REVOCATION_DELAY:-60}
+      SHARES_DIR: /env/custodian-shares
+      FROST_SIGNER: frost-signer
+    volumes:
+      - armada_env:/env
+      - ${FROST_SIGNER_BIN}:/usr/local/bin/frost-signer:ro
+
+volumes:
+  armada_env:

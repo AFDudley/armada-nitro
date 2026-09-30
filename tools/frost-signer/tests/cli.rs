@@ -165,6 +165,55 @@ fn sign_pair_2_3_produces_signature_the_verifier_accepts() {
 }
 
 #[test]
+fn sign_json_format_commitment_matches_the_signature_the_hex_format_encodes() {
+    let dir = TempDir::new("sign-json");
+    run_keygen(dir.path());
+
+    let mut cmd = Command::new(bin());
+    cmd.arg("sign")
+        .arg("--shares")
+        .arg(dir.path().join("share-1"))
+        .arg(dir.path().join("share-3"))
+        .arg("--message")
+        .arg(MESSAGE_HEX)
+        .arg("--format")
+        .arg("json");
+    let out = cmd.output().expect("run sign --format json");
+    assert!(
+        out.status.success(),
+        "sign --format json failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("sign --format json prints JSON");
+    let x = hex::decode(v["commitmentX"].as_str().unwrap().trim_start_matches("0x")).unwrap();
+    let y = hex::decode(v["commitmentY"].as_str().unwrap().trim_start_matches("0x")).unwrap();
+    let z = hex::decode(v["z"].as_str().unwrap().trim_start_matches("0x")).unwrap();
+    assert_eq!(x.len(), 32, "commitmentX is a 32-byte word");
+    assert_eq!(y.len(), 32, "commitmentY is a 32-byte word");
+    assert_eq!(z.len(), 32, "z is a 32-byte word");
+
+    // Reconstruct the compact (compressed-R || z) encoding from the JSON's uncompressed
+    // coordinates and confirm it decodes to a signature the on-chain FROST verifier's own
+    // math (VerifyingKey::verify) accepts -- proving commitmentX/commitmentY are truly R's
+    // coordinates, not just any 32-byte words.
+    let prefix: u8 = if y[31] & 1 == 0 { 0x02 } else { 0x03 };
+    let mut compact = Vec::with_capacity(65);
+    compact.push(prefix);
+    compact.extend_from_slice(&x);
+    compact.extend_from_slice(&z);
+    let signature = frost::Signature::deserialize(&compact).expect("valid signature encoding");
+
+    let kp = load_key_package(&dir.path().join("share-1"));
+    let message = hex::decode(MESSAGE_HEX.trim_start_matches("0x")).unwrap();
+    kp.verifying_key()
+        .verify(&message, &signature)
+        .expect("on-chain verifier accepts the reconstructed signature");
+}
+
+#[test]
 fn sign_with_single_share_exits_nonzero_and_names_threshold() {
     let dir = TempDir::new("single-share");
     run_keygen(dir.path());

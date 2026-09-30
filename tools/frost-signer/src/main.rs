@@ -2,7 +2,7 @@
 //!
 //! Subcommands:
 //!   keygen --out <dir>   Generate a 2-of-3 FROST group into <dir>
-//!   sign --shares <a> <b> --message <hex32>
+//!   sign --shares <a> <b> --message <hex32> [--format hex|json]
 //!
 //! No networked DKG among separate machines; no contract deployment.
 
@@ -11,6 +11,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use frost_signer::{keygen_into, sign_shares};
+use k256::elliptic_curve::sec1::ToEncodedPoint;
 
 /// A 2-of-3 FROST(secp256k1, KECCAK-256) trusted-dealer keygen and threshold signing tool.
 #[derive(Parser, Debug)]
@@ -40,6 +41,15 @@ enum Command {
         /// 32-byte message, as hex (optionally 0x-prefixed)
         #[arg(long)]
         message: String,
+        /// Output format: `hex` (default) prints the compact serialized signature
+        /// (33-byte compressed R || 32-byte z), the same encoding
+        /// `frost::Signature::deserialize` reads back. `json` prints the group
+        /// commitment's uncompressed coordinates and z as 32-byte hex words --
+        /// `{"commitmentX", "commitmentY", "z"}` -- for callers that need
+        /// `HubCustodian.execute`'s `GroupSignature` struct directly (e.g. a forge
+        /// script's `vm.ffi`), without decompressing the point themselves.
+        #[arg(long, default_value = "hex", value_parser = ["hex", "json"])]
+        format: String,
     },
 }
 
@@ -59,7 +69,11 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Command::Sign { shares, message } => {
+        Command::Sign {
+            shares,
+            message,
+            format,
+        } => {
             // c6: a single share file must be refused with an error naming the threshold.
             if shares.len() != 2 {
                 eprintln!(
@@ -79,9 +93,21 @@ fn main() -> ExitCode {
             };
             match sign_shares(shares, &msg) {
                 Ok(sig) => {
-                    let serialized = sig.serialize().unwrap();
-                    // Print the joint signature (R || z).
-                    println!("{}", hex::encode(&serialized));
+                    if format == "json" {
+                        let commitment = sig.R().to_affine().to_encoded_point(false);
+                        let serialized = sig.serialize().unwrap();
+                        let z = &serialized[33..];
+                        let out = serde_json::json!({
+                            "commitmentX": format!("0x{}", hex::encode(commitment.x().unwrap())),
+                            "commitmentY": format!("0x{}", hex::encode(commitment.y().unwrap())),
+                            "z": format!("0x{}", hex::encode(z)),
+                        });
+                        println!("{out}");
+                    } else {
+                        // Print the joint signature (R || z).
+                        let serialized = sig.serialize().unwrap();
+                        println!("{}", hex::encode(&serialized));
+                    }
                     ExitCode::SUCCESS
                 }
                 Err(e) => {

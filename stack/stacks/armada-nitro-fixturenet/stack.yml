@@ -9,3 +9,4 @@ jobs:
   - armada-env-reconcile
   - armada-env-verify
   - armada-nitro-e2e
+  - armada-custodian-e2e

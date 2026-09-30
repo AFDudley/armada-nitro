@@ -258,7 +258,11 @@ async function main() {
   const deployBlock: number = manifest.armada.deployBlock ?? 0;
   const adjudicatorAddress: string = manifest.armadaNitro.adjudicator;
   const consensusApp: string = manifest.armadaNitro.consensusApp;
-  const custodian: string = manifest.armadaNitro.hubCustodian;
+  // E14c (armada-custodian-e2e): overrides the manifest's shared custodian with a hub
+  // custodian this gate deployed itself under a real FROST group key. Unset for every other
+  // caller of this script, which keeps reading the manifest's custodian exactly as before.
+  const custodian: string =
+    process.env.HUB_CUSTODIAN_OVERRIDE || manifest.armadaNitro.hubCustodian;
   const testAccountAddress: string = manifest.testAccounts[0].address;
 
   console.log(

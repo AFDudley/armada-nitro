@@ -1,8 +1,20 @@
 {
+  "lib/armada-poc": {
+    "rev": "532bc0641443879e30c07b98970f6e11d5d9400c"
+  },
+  "lib/exit-format": {
+    "rev": "43450d8af4a096a2c8e3532ff40f90f9a1d383e5"
+  },
   "lib/forge-std": {
     "tag": {
       "name": "v1.16.2",
       "rev": "bf647bd6046f2f7da30d0c2bf435e5c76a780c1b"
     }
+  },
+  "lib/frost-secp256k1-evm": {
+    "rev": "65d03d00955d6c2002ccac8370410cd72091ef48"
+  },
+  "lib/openzeppelin-contracts": {
+    "rev": "fd81a96f01cc42ef1c9a5399364968d0e07e9e90"
   }
 }
