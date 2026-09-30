@@ -6,12 +6,26 @@ docs/tasks/E6-armada-and-nitro.md.
 
 from __future__ import annotations
 
+import json
+
 from typing import Any
 
 from pathlib import Path
-
 from reconciler.context import Context, resolve_target_mode, to_int
-from reconciler.modules import _forge, _wallet
+from reconciler.modules import _forge
+
+
+def _read_group_key(ctx: Context) -> tuple[str, str]:
+    """The FROST group public key (X, Y) from the frost-signer key file named by the
+    target's `groupKeyFile` parameter. The file lives in the deployment's state directory
+    (`ctx.state_dir`) and holds JSON `{"x": "0x<64hex>", "y": "0x<64hex>"}` (frost-signer's
+    `group-pubkey.json`)."""
+    params = resolve_target_mode(ctx.target["armada_nitro"])[1]
+    key_file = Path(params["groupKeyFile"])
+    path = key_file if key_file.is_absolute() else ctx.state_dir / key_file
+    raw = json.loads(path.read_text())
+    return raw["x"], raw["y"]
+
 
 # env/reconciler/modules/armada_nitro.py -> repo root (this repository is baked into the
 # image at /src/armada-nitro by `COPY . /src/armada-nitro`, so this resolves the same way
@@ -42,15 +56,20 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
         }
         return action, 0
 
-    # mode == "deploy": an adjudicator already on record is never redeployed.
+    # mode == "deploy": an adjudicator already on record is never redeployed, but the group
+    # key is still (re)recorded in the manifest so the deployment state shows the key actually
+    # deployed.
     if observed and observed.get("adjudicator"):
+        group_key_x, group_key_y = _read_group_key(ctx)
+        observed["groupKeyX"] = group_key_x
+        observed["groupKeyY"] = group_key_y
         return "present", 0
 
     armada = ctx.manifest.get("armada")
     if not armada or not armada.get("pool"):
         raise ctx.fail("armada module has not been reconciled; run it before armada_nitro (MODULE_ORDER)")
 
-    group_key_x, group_key_y = _wallet.public_key_xy(params["groupKeyScalar"])
+    group_key_x, group_key_y = _read_group_key(ctx)
     chain_id = ctx.target["network"]["chainId"]
 
     # Deploy.s.sol writes deployments/<chainId>.json (vm.writeJson) but -- unlike the
@@ -87,6 +106,9 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
         "adjudicator": adjudicator,
         "consensusApp": consensus_app,
         "hubCustodian": custodian,
+        "groupKeyFile": params["groupKeyFile"],
+        "groupKeyX": group_key_x,
+        "groupKeyY": group_key_y,
     }
     ctx.manifest.setdefault("gasUsed", {})
     ctx.manifest["gasUsed"]["armada_nitro"] = ctx.manifest["gasUsed"].get("armada_nitro", 0) + gas_used
@@ -109,7 +131,7 @@ def verify(ctx: Context, action: str) -> None:
 
     mode, params = resolve_target_mode(ctx.target["armada_nitro"])
     if mode == "deploy":
-        expected_x, expected_y = _wallet.public_key_xy(params["groupKeyScalar"])
+        expected_x, expected_y = _read_group_key(ctx)
         group_key_x = _uint(ctx.cast("call", custodian, "groupKeyX()(uint256)"))
         group_key_y = _uint(ctx.cast("call", custodian, "groupKeyY()(uint256)"))
         if group_key_x != int(expected_x, 16):
