@@ -442,7 +442,7 @@ def verify(ctx: Context, action: str) -> None:
             )
             if deployer_has_role == "true":
                 raise ctx.fail(
-                    f"{name}[{contract_addr}]: deployer holds DEFAULT_ADMIN_ROLE, " f"expected only the Agent"
+                    f"{name}[{contract_addr}]: deployer holds DEFAULT_ADMIN_ROLE, expected only the Agent"
                 )
             if agent_has_role != "true":
                 raise ctx.fail(f"{name}[{contract_addr}]: Agent does not hold DEFAULT_ADMIN_ROLE")

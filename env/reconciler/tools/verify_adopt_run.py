@@ -33,7 +33,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 # env/reconciler/tools/verify_adopt_run.py -> parents:
 # parents[0]=tools, parents[1]=reconciler, parents[2]=env, parents[3]=repo root.
@@ -43,8 +43,9 @@ _REPO_ROOT = _TOOLS_DIR.parents[3]
 _ADOPT_TARGET_TOOL = _TOOLS_DIR / "adopt_target.py"
 
 # The fixturenet deployment this pebble targets (operator-managed; do not recreate).
-_DEPLOYMENT_DIR = Path(os.path.join(os.environ.get("HOME", "/home/rix"),
-                                    "deployments", "armada-fixturenet-e12"))
+_DEPLOYMENT_DIR = Path(
+    os.path.join(os.environ.get("HOME", "/home/rix"), "deployments", "armada-fixturenet-e12")
+)
 _SOURCE_MANIFEST = _DEPLOYMENT_DIR / "data" / "armada_env" / "manifest.json"
 _KEY_FILE = _DEPLOYMENT_DIR / "data" / "armada_env" / "deployer.key"
 _RPC_URL = "http://127.0.0.1:8545"
@@ -65,9 +66,19 @@ def _ensure_src_stablecoin() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         subprocess.run(
-            ["docker", "run", "--rm", "-v", str(tmp_path) + ":/dst", _IMAGE,
-             "sh", "-c", "cp -a /src/. /dst/"],
-            capture_output=True, text=True,
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                str(tmp_path) + ":/dst",
+                _IMAGE,
+                "sh",
+                "-c",
+                "cp -a /src/. /dst/",
+            ],
+            capture_output=True,
+            text=True,
         )
         subprocess.run(["sudo", "mkdir", "-p", "/src"], capture_output=True)
         subprocess.run(["sudo", "cp", "-a", str(tmp_path) + "/.", "/src/"], capture_output=True)
@@ -79,7 +90,8 @@ def _generate_target(out_path: Path) -> None:
         raise SystemExit(f"source manifest not found: {_SOURCE_MANIFEST}")
     result = subprocess.run(
         [sys.executable, str(_ADOPT_TARGET_TOOL), str(_SOURCE_MANIFEST), str(out_path)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         raise SystemExit(f"adopt_target.py failed (exit {result.returncode}): {result.stderr.strip()}")
@@ -90,7 +102,8 @@ def _deployer_address() -> str:
     key = _KEY_FILE.read_text().strip()
     result = subprocess.run(
         ["cast", "wallet", "address", "--private-key", key],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         raise SystemExit(f"cannot compute deployer address: {result.stderr.strip()}")
@@ -101,7 +114,8 @@ def _read_nonce(address: str) -> int:
     """Read the deployer's transaction count via the fixturenet RPC."""
     result = subprocess.run(
         ["cast", "nonce", address, "--rpc-url", _RPC_URL],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         raise SystemExit(f"cannot read nonce: {result.stderr.strip()}")
@@ -112,12 +126,22 @@ def _run_reconciler(state_dir: Path, target: Path) -> tuple[int, str, str]:
     """Run `python3 -m reconciler` (the reconcile-job invocation) and return
     (exit_code, stdout, stderr)."""
     result = subprocess.run(
-        ["python3", "-m", "reconciler",
-         "--target", str(target),
-         "--rpc", _RPC_URL,
-         "--state", str(state_dir),
-         "--key-file", str(_KEY_FILE)],
-        capture_output=True, text=True, cwd=str(_ENV_ROOT),
+        [
+            "python3",
+            "-m",
+            "reconciler",
+            "--target",
+            str(target),
+            "--rpc",
+            _RPC_URL,
+            "--state",
+            str(state_dir),
+            "--key-file",
+            str(_KEY_FILE),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(_ENV_ROOT),
     )
     return result.returncode, result.stdout, result.stderr
 
@@ -233,8 +257,7 @@ def main() -> int:
         print(json.dumps(verdict))
 
         # Exit non-zero if any of the four clauses failed.
-        return 0 if (all_modules_adopted and nonce_unchanged and manifest_diff and
-                      verify_all_pass) else 1
+        return 0 if (all_modules_adopted and nonce_unchanged and manifest_diff and verify_all_pass) else 1
 
 
 if __name__ == "__main__":

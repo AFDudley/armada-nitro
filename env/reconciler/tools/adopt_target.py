@@ -137,7 +137,7 @@ def _build_adopt_entry(module_name: str, manifest: dict[str, Any]) -> dict[str, 
         section = manifest.get(manifest_key)
         if not isinstance(section, dict) or section.get(source_field) is None:
             raise ValueError(
-                f"module {module_name}: missing required key " f"manifest.{manifest_key}.{source_field}"
+                f"module {module_name}: missing required key manifest.{manifest_key}.{source_field}"
             )
         result[out_field] = section[source_field]
 
@@ -203,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
 
     if len(argv) != 2:
-        sys.exit("Usage: python3 env/reconciler/tools/adopt_target.py " "<manifest.json> <out.json>")
+        sys.exit("Usage: python3 env/reconciler/tools/adopt_target.py <manifest.json> <out.json>")
 
     manifest_path = Path(argv[0])
     out_path = Path(argv[1])

@@ -119,7 +119,9 @@ def verify(ctx: Context, action: str) -> None:
         if "revocationDelay" in params:
             revocation_delay = _uint(ctx.cast("call", custodian, "revocationDelay()(uint256)"))
             if revocation_delay != int(params["revocationDelay"]):
-                raise ctx.fail(f"custodian.revocationDelay() = {revocation_delay}, expected {params['revocationDelay']}")
+                raise ctx.fail(
+                    f"custodian.revocationDelay() = {revocation_delay}, expected {params['revocationDelay']}"
+                )
     else:
         # Adopt: group-key coordinates and revocation delay are optional fields,
         # carried through by tools/adopt_target.py only when the manifest records
@@ -129,10 +131,16 @@ def verify(ctx: Context, action: str) -> None:
             group_key_x = _uint(ctx.cast("call", custodian, "groupKeyX()(uint256)"))
             group_key_y = _uint(ctx.cast("call", custodian, "groupKeyY()(uint256)"))
             if group_key_x != int(params["groupKeyX"], 16):
-                raise ctx.fail(f"custodian.groupKeyX() = {group_key_x}, expected {int(params['groupKeyX'], 16)}")
+                raise ctx.fail(
+                    f"custodian.groupKeyX() = {group_key_x}, expected {int(params['groupKeyX'], 16)}"
+                )
             if group_key_y != int(params["groupKeyY"], 16):
-                raise ctx.fail(f"custodian.groupKeyY() = {group_key_y}, expected {int(params['groupKeyY'], 16)}")
+                raise ctx.fail(
+                    f"custodian.groupKeyY() = {group_key_y}, expected {int(params['groupKeyY'], 16)}"
+                )
         if "revocationDelay" in params:
             revocation_delay = _uint(ctx.cast("call", custodian, "revocationDelay()(uint256)"))
             if revocation_delay != int(params["revocationDelay"]):
-                raise ctx.fail(f"custodian.revocationDelay() = {revocation_delay}, expected {params['revocationDelay']}")
+                raise ctx.fail(
+                    f"custodian.revocationDelay() = {revocation_delay}, expected {params['revocationDelay']}"
+                )
