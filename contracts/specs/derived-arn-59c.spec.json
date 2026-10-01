@@ -1,0 +1,167 @@
+{
+  "id": "derived-arn-59c",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? A watcher process detects a counterparty's challenge with a stale channel state and answers it on-chain with the newer fully signed state.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. env/gates/watchtower/watch.ts (ethers 6) subscribes to the adjudicator's ChallengeRegistered events for a channel; when a challenge's turn number is lower than the latest fully signed state it holds, it answers with checkpoint (or the counter-challenge ForceMove requires) using that state, and logs the event block, the response transaction and the latency.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. Against a fixturenet, a scripted challenge with state N while the watcher holds N+1 produces a successful response transaction logged with block and latency; a challenge with the latest state produces no response. Spec: docs/tasks/E15-watchtower-response.md (Deliver, watcher script).\nWhat are the non-goals / constraints? What must this NOT do? Payout scenarios (E15b); armada-client's watchtower (P2-06); Waku; multiple channels.\nAny examples or references? (links, prior art, a similar thing you like) src/nitro/ForceMove.sol (challenge, checkpoint, ChallengeRegistered, turn number rules); script/FixturenetScenario.s.sol; docs/tasks/E10-gates-fixes.md (challenge window enforced).\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "The armada-nitro repository gets a watcher script at env/gates/watchtower/watch.ts. The script uses ethers 6. The script subscribes to the adjudicator contract's ChallengeRegistered events for one channel. Each event carries a turn number. The watcher already holds the latest fully signed state for that channel. When an event's turn number is lower than the held state's turn number, the watcher answers on-chain. The watcher answers with a checkpoint transaction, or with the counter-challenge ForceMove requires, using the held state. When an event's turn number matches the held state's turn number, the watcher sends no answer. For each answer the watcher sends, it logs the event's block number, the response transaction, and the latency between the event and the response. Armada-nitro developers use this watcher to verify reconciler and custody/channel behavior on the fixturenet, ahead of the Sepolia milestone E8. The watcher covers one channel only. The watcher does not cover payout scenarios, which are tracked separately as E15b. The watcher does not cover armada-client's own watchtower, tracked separately as P2-06. The watcher does not use Waku. The watcher does not cover more than one channel.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The watcher, in env/gates/watchtower/watch.ts, subscribes with ethers 6 to the adjudicator's ChallengeRegistered events for a channel, and reads each challenge's turn number."
+    },
+    {
+      "id": "c2",
+      "text": "When a challenge's turn number is lower than the turn number of the latest fully signed state the watcher holds, the watcher answers on-chain with checkpoint, or with the counter-challenge ForceMove requires, using that held state."
+    },
+    {
+      "id": "c3",
+      "text": "When a challenge carries the same turn number as the watcher's held state, the watcher sends no response."
+    },
+    {
+      "id": "c4",
+      "text": "For each response it sends, the watcher logs the challenge event's block number, the response transaction, and the latency between the event and the response."
+    }
+  ],
+  "goal": "Build a watcher script that detects a stale challenge on a channel and answers it on-chain with the watcher's newer signed state, demonstrated against the fixturenet.",
+  "acceptance_criteria": [
+    "A demonstration channel on the fixturenet receives a challenge. The check confirms the watcher notices the challenge and reads its turn number.",
+    "On the fixturenet, a channel receives a challenge at turn number N. The watcher holds a fully signed state at turn number N+1 for that channel. The check confirms the watcher sends a successful response transaction.",
+    "On the fixturenet, a channel receives a challenge that already carries the watcher's latest held state. The check confirms the watcher sends no response transaction.",
+    "After the watcher answers the stale challenge from the earlier demonstration, the check confirms the watcher's report names the challenge's block number, the response transaction, and how long the response took."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A demonstration channel on the fixturenet receives a challenge. The check confirms the watcher notices the challenge and reads its turn number."
+    },
+    {
+      "id": "c2",
+      "text": "On the fixturenet, a channel receives a challenge at turn number N. The watcher holds a fully signed state at turn number N+1 for that channel. The check confirms the watcher sends a successful response transaction."
+    },
+    {
+      "id": "c3",
+      "text": "On the fixturenet, a channel receives a challenge that already carries the watcher's latest held state. The check confirms the watcher sends no response transaction."
+    },
+    {
+      "id": "c4",
+      "text": "After the watcher answers the stale challenge from the earlier demonstration, the check confirms the watcher's report names the challenge's block number, the response transaction, and how long the response took."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "A demonstration channel on the fixturenet receives a challenge. The check confirms the watcher notices the challenge and reads its turn number.",
+      "proves": "The watcher subscribes to challenge events for a channel and reads each challenge's turn number, as the request states.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/watchtower/scenario.sh",
+        "args": [
+          "stale"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "detected",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "On the fixturenet, a channel receives a challenge at turn number N. The watcher holds a fully signed state at turn number N+1 for that channel. The check confirms the watcher sends a successful response transaction.",
+      "proves": "The watcher answers a stale challenge on-chain with its newer state, matching the request's stated 'done' scenario.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/watchtower/scenario.sh",
+        "args": [
+          "stale"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "responded",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "On the fixturenet, a channel receives a challenge that already carries the watcher's latest held state. The check confirms the watcher sends no response transaction.",
+      "proves": "The watcher does not answer a challenge that already carries the latest state, matching the request's stated 'done' scenario.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/watchtower/scenario.sh",
+        "args": [
+          "current"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "responded",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "After the watcher answers the stale challenge from the earlier demonstration, the check confirms the watcher's report names the challenge's block number, the response transaction, and how long the response took.",
+      "proves": "The watcher logs the block number, the response transaction, and the latency, as the request requires.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/watchtower/scenario.sh",
+        "args": [
+          "stale"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "block",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "latency_ms",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "tx_hash",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c4"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "env/gates/watchtower/scenario.sh"
+  ]
+}
