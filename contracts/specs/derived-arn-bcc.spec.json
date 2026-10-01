@@ -1,0 +1,399 @@
+{
+  "id": "derived-arn-bcc",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? The custodian gate also proves delegate revocation takes effect only after its delay, group key rotation locks out the old group, and invalid signatures are rejected.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. armada-custodian-e2e continues: (3) signers {2,3} schedule revokeDelegate; the delegate stays valid until revocationDelay passes, then isActiveDelegate is false and a state it signs is rejected; (4) signers {1,2} rotateGroupKey to a new group and a signature by the old group then fails. Discrimination runs show: (a) a single-share signature rejected by execute; (b) replaying step 1's signed operation fails on the nonce; (c) a state signed by the revoked delegate after the delay rejected; (d) a signature over a different operationHash rejected.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. The gate job exits 0 with steps 1-4 passing, and each of (a)-(d) prints its rejection line. Spec: docs/tasks/E14-hub-custodian-frost.md (steps 3-4, Discrimination).\nWhat are the non-goals / constraints? What must this NOT do? Networked DKG; hub business logic.\nAny examples or references? (links, prior art, a similar thing you like) src/HubCustodian.sol (revokeDelegate, revocationDelay, isActiveDelegate, rotateGroupKey).\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "Extend the armada-custodian-e2e fixturenet gate for the HubCustodian contract with steps 3 and 4 and four rejection checks. Signers 2 and 3 schedule revocation of a delegate. The delegate stays active until the revocation delay passes. After the delay, isActiveDelegate reports false for that delegate, and a state it signs is rejected. Signers 1 and 2 rotate the group key to a new group. After rotation, a signature made by the old group is rejected. The gate also proves four rejection cases. A signature from one share out of three is rejected by execute. Replaying the operation signed in step 1 is rejected on the nonce. A state signed by the revoked delegate after the delay is rejected. A signature over a different operationHash than the one submitted is rejected. The gate job exits 0 only when steps 3 and 4 pass and all four rejection checks print their rejection line.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Signers {2,3} schedule revokeDelegate for the delegate."
+    },
+    {
+      "id": "c2",
+      "text": "The delegate stays valid until revocationDelay passes."
+    },
+    {
+      "id": "c3",
+      "text": "After revocationDelay passes, isActiveDelegate is false for the delegate."
+    },
+    {
+      "id": "c4",
+      "text": "After revocationDelay passes, a state signed by the delegate is rejected."
+    },
+    {
+      "id": "c5",
+      "text": "Signers {1,2} rotateGroupKey to a new group."
+    },
+    {
+      "id": "c6",
+      "text": "After rotateGroupKey, a signature by the old group fails."
+    },
+    {
+      "id": "c7",
+      "text": "A single-share signature is rejected by execute."
+    },
+    {
+      "id": "c8",
+      "text": "Replaying step 1's signed operation fails on the nonce."
+    },
+    {
+      "id": "c9",
+      "text": "A state signed by the revoked delegate after the delay is rejected."
+    },
+    {
+      "id": "c10",
+      "text": "A signature over a different operationHash is rejected."
+    },
+    {
+      "id": "c11",
+      "text": "The gate job exits 0 with steps 3-4 passing and each of (a)-(d) printing its rejection line."
+    }
+  ],
+  "goal": "Extend the armada-custodian-e2e fixturenet gate to prove delegate revocation with its delay, group-key rotation, and four rejection cases for the HubCustodian contract.",
+  "acceptance_criteria": [
+    "The gate schedules the revocation of the delegate using signers 2 and 3, and reports the schedule step as successful.",
+    "Before the revocation delay passes, the delegate is still active and a state it signs is still accepted.",
+    "After the revocation delay passes, the contract reports the delegate as no longer active.",
+    "After the revocation delay passes, a state signed by the delegate is rejected.",
+    "Signers 1 and 2 rotate the group key to a new group, and the contract accepts the new group.",
+    "After the group key rotates, a signature made by the old group is rejected.",
+    "A signature made from only one of the three key shares is rejected when execute is called, and the gate prints the rejection line for this case.",
+    "Submitting step 1's already-executed signed operation a second time is rejected because the nonce was already used, and the gate prints the rejection line for this case.",
+    "A state signed by the revoked delegate after the revocation delay has passed is rejected, and the gate prints the rejection line for this case.",
+    "A signature made over a different operationHash than the one submitted is rejected, and the gate prints the rejection line for this case.",
+    "The gate job as a whole exits with a success code only when steps 3 and 4 pass and all four rejection checks pass."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The gate schedules the revocation of the delegate using signers 2 and 3, and reports the schedule step as successful."
+    },
+    {
+      "id": "c2",
+      "text": "Before the revocation delay passes, the delegate is still active and a state it signs is still accepted."
+    },
+    {
+      "id": "c3",
+      "text": "After the revocation delay passes, the contract reports the delegate as no longer active."
+    },
+    {
+      "id": "c4",
+      "text": "After the revocation delay passes, a state signed by the delegate is rejected."
+    },
+    {
+      "id": "c5",
+      "text": "Signers 1 and 2 rotate the group key to a new group, and the contract accepts the new group."
+    },
+    {
+      "id": "c6",
+      "text": "After the group key rotates, a signature made by the old group is rejected."
+    },
+    {
+      "id": "c7",
+      "text": "A signature made from only one of the three key shares is rejected when execute is called, and the gate prints the rejection line for this case."
+    },
+    {
+      "id": "c8",
+      "text": "Submitting step 1's already-executed signed operation a second time is rejected because the nonce was already used, and the gate prints the rejection line for this case."
+    },
+    {
+      "id": "c9",
+      "text": "A state signed by the revoked delegate after the revocation delay has passed is rejected, and the gate prints the rejection line for this case."
+    },
+    {
+      "id": "c10",
+      "text": "A signature made over a different operationHash than the one submitted is rejected, and the gate prints the rejection line for this case."
+    },
+    {
+      "id": "c11",
+      "text": "The gate job as a whole exits with a success code only when steps 3 and 4 pass and all four rejection checks pass."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "The gate schedules the revocation of the delegate using signers 2 and 3, and reports the schedule step as successful.",
+      "proves": "Signers {2,3} can schedule revokeDelegate for the delegate.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "step3_revoke_scheduled",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c1"
+    },
+    {
+      "description": "Before the revocation delay passes, the delegate is still active and a state it signs is still accepted.",
+      "proves": "The delegate stays valid until revocationDelay passes.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "step3_delegate_valid_before_delay",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c2"
+    },
+    {
+      "description": "After the revocation delay passes, the contract reports the delegate as no longer active.",
+      "proves": "isActiveDelegate is false for the delegate after revocationDelay passes.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "step3_isActiveDelegate_false_after_delay",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c3"
+    },
+    {
+      "description": "After the revocation delay passes, a state signed by the delegate is rejected.",
+      "proves": "A state signed by the delegate is rejected after revocationDelay passes.",
+      "restatement_clause_id": "c4",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "step3_signed_state_rejected_after_delay",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c4"
+    },
+    {
+      "description": "Signers 1 and 2 rotate the group key to a new group, and the contract accepts the new group.",
+      "proves": "Signers {1,2} can rotateGroupKey to a new group.",
+      "restatement_clause_id": "c5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "step4_rotate_group_key_succeeded",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c5"
+    },
+    {
+      "description": "After the group key rotates, a signature made by the old group is rejected.",
+      "proves": "A signature by the old group fails after rotateGroupKey.",
+      "restatement_clause_id": "c6",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "step4_old_group_signature_rejected",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c6"
+    },
+    {
+      "description": "A signature made from only one of the three key shares is rejected when execute is called, and the gate prints the rejection line for this case.",
+      "proves": "A single-share signature is rejected by execute.",
+      "restatement_clause_id": "c7",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_a_single_share_rejected",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c7"
+    },
+    {
+      "description": "Submitting step 1's already-executed signed operation a second time is rejected because the nonce was already used, and the gate prints the rejection line for this case.",
+      "proves": "Replaying step 1's signed operation fails on the nonce.",
+      "restatement_clause_id": "c8",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_b_replay_rejected",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c8"
+    },
+    {
+      "description": "A state signed by the revoked delegate after the revocation delay has passed is rejected, and the gate prints the rejection line for this case.",
+      "proves": "A state signed by the revoked delegate after the delay is rejected.",
+      "restatement_clause_id": "c9",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_c_revoked_delegate_rejected",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c9"
+    },
+    {
+      "description": "A signature made over a different operationHash than the one submitted is rejected, and the gate prints the rejection line for this case.",
+      "proves": "A signature over a different operationHash is rejected.",
+      "restatement_clause_id": "c10",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_d_wrong_hash_rejected",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c10"
+    },
+    {
+      "description": "The gate job as a whole exits with a success code only when steps 3 and 4 pass and all four rejection checks pass.",
+      "proves": "The gate job exits 0 with steps 3-4 passing and each of (a)-(d) printing its rejection line.",
+      "restatement_clause_id": "c11",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-custodian-e2e.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "all_passed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c11"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/armada-custodian-e2e.py"
+  ]
+}
