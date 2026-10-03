@@ -82,3 +82,11 @@ llm_transport:
   # provider: ""     # omp_rpc only: omp provider (e.g. "anthropic", "vllm")
   # base_url: ""     # vllm only: server address (default http://localhost:8000/v1)
   # cli_path: ""     # omp_rpc only: built omp-structured dist/cli.js (required for that backend)
+
+# Per-tier omp tool allow-list (exo-b668/exo-3be), passed to the worker as --tools.
+# The pool/5090 qwen worker reread files with `read` until its context overflowed
+# (arn-bcc: one file 43 times, peak 161k tokens); with only bash/grep/glob it reads
+# and writes files through bash.
+workers:
+  default:
+    tools: [bash, grep, glob]
