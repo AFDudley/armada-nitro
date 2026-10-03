@@ -53,7 +53,7 @@ echo "fixturenet-base-snapshot: recording geth's head block from ${RPC} ..."
 headfile=$(mktemp)
 trap 'rm -f "$headfile"' EXIT
 capture_head_block "$RPC" > "$headfile"
-echo "fixturenet-base-snapshot: head: number=$(jq -r .number "$headfile") ($(( $(jq -r .number "$headfile") ))) hash=$(jq -r .hash "$headfile")"
+echo "fixturenet-base-snapshot: head: number=$(jq -r .result.number "$headfile") ($(( $(jq -r .result.number "$headfile") ))) hash=$(jq -r .result.hash "$headfile")"
 
 # 3. Stop geth so its on-disk head equals the block we just recorded, then tar the
 #    execution layer plus the head block (as head-block.json at the tar root). tar
@@ -77,7 +77,7 @@ sudo rm -f "${DEP}/data/${SNAP_HEAD_FILE}"
   echo "# snapshot: $(basename "$SNAP")"
   echo "# created:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# source:   ${DEP}"
-  echo "# el-head:  number=$(jq -r .number "$headfile") hash=$(jq -r .hash "$headfile")"
+  echo "# el-head:  number=$(jq -r .result.number "$headfile") hash=$(jq -r .result.hash "$headfile")"
   echo "#"
   echo "# sha256(this file's key-input lines, truncated to 16 hex) == key."
   _base_key_lines "$REPO_ROOT"
