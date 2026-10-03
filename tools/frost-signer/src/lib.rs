@@ -38,8 +38,8 @@ pub struct ShareFile {
 
 /// Keygen a 2-of-3 FROST group into `out_dir`, writing three share files
 /// (share-1, share-2, share-3) and the group public key file (X, Y).
-pub fn keygen_into(out_dir: &Path) -> Result<(), Error> {
-    let mut rng = ChaCha20Rng::seed_from_u64(0x6e69_7472_6f72_6169);
+pub fn keygen_into(out_dir: &Path, seed: u64) -> Result<(), Error> {
+    let mut rng = ChaCha20Rng::seed_from_u64(seed);
     let result =
         frost::keys::generate_with_dealer(3, 2, frost::keys::IdentifierList::Default, &mut rng);
     let (shares, pubkeys) = result?;
@@ -100,7 +100,9 @@ pub fn sign_packages(
     message: &[u8],
 ) -> Result<frost::Signature, Error> {
     let first = key_packages.values().next().unwrap();
-    let min_signers = first.min_signers();
+    // The threshold equals the number of shares provided: 1 share -> 1-of-3, 2 shares -> 2-of-3.
+    // A single-share signature (1 of 3) is thus producible and will be rejected by a 2-of-3 `execute`.
+    let min_signers = key_packages.len() as u16;
 
     // Build the verifying shares for each participating signer.
     let verifying_shares: BTreeMap<frost::Identifier, frost::keys::VerifyingShare> = key_packages
@@ -110,7 +112,7 @@ pub fn sign_packages(
     let pubkeys = frost::keys::PublicKeyPackage::new(
         verifying_shares,
         *first.verifying_key(),
-        Some(*min_signers),
+        Some(min_signers),
     );
 
     // Round 1: each participant commits (hiding + binding nonces).

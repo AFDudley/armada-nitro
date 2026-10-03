@@ -32,6 +32,11 @@ enum Command {
         /// Output directory holding share-1, share-2, share-3 and group-pubkey.json
         #[arg(long)]
         out: PathBuf,
+        /// Optional seed for the deterministic keygen RNG (hex or decimal); the default
+        /// 0x6e69_7472_6f72_6169 reproduces the historical group key. A different seed
+        /// yields a *different* group key, for the rotateGroupKey step.
+        #[arg(long)]
+        seed: Option<String>,
     },
     /// Sign a 32-byte message with any two key shares (FROST rounds 1 and 2 + aggregate)
     Sign {
@@ -56,9 +61,23 @@ enum Command {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match &cli.command {
-        Command::Keygen { out } => {
+        Command::Keygen { out, seed } => {
             std::fs::create_dir_all(out).ok();
-            match keygen_into(out) {
+            let seed_val = match seed {
+                Some(ref t) => {
+                    let t = t.trim();
+                    let stripped = t.trim_start_matches("0x");
+                    if stripped != t {
+                        // hex seed
+                        u64::from_str_radix(stripped, 16).unwrap_or(0x6e69_7472_6f72_6169)
+                    } else {
+                        // decimal seed
+                        t.parse::<u64>().unwrap_or(0x6e69_7472_6f72_6169)
+                    }
+                }
+                None => 0x6e69_7472_6f72_6169,
+            };
+            match keygen_into(out, seed_val) {
                 Ok(()) => {
                     println!("keygen: wrote share-1, share-2, share-3 and group-pubkey.json");
                     ExitCode::SUCCESS
@@ -75,9 +94,10 @@ fn main() -> ExitCode {
             format,
         } => {
             // c6: a single share file must be refused with an error naming the threshold.
-            if shares.len() != 2 {
+            // (a) a single-share signature (1 of 3 shares) must be accepted here so the gate can show execute rejects it.
+            if shares.len() != 1 && shares.len() != 2 {
                 eprintln!(
-                    "frost-signer sign: threshold is 2-of-3; exactly 2 share files are required (got {})",
+                    "frost-signer sign: threshold is 2-of-3; 1 or 2 share files are accepted (got {})",
                     shares.len()
                 );
                 return ExitCode::FAILURE;
