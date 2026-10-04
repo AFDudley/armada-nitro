@@ -1,0 +1,401 @@
+{
+  "id": "derived-arn-433",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? The custodian gate also proves delegate revocation takes effect only after its delay, group key rotation locks out the old group, and invalid signatures are rejected.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. armada-custodian-e2e continues from steps 1-2: (3) signers {2,3} schedule revokeDelegate; the delegate stays valid until revocationDelay passes, then isActiveDelegate is false and a state it signs is rejected; (4) signers {1,2} rotateGroupKey to a new group (frost-signer keygen --seed <other>, a new option; the default seed is unchanged), and a signature by the old group then fails. Discrimination runs, each printing a named rejection line: (a) one signer cannot authorize alone: frost-signer sign with one real share plus one share from the other group fails (FROST rejects the foreign share), and a valid signature made by two shares of the other group makes execute revert with InvalidGroupSignature; (b) replaying step 1's signed operation reverts on the nonce; (c) a state signed by the revoked delegate after the delay is rejected by isValidSignature; (d) a signature over a different operationHash reverts with InvalidGroupSignature. Do not change frost-signer's threshold or FROST's signing rounds: frost-core refuses thresholds below 2, which is the property case (a) demonstrates.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. The gate's JSON output has step3_revoked_delegate_rejected_after_delay=true, step3_delegate_still_active_before_delay=true, step4_old_group_signature_rejected=true, and discrimination_a_single_signer_rejected, discrimination_b_replay_rejected, discrimination_c_revoked_delegate_rejected, discrimination_d_wrong_hash_rejected all true, each with the transaction hash or revert selector observed; all_passed=true only when every one of those is true. Spec: docs/tasks/E14-hub-custodian-frost.md (steps 3-4, Discrimination, as corrected in 1df2e02).\nWhat are the non-goals / constraints? What must this NOT do? Networked DKG; hub business logic; changing frost-signer's 2-of-3 threshold or FROST's signing code.\nAny examples or references? (links, prior art, a similar thing you like) src/HubCustodian.sol (revokeDelegate, revocationDelay, isActiveDelegate, rotateGroupKey, InvalidGroupSignature); script/CustodianFrostScenario.s.sol and scripts/run-armada-custodian-e2e-check.py from E14c (arn-77e); tools/frost-signer. Supersedes arn-bcc, whose filing asked for an unproducible 1-of-3 signature and stated done as an exit code.\nWhat priority is this? (P0\u2013P4) and why now? 2",
+  "restatement": "This request extends the armada-custodian-e2e check. The check already covers steps 1 and 2 from the E14 custodian spec. The check must add steps 3 and 4, plus four discrimination tests. Step 3 tests delegate revocation. Signers 2 and 3 schedule revokeDelegate for a delegate. The check confirms isActiveDelegate stays true until revocationDelay elapses. The check confirms isActiveDelegate turns false after the delay. The check confirms a state signed by the revoked delegate is rejected after the delay. Step 4 tests group key rotation. Signers 1 and 2 call rotateGroupKey to move custody to a new FROST group. The new group comes from frost-signer keygen with a new --seed option. The default seed stays unchanged. The check confirms a signature from the old group is rejected after rotation. Four discrimination tests rule out weaker causes for the same rejections. Test a confirms frost-signer sign fails when given one real share and one share from the other group. Test a also confirms execute reverts with InvalidGroupSignature when given a valid signature made from two shares of the other group. Test b confirms replaying step 1's already-executed operation reverts on nonce reuse. Test c confirms isValidSignature rejects a state signed by the revoked delegate after the delay. Test d confirms execute reverts with InvalidGroupSignature when the signature covers a different operationHash. The check prints a named rejection line for each discrimination test. The check's JSON output carries eight fields: step3_delegate_still_active_before_delay, step3_revoked_delegate_rejected_after_delay, step4_old_group_signature_rejected, discrimination_a_single_signer_rejected, discrimination_b_replay_rejected, discrimination_c_revoked_delegate_rejected, discrimination_d_wrong_hash_rejected, and all_passed. all_passed is true only when the other seven fields are all true. Each of those seven fields carries the observed transaction hash or revert selector as evidence. The check must not change frost-signer's 2-of-3 threshold. The check must not change FROST's signing round code. This spec supersedes arn-bcc, which asked for an unproducible 1-of-3 signature and stated done as an exit code.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "isActiveDelegate returns true for the delegate before revocationDelay elapses, after signers 2 and 3 schedule revokeDelegate for it."
+    },
+    {
+      "id": "c2",
+      "text": "After revocationDelay elapses, isActiveDelegate returns false for the delegate, and a state the delegate signs is rejected."
+    },
+    {
+      "id": "c3",
+      "text": "After signers 1 and 2 rotate the group key to a new group made with frost-signer keygen --seed <a different seed>, a signature from the old group is rejected. The default seed stays unchanged."
+    },
+    {
+      "id": "c4",
+      "text": "frost-signer sign fails when given one real share and one share from the other group, because FROST rejects the foreign share. Execute reverts with InvalidGroupSignature when given a valid signature made from two shares of the other group."
+    },
+    {
+      "id": "c5",
+      "text": "Replaying the operation signed and executed in step 1 reverts because of nonce reuse."
+    },
+    {
+      "id": "c6",
+      "text": "isValidSignature rejects a state signed by the revoked delegate after revocationDelay has elapsed."
+    },
+    {
+      "id": "c7",
+      "text": "Execute reverts with InvalidGroupSignature when the signature covers a different operationHash than the one executed."
+    },
+    {
+      "id": "c8",
+      "text": "The check's JSON output sets all_passed true only when step3_delegate_still_active_before_delay, step3_revoked_delegate_rejected_after_delay, step4_old_group_signature_rejected, discrimination_a_single_signer_rejected, discrimination_b_replay_rejected, discrimination_c_revoked_delegate_rejected, and discrimination_d_wrong_hash_rejected are all true. Each of those seven fields carries the observed transaction hash or revert selector."
+    }
+  ],
+  "goal": "Extend the armada-custodian-e2e check so it verifies delegate revocation, group key rotation, and four discrimination tests, and reports the result as one JSON object with eight named fields.",
+  "acceptance_criteria": [
+    "Before the delegate-revocation delay passes, the check still shows the delegate as active.",
+    "After the delegate-revocation delay passes, the check shows the delegate as inactive, and turns down a state it signs.",
+    "After signers 1 and 2 move custody to a new signing group, the check turns down a signature from the old group.",
+    "One signer cannot authorize alone: a mixed-share signature fails to form, and a valid signature from the wrong group is turned down on execute.",
+    "Replaying the first signed and executed operation is turned down.",
+    "A state signed by the revoked delegate, after the delay, is turned down.",
+    "A signature over the wrong operation hash is turned down on execute.",
+    "The check's overall result is true only when every one of its seven checks is true."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Before the delegate-revocation delay passes, the check still shows the delegate as active."
+    },
+    {
+      "id": "c2",
+      "text": "After the delegate-revocation delay passes, the check shows the delegate as inactive, and turns down a state it signs."
+    },
+    {
+      "id": "c3",
+      "text": "After signers 1 and 2 move custody to a new signing group, the check turns down a signature from the old group."
+    },
+    {
+      "id": "c4",
+      "text": "One signer cannot authorize alone: a mixed-share signature fails to form, and a valid signature from the wrong group is turned down on execute."
+    },
+    {
+      "id": "c5",
+      "text": "Replaying the first signed and executed operation is turned down."
+    },
+    {
+      "id": "c6",
+      "text": "A state signed by the revoked delegate, after the delay, is turned down."
+    },
+    {
+      "id": "c7",
+      "text": "A signature over the wrong operation hash is turned down on execute."
+    },
+    {
+      "id": "c8",
+      "text": "The check's overall result is true only when every one of its seven checks is true."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Before the delegate-revocation delay passes, the check still shows the delegate as active.",
+      "proves": "Proves the delegate stays valid until revocationDelay passes.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "step3_delegate_still_active_before_delay",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "description": "After the delegate-revocation delay passes, the check shows the delegate as inactive, and turns down a state it signs.",
+      "proves": "Proves isActiveDelegate turns false, and a state signed by the revoked delegate is rejected, once the delay passes.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "step3_revoked_delegate_rejected_after_delay",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "step3_revoked_delegate_rejected_after_delay_evidence",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    },
+    {
+      "description": "After signers 1 and 2 move custody to a new signing group, the check turns down a signature from the old group.",
+      "proves": "Proves group key rotation locks out the old group's signature.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "step4_old_group_signature_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "step4_old_group_signature_rejected_evidence",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c3"
+    },
+    {
+      "description": "One signer cannot authorize alone: a mixed-share signature fails to form, and a valid signature from the wrong group is turned down on execute.",
+      "proves": "Proves a single real share plus a foreign share cannot sign, and the foreign group's valid signature reverts with InvalidGroupSignature.",
+      "restatement_clause_id": "c4",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_a_single_signer_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_a_single_signer_rejected_evidence",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c4"
+    },
+    {
+      "description": "Replaying the first signed and executed operation is turned down.",
+      "proves": "Proves nonce reuse blocks a replay of step 1's operation.",
+      "restatement_clause_id": "c5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_b_replay_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_b_replay_rejected_evidence",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c5"
+    },
+    {
+      "description": "A state signed by the revoked delegate, after the delay, is turned down.",
+      "proves": "Proves isValidSignature rejects the revoked delegate's signature once the delay has passed.",
+      "restatement_clause_id": "c6",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_c_revoked_delegate_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_c_revoked_delegate_rejected_evidence",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c6"
+    },
+    {
+      "description": "A signature over the wrong operation hash is turned down on execute.",
+      "proves": "Proves execute reverts with InvalidGroupSignature when the signed hash does not match the executed one.",
+      "restatement_clause_id": "c7",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_d_wrong_hash_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_d_wrong_hash_rejected_evidence",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c7"
+    },
+    {
+      "description": "The check's overall result is true only when every one of its seven checks is true.",
+      "proves": "Proves all_passed is the logical AND of the seven named checks.",
+      "restatement_clause_id": "c8",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/run-armada-custodian-e2e-check.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "all_passed",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "step3_delegate_still_active_before_delay",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "step3_revoked_delegate_rejected_after_delay",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "step4_old_group_signature_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_a_single_signer_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_b_replay_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_c_revoked_delegate_rejected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "discrimination_d_wrong_hash_rejected",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c8"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/run-armada-custodian-e2e-check.py"
+  ]
+}
