@@ -268,8 +268,7 @@ fn run_keygen_with_seed(dir: &Path, seed: &str) {
 fn group_pubkey_x(dir: &Path) -> String {
     let raw = fs::read_to_string(dir.join("group-pubkey.json")).unwrap();
     let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
-    v["x"].as_str().expect("group key has x")
-    .to_string()
+    v["x"].as_str().expect("group key has x").to_string()
 }
 
 #[test]
@@ -285,8 +284,14 @@ fn keygen_default_is_deterministic_and_seeded_differs() {
     let default_x_2 = group_pubkey_x(d2.path());
     let seeded_x = group_pubkey_x(d3.path());
 
-    assert_eq!(default_x_1, default_x_2, "default keygen must be deterministic across runs");
-    assert_ne!(default_x_1, seeded_x, "a different --seed must produce a different group key");
+    assert_eq!(
+        default_x_1, default_x_2,
+        "default keygen must be deterministic across runs"
+    );
+    assert_ne!(
+        default_x_1, seeded_x,
+        "a different --seed must produce a different group key"
+    );
 }
 
 #[test]

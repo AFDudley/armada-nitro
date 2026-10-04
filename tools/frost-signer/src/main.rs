@@ -62,7 +62,8 @@ fn parse_u64_value(val: &str) -> Result<u64, String> {
     if let Some(hex_digits) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
         u64::from_str_radix(hex_digits, 16).map_err(|_| format!("invalid hex seed '{s}"))
     } else {
-        s.parse::<u64>().map_err(|_| format!("invalid decimal seed '{s}"))
+        s.parse::<u64>()
+            .map_err(|_| format!("invalid decimal seed '{s}"))
     }
 }
 
@@ -71,7 +72,7 @@ fn main() -> ExitCode {
     match &cli.command {
         Command::Keygen { out, seed } => {
             std::fs::create_dir_all(out).ok();
-            let seed = parse_u64_value(&seed).expect("--seed must be a u64 (hex 0x... or decimal)");
+            let seed = parse_u64_value(seed).expect("--seed must be a u64 (hex 0x... or decimal)");
             match keygen_into(out, seed) {
                 Ok(()) => {
                     println!("keygen: wrote share-1, share-2, share-3 and group-pubkey.json");

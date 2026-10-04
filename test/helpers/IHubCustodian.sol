@@ -34,6 +34,8 @@ interface IHubCustodian {
     function revocationDelay() external view returns (uint256);
 
     function rotateGroupKey(uint256 groupKeyX, uint256 groupKeyY) external;
+
+    function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4);
 }
 
 interface IFrostTestSigner {
