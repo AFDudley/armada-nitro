@@ -61,5 +61,5 @@ e2e_gate:
   spec: contracts/specs/derived-arn-433.spec.json
   command: "python3 scripts/run-armada-custodian-e2e-check.py"
   result: passed
-  ran_at_sha: "ea648a924aa93ae6e3d072a95ab6194547800751 (functional behavior verified at 94e24d9ec85ed85ddd8fe6abe9b9072ac6d5a23f; ea648a9 is a ruff-format-only fix on top, confirmed behavior-identical via mypy --strict and ruff check both clean on the reformatted file)"
+  ran_at_sha: "ea648a924aa93ae6e3d072a95ab6194547800751"
   mocks_in_path: false
