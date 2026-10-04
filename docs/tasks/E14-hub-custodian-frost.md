@@ -16,6 +16,8 @@ key rotation. No single party holds the group scalar.
     participant and the group public key (X, Y);
   - produces a FROST signature for a given 32-byte message from any 2 of the 3 share files, running both rounds;
   - never writes the group scalar.
+  - `keygen --seed <n>` selects the deterministic seed (default unchanged), so step 4 and case (a) can make a
+    second, different group.
 - The custodian is deployed with the group key from this tool. The fixturenet target takes the group key as parameters;
   update `env/targets/fixturenet.json` and `armada_nitro.py` to take it from a generated key file in the state dir.
 - A gate job `armada-custodian-e2e` that:
@@ -30,7 +32,11 @@ key rotation. No single party holds the group scalar.
 Paste the job output, with each step's transaction hash and check.
 
 Discrimination; paste each failure line:
-- (a) A signature from a single share (1 of 3) is rejected by `execute`.
+- (a) One signer cannot authorize alone: run `frost-signer sign` with one real share plus one share from a
+  *different* group (a second keygen with another seed). Show that it fails (FROST rejects the foreign share), and
+  that an aggregate built without that check is rejected by `execute` (`InvalidGroupSignature`). Do not change
+  frost-signer's threshold or FROST's signing: frost-core refuses thresholds below 2, which is the property under
+  test.
 - (b) Replaying step 1's signed operation fails (nonce).
 - (c) A state signed by the revoked delegate after the delay is rejected.
 - (d) A signature over a different `operationHash` (wrong target) is rejected.
