@@ -128,18 +128,34 @@ def run_job() -> int:
         "payout_matches_allocations": job_json.get("payout_matches_allocations"),
         # E14d fields
         "step3_delegate_still_active_before_delay": job_json.get("step3_delegate_still_active_before_delay"),
-        "step3_revoked_delegate_rejected_after_delay": job_json.get("step3_revoked_delegate_rejected_after_delay"),
-        "step3_revoked_delegate_rejected_after_delay_evidence": job_json.get("step3_revoked_delegate_rejected_after_delay_evidence", ""),
+        "step3_revoked_delegate_rejected_after_delay": job_json.get(
+            "step3_revoked_delegate_rejected_after_delay"
+        ),
+        "step3_revoked_delegate_rejected_after_delay_evidence": job_json.get(
+            "step3_revoked_delegate_rejected_after_delay_evidence", ""
+        ),
         "step4_old_group_signature_rejected": job_json.get("step4_old_group_signature_rejected"),
-        "step4_old_group_signature_rejected_evidence": job_json.get("step4_old_group_signature_rejected_evidence", ""),
+        "step4_old_group_signature_rejected_evidence": job_json.get(
+            "step4_old_group_signature_rejected_evidence", ""
+        ),
         "discrimination_a_single_signer_rejected": job_json.get("discrimination_a_single_signer_rejected"),
-        "discrimination_a_single_signer_rejected_evidence": job_json.get("discrimination_a_single_signer_rejected_evidence", ""),
+        "discrimination_a_single_signer_rejected_evidence": job_json.get(
+            "discrimination_a_single_signer_rejected_evidence", ""
+        ),
         "discrimination_b_replay_rejected": job_json.get("discrimination_b_replay_rejected"),
-        "discrimination_b_replay_rejected_evidence": job_json.get("discrimination_b_replay_rejected_evidence", ""),
-        "discrimination_c_revoked_delegate_rejected": job_json.get("discrimination_c_revoked_delegate_rejected"),
-        "discrimination_c_revoked_delegate_rejected_evidence": job_json.get("discrimination_c_revoked_delegate_rejected_evidence", ""),
+        "discrimination_b_replay_rejected_evidence": job_json.get(
+            "discrimination_b_replay_rejected_evidence", ""
+        ),
+        "discrimination_c_revoked_delegate_rejected": job_json.get(
+            "discrimination_c_revoked_delegate_rejected"
+        ),
+        "discrimination_c_revoked_delegate_rejected_evidence": job_json.get(
+            "discrimination_c_revoked_delegate_rejected_evidence", ""
+        ),
         "discrimination_d_wrong_hash_rejected": job_json.get("discrimination_d_wrong_hash_rejected"),
-        "discrimination_d_wrong_hash_rejected_evidence": job_json.get("discrimination_d_wrong_hash_rejected_evidence", ""),
+        "discrimination_d_wrong_hash_rejected_evidence": job_json.get(
+            "discrimination_d_wrong_hash_rejected_evidence", ""
+        ),
         "all_passed": None,
         "exit_code": result.returncode,
     }
