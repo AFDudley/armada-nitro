@@ -1,0 +1,64 @@
+status: completed
+pebble_id: arn-433
+summary: >
+  Finished E14d (armada-custodian-e2e steps 3-4 and discrimination) on top of the
+  parked worker's capture commit (7e809ea), which never ran the gate and whose
+  step 3/4/discrimination code was non-functional: four of the seven required
+  booleans (step3_revoked_delegate_rejected_after_delay, step4_old_group_
+  signature_rejected, discrimination_a_single_signer_rejected, discrimination_b_
+  replay_rejected) were hardcoded `true` literals rather than derived from any
+  observation, and every `cast call` used for the on-chain discrimination checks
+  had the RPC URL and contract address swapped (`cast call "$HUB_RPC" "$CUSTODIAN"
+  ...` instead of `cast call "$CUSTODIAN" ... --rpc-url "$HUB_RPC"`), most missing
+  `--rpc-url` entirely. Kept from the capture: frost-signer's `keygen --seed`
+  option and its two determinism tests (threshold and FROST signing unchanged --
+  `generate_with_dealer(3, 2, ...)` and `sign_shares`/`sign_packages` untouched),
+  and the IHubCustodian.rotateGroupKey addition. Rewrote: the compose job's step
+  3/4/discrimination bash block (correct `cast call` syntax for the before/after
+  isActiveDelegate reads, matching the already-working step 1/2 code) and added a
+  `discriminate()` phase to script/CustodianFrostScenario.s.sol that runs the
+  on-chain discrimination checks (old group's valid signature, replay at a stale
+  nonce, the revoked delegate's rejected signature, a signature over the wrong
+  operation hash) as non-broadcast calls so a rejection surfaces as the call's own
+  revert data, writing one JSON object the job script reads; added `revoke()`/
+  `rotate()` calling a new `_hubExecuteShares` helper generalizing the existing
+  `_hubExecute` to any two signer indices; added `isValidSignature` to the
+  IHubCustodian test helper. Verified by running the real gate against the
+  operator-managed fixturenet (armada-fixturenet-e12): all eleven boolean fields
+  true, all eight evidence fields non-empty with genuine observed values (selector
+  0x01b60df4 = InvalidGroupSignature(), confirmed via `cast sig`; 0xffffffff =
+  EIP-1271's invalid-signature sentinel), all_passed=true, exit_code=0 -- every
+  acceptance_test in contracts/specs/derived-arn-433.spec.json satisfied.
+cost: "~1.1M tokens (investigation of the non-functional capture, a Rust
+  fmt/clippy cleanup, the forge script's discriminate() phase and its helpers,
+  a full rewrite of the job script's step 3/4/discrimination block, one image
+  rebuild, and three real gate runs against the fixturenet -- two to find and
+  fix a jq pretty-print bug, one to confirm green)"
+commits:
+  - "94e24d9ec85ed85ddd8fe6abe9b9072ac6d5a23f"
+verify_transcript:
+  hooks:
+    - name: "cargo test --manifest-path tools/frost-signer/Cargo.toml"
+      outcome: passed
+      duration_s: 1.0
+    - name: "cargo clippy --release --manifest-path tools/frost-signer/Cargo.toml --all-targets"
+      outcome: passed
+      duration_s: 3.0
+    - name: "cargo fmt --check --manifest-path tools/frost-signer/Cargo.toml"
+      outcome: passed
+      duration_s: 0.5
+    - name: "forge build"
+      outcome: passed
+      duration_s: 5.0
+    - name: "forge test --match-contract ArmadaNitroAdjudicator"
+      outcome: passed
+      duration_s: 6.0
+    - name: "pre-commit (all repo hooks, commit 94e24d9)"
+      outcome: passed
+      duration_s: 3.3
+e2e_gate:
+  spec: contracts/specs/derived-arn-433.spec.json
+  command: "python3 scripts/run-armada-custodian-e2e-check.py"
+  result: passed
+  ran_at_sha: "94e24d9ec85ed85ddd8fe6abe9b9072ac6d5a23f"
+  mocks_in_path: false
