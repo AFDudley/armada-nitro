@@ -33,8 +33,9 @@ Paste the job output, with each step's transaction hash and check.
 
 Discrimination; paste each failure line:
 - (a) One signer cannot authorize alone: run `frost-signer sign` with one real share plus one share from a
-  *different* group (a second keygen with another seed). Show that it fails (FROST rejects the foreign share), and
-  that an aggregate built without that check is rejected by `execute` (`InvalidGroupSignature`). Do not change
+  *different* group (a second keygen with another seed) and show that signing fails (FROST rejects the foreign
+  share); then submit a valid signature made by two shares of that other group and show that `execute` reverts with
+  `InvalidGroupSignature`. Do not change
   frost-signer's threshold or FROST's signing: frost-core refuses thresholds below 2, which is the property under
   test.
 - (b) Replaying step 1's signed operation fails (nonce).
