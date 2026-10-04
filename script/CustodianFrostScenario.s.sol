@@ -127,6 +127,28 @@ contract CustodianFrostScenario is Script {
         c.adjudicator.concludeAndTransferAllAssets(fp, signedFinal);
     }
 
+    /// @dev Step 3 (E14d): signers {2,3} schedule `revokeDelegate` through `execute`
+    /// (FROST-signed) -- the delegate stays valid until the revocation delay elapses.
+    function revoke() external {
+        Ctx memory c = _ctx();
+        address custodian = _readCustodian();
+        address delegate = vm.addr(c.delegateKey);
+        _hubExecuteShares(c, custodian, custodian, abi.encodeCall(IHubCustodian.revokeDelegate, (delegate)), 2, 3);
+    }
+
+    /// @dev Step 4 (E14d): signers {1,2} rotate the group key to a new FROST group (the
+    /// `--seed`-generated group, a different keypair from the default). A signature made by
+    /// the old group's shares then fails `execute` (InvalidGroupSignature).
+    function rotate() external {
+        Ctx memory c = _ctx();
+        address custodian = _readCustodian();
+        string memory newDir = vm.envOr('NEW_SHARES_DIR', string('/env/custodian-shares-new'));
+        string memory newPubkeyJson = vm.readFile(string.concat(newDir, '/group-pubkey.json'));
+        uint256 newX = vm.parseJsonUint(newPubkeyJson, '.x');
+        uint256 newY = vm.parseJsonUint(newPubkeyJson, '.y');
+        _hubExecuteShares(c, custodian, custodian, abi.encodeCall(IHubCustodian.rotateGroupKey, (newX, newY)), 1, 2);
+    }
+
     /// @dev c7: the Shield log's payout note value equals the closed state's user allocation
     /// net of the pool's live `shieldFee()`.
     function verify() external view {
@@ -182,9 +204,36 @@ contract CustodianFrostScenario is Script {
     /// @dev Signs `operationHash(nonce, target, 0, data)` with real FROST shares {1,3} --
     /// `frost-signer sign --shares share-1 share-3 --format json` via `vm.ffi` -- and broadcasts
     /// the group-authorized `execute`.
+    /// @dev Signs `operationHash(nonce, target, 0, data) with real FROST shares {a,b} --
+    /// the two signer indices (any two of 1,2,3) -- via `frost-signer sign --format json`
+    /// through `vm.ffi`, then broadcasts the group-authorized `execute`.
+    function _hubExecuteShares(Ctx memory c, address custodian, address target, bytes memory data, uint8 a, uint8 b) internal {
+        bytes32 message = IHubCustodian(custodian).operationHash(IHubCustodian(custodian).nonce(), target, 0, data);
+
+        string memory shareA = string.concat(c.sharesDir, '/share-', vm.toString(uint256(a)));
+        string memory shareB = string.concat(c.sharesDir, '/share-', vm.toString(uint256(b)));
+        string[] memory cmd = new string[](9);
+        cmd[0] = c.frostSigner;
+        cmd[1] = 'sign';
+        cmd[2] = '--shares';
+        cmd[3] = shareA;
+        cmd[4] = shareB;
+        cmd[5] = '--message';
+        cmd[6] = vm.toString(message);
+        cmd[7] = '--format';
+        cmd[8] = 'json';
+        string memory json = string(vm.ffi(cmd));
+        uint256 x = vm.parseJsonUint(json, '.commitmentX');
+        uint256 y = vm.parseJsonUint(json, '.commitmentY');
+        uint256 z = vm.parseJsonUint(json, '.z');
+
+        vm.broadcast(c.deployerKey);
+        IHubCustodian(custodian).execute(target, 0, data, IHubCustodian.GroupSignature(x, y, z));
+    }
+
     function _hubExecute(Ctx memory c, address custodian, address target, bytes memory data) internal {
-        IHubCustodian hub = IHubCustodian(custodian);
-        bytes32 message = hub.operationHash(hub.nonce(), target, 0, data);
+
+        bytes32 message = IHubCustodian(custodian).operationHash(IHubCustodian(custodian).nonce(), target, 0, data);
 
         string[] memory cmd = new string[](9);
         cmd[0] = c.frostSigner;
@@ -202,7 +251,7 @@ contract CustodianFrostScenario is Script {
         uint256 z = vm.parseJsonUint(json, '.z');
 
         vm.broadcast(c.deployerKey);
-        hub.execute(target, 0, data, IHubCustodian.GroupSignature(x, y, z));
+        IHubCustodian(custodian).execute(target, 0, data, IHubCustodian.GroupSignature(x, y, z));
     }
 
     /// @dev The adjudicator is not a registered shield caller (no adapterRegistry in this

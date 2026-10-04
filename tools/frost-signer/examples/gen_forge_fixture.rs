@@ -32,7 +32,7 @@ fn main() {
             .as_nanos()
     ));
     std::fs::create_dir_all(&dir).unwrap();
-    frost_signer::keygen_into(&dir).expect("keygen");
+    frost_signer::keygen_into(&dir, frost_signer::DEFAULT_SEED).expect("keygen");
 
     let pubkey_raw = std::fs::read_to_string(dir.join(frost_signer::GROUP_PUBKEY_FILE)).unwrap();
     let pubkey: frost_signer::GroupPubkey = serde_json::from_str(&pubkey_raw).unwrap();

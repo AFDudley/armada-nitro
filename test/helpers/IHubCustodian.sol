@@ -32,6 +32,8 @@ interface IHubCustodian {
     function isActiveDelegate(address delegate) external view returns (bool);
 
     function revocationDelay() external view returns (uint256);
+
+    function rotateGroupKey(uint256 groupKeyX, uint256 groupKeyY) external;
 }
 
 interface IFrostTestSigner {

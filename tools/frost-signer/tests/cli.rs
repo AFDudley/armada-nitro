@@ -252,3 +252,52 @@ fn a_signature_does_not_verify_against_a_different_message() {
         "verifier must reject a signature over a different message"
     );
 }
+
+fn run_keygen_with_seed(dir: &Path, seed: &str) {
+    let status = Command::new(bin())
+        .arg("keygen")
+        .arg("--out")
+        .arg(dir)
+        .arg("--seed")
+        .arg(seed)
+        .status()
+        .expect("run seeded keygen");
+    assert!(status.success(), "seeded keygen exited non-zero");
+}
+
+fn group_pubkey_x(dir: &Path) -> String {
+    let raw = fs::read_to_string(dir.join("group-pubkey.json")).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    v["x"].as_str().expect("group key has x")
+    .to_string()
+}
+
+#[test]
+fn keygen_default_is_deterministic_and_seeded_differs() {
+    let d1 = TempDir::new("seed-default-1");
+    let d2 = TempDir::new("seed-default-2");
+    let d3 = TempDir::new("seed-other");
+    run_keygen(d1.path());
+    run_keygen(d2.path());
+    run_keygen_with_seed(d3.path(), "0x6e6974726f726170");
+
+    let default_x_1 = group_pubkey_x(d1.path());
+    let default_x_2 = group_pubkey_x(d2.path());
+    let seeded_x = group_pubkey_x(d3.path());
+
+    assert_eq!(default_x_1, default_x_2, "default keygen must be deterministic across runs");
+    assert_ne!(default_x_1, seeded_x, "a different --seed must produce a different group key");
+}
+
+#[test]
+fn keygen_seeded_is_deterministic() {
+    let d1 = TempDir::new("seed-det-1");
+    let d2 = TempDir::new("seed-det-2");
+    run_keygen_with_seed(d1.path(), "0x6e6974726f726170");
+    run_keygen_with_seed(d2.path(), "0x6e6974726f726170");
+    assert_eq!(
+        group_pubkey_x(d1.path()),
+        group_pubkey_x(d2.path()),
+        "the same --seed must be deterministic"
+    );
+}

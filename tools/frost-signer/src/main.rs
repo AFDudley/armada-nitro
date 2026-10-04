@@ -32,6 +32,9 @@ enum Command {
         /// Output directory holding share-1, share-2, share-3 and group-pubkey.json
         #[arg(long)]
         out: PathBuf,
+        /// Deterministic keygen seed (hex 0x... or decimal u64). Default 0x6e6974726f726169.
+        #[arg(long, default_value = "0x6e6974726f726169")]
+        seed: String,
     },
     /// Sign a 32-byte message with any two key shares (FROST rounds 1 and 2 + aggregate)
     Sign {
@@ -53,12 +56,23 @@ enum Command {
     },
 }
 
+/// Parse a u64 seed: accepts 0x-prefixed hex or plain decimal.
+fn parse_u64_value(val: &str) -> Result<u64, String> {
+    let s = val.trim();
+    if let Some(hex_digits) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u64::from_str_radix(hex_digits, 16).map_err(|_| format!("invalid hex seed '{s}"))
+    } else {
+        s.parse::<u64>().map_err(|_| format!("invalid decimal seed '{s}"))
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match &cli.command {
-        Command::Keygen { out } => {
+        Command::Keygen { out, seed } => {
             std::fs::create_dir_all(out).ok();
-            match keygen_into(out) {
+            let seed = parse_u64_value(&seed).expect("--seed must be a u64 (hex 0x... or decimal)");
+            match keygen_into(out, seed) {
                 Ok(()) => {
                     println!("keygen: wrote share-1, share-2, share-3 and group-pubkey.json");
                     ExitCode::SUCCESS

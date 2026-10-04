@@ -117,7 +117,8 @@ def run_job() -> int:
             print(job_stderr, file=sys.stderr)
         return 1
 
-    # Re-emit the six required fields (and the exit code for c5).
+    # Re-emit the E14c fields plus the E14d fields (step3, step4, discrimination a-d) and
+    # compute `all_passed` as the logical AND of the seven named E14d checks.
     out = {
         "authorize_delegate_success": job_json.get("authorize_delegate_success"),
         "authorize_delegate_tx_hash": job_json.get("authorize_delegate_tx_hash", ""),
@@ -125,19 +126,37 @@ def run_job() -> int:
         "close_tx_hash": job_json.get("close_tx_hash", ""),
         "is_active_delegate": job_json.get("is_active_delegate"),
         "payout_matches_allocations": job_json.get("payout_matches_allocations"),
+        # E14d fields
+        "step3_delegate_still_active_before_delay": job_json.get("step3_delegate_still_active_before_delay"),
+        "step3_revoked_delegate_rejected_after_delay": job_json.get("step3_revoked_delegate_rejected_after_delay"),
+        "step3_revoked_delegate_rejected_after_delay_evidence": job_json.get("step3_revoked_delegate_rejected_after_delay_evidence", ""),
+        "step4_old_group_signature_rejected": job_json.get("step4_old_group_signature_rejected"),
+        "step4_old_group_signature_rejected_evidence": job_json.get("step4_old_group_signature_rejected_evidence", ""),
+        "discrimination_a_single_signer_rejected": job_json.get("discrimination_a_single_signer_rejected"),
+        "discrimination_a_single_signer_rejected_evidence": job_json.get("discrimination_a_single_signer_rejected_evidence", ""),
+        "discrimination_b_replay_rejected": job_json.get("discrimination_b_replay_rejected"),
+        "discrimination_b_replay_rejected_evidence": job_json.get("discrimination_b_replay_rejected_evidence", ""),
+        "discrimination_c_revoked_delegate_rejected": job_json.get("discrimination_c_revoked_delegate_rejected"),
+        "discrimination_c_revoked_delegate_rejected_evidence": job_json.get("discrimination_c_revoked_delegate_rejected_evidence", ""),
+        "discrimination_d_wrong_hash_rejected": job_json.get("discrimination_d_wrong_hash_rejected"),
+        "discrimination_d_wrong_hash_rejected_evidence": job_json.get("discrimination_d_wrong_hash_rejected_evidence", ""),
+        "all_passed": None,
         "exit_code": result.returncode,
     }
-    print(json.dumps(out))
-    both_pass = (
-        result.returncode == 0
-        and out["authorize_delegate_success"] is True
-        and out["close_success"] is True
-        and out["payout_matches_allocations"] is True
-        and out["is_active_delegate"] is True
-        and out["authorize_delegate_tx_hash"] != ""
-        and out["close_tx_hash"] != ""
+    # c8: all_passed is the logical AND of the seven named E14d checks.
+    all_passed = (
+        out["step3_delegate_still_active_before_delay"] is True
+        and out["step3_revoked_delegate_rejected_after_delay"] is True
+        and out["step4_old_group_signature_rejected"] is True
+        and out["discrimination_a_single_signer_rejected"] is True
+        and out["discrimination_b_replay_rejected"] is True
+        and out["discrimination_c_revoked_delegate_rejected"] is True
+        and out["discrimination_d_wrong_hash_rejected"] is True
     )
-    return 0 if both_pass else 1
+    out["all_passed"] = all_passed
+    print(json.dumps(out))
+    # The checker exits 0 only when the job succeeded AND all seven E14d checks are true.
+    return 0 if (result.returncode == 0 and out["all_passed"]) else 1
 
 
 def main() -> int:

@@ -20,6 +20,10 @@ use serde_json as json;
 
 pub type Error = frost::Error;
 
+/// Default seed (0x6e69_7472_6f72_6169 = "nitro") -- the deterministic trusted-dealer keygen
+/// used when `--seed` is not given, keeping the default group key stable across runs.
+pub const DEFAULT_SEED: u64 = 0x6e69_7472_6f72_6169;
+
 /// File name of the group public key (X, Y) that keygen writes.
 pub const GROUP_PUBKEY_FILE: &str = "group-pubkey.json";
 
@@ -38,8 +42,8 @@ pub struct ShareFile {
 
 /// Keygen a 2-of-3 FROST group into `out_dir`, writing three share files
 /// (share-1, share-2, share-3) and the group public key file (X, Y).
-pub fn keygen_into(out_dir: &Path) -> Result<(), Error> {
-    let mut rng = ChaCha20Rng::seed_from_u64(0x6e69_7472_6f72_6169);
+pub fn keygen_into(out_dir: &Path, seed: u64) -> Result<(), Error> {
+    let mut rng = ChaCha20Rng::seed_from_u64(seed);
     let result =
         frost::keys::generate_with_dealer(3, 2, frost::keys::IdentifierList::Default, &mut rng);
     let (shares, pubkeys) = result?;
