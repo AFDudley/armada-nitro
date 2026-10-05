@@ -368,3 +368,4 @@
 {"type":"comment","timestamp":"2026-10-05T06:54:38.428677Z","issue_id":"arn-59c","payload":{"body":"tokens-recorded: 145000"}}
 {"type":"comment","timestamp":"2026-10-05T06:54:39.574349Z","issue_id":"arn-59c","payload":{"body":"exophiald: merged (merged_ff). Model: pool/5090. Measured: unavailable (exophial-handoff-cost: no Claude Code transcript found; looked in /home/rix/.claude/projects/-home-rix-code-git-puller-repos-armada-nitro--worktrees-worker-arn-59c). Delivery: deploy=no_gate, staging-acceptance=no_gate, prod-verify=no_gate.\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
 {"type":"close","timestamp":"2026-10-05T06:54:39.577006Z","issue_id":"arn-59c","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
+{"type":"comment","timestamp":"2026-10-05T06:56:10.849471Z","issue_id":"arn-d76","payload":{"body":"exophial-unparked: "}}

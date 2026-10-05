@@ -1,0 +1,313 @@
+{
+  "id": "derived-arn-d76",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? The fixturenet proves a participant holding a newer state defeats a stale force-close when its watcher answers in time, and loses it when the watcher is off.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. Gate job armada-watchtower-e2e. Scenario A: a channel funded with a real-proof deposit; both parties sign N then N+1 (each giving the user more); the hub challenges with N; the watcher answers with N+1 within the window; after finalization the payout equals N+1's allocation (shielded note values net of the shield fee, from Shield logs). Scenario B: the same with the watcher off; the payout equals N's allocation.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. The job exits 0 and prints for both scenarios the challenge transaction, the response transaction and its latency (A), the final payouts and the check lines. Spec: docs/tasks/E15-watchtower-response.md (Scenarios A and B).\nWhat are the non-goals / constraints? What must this NOT do? Negative cases (E15c).\nAny examples or references? (links, prior art, a similar thing you like) The watcher from E15a; existing gate armada-nitro-e2e for real-proof deposit and payout checks from Shield logs.\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "This request asks for a fixturenet gate job named armada-watchtower-e2e that proves the watchtower dispute-response mechanism for armada-nitro payment channels behaves correctly, by running two paired scenarios in one job and printing evidence for both. The channel used in both scenarios is funded with a real zero-knowledge-proof deposit. Both channel parties sign channel state N, which allocates the user 1,000,000 shielded units, and then sign channel state N+1, which allocates the user 2,000,000 shielded units \u2014 a strictly larger amount, so the scenarios can be told apart by payout size alone. In Scenario A, the hub submits a stale challenge using state N, and the watcher (armada-nitro's automated channel monitor from E15a) answers inside the dispute window with state N+1. After the dispute finalizes, the user's payout, read from the Shield logs, must be the state N+1 amount net of the shield fee \u2014 high enough to be unmistakably the larger, newer-state payout. This proves a participant holding a newer state defeats a stale force-close when its watcher answers in time. In Scenario B, the identical setup runs again but with the watcher turned off. Because no response is submitted, the hub's stale challenge with state N stands, and the user's payout must instead be the state N amount net of the shield fee \u2014 low enough to be unmistakably the smaller, older-state payout. This proves the same participant loses the newer-state advantage when its watcher is unavailable. Because the two payouts are on opposite sides of a fixed midpoint, the job's output also directly shows the two payouts differ, which proves the watcher's presence \u2014 not some unrelated factor \u2014 decided the outcome. The job must exit 0. For both scenarios it must print the hub's challenge transaction, the final payout, and a line stating whether the scenario's check passed. For Scenario A only, it must also print the watcher's response transaction and how long the watcher took to answer. Negative-case scenarios, tracked separately as E15c, are out of scope for this gate.",
+  "restatement_clauses": [
+    {
+      "id": "RC1",
+      "text": "Scenario A: a channel is funded with a real zero-knowledge-proof deposit; both parties sign state N (allocating the user 1,000,000 shielded units) and then state N+1 (allocating the user 2,000,000 shielded units); the hub challenges with state N; the watcher answers within the dispute window with state N+1; after finalization the payout to the user, read from the Shield logs, is the state N+1 amount net of the shield fee \u2014 clearly above the midpoint of 1,500,000 and no higher than 2,000,000."
+    },
+    {
+      "id": "RC2",
+      "text": "Scenario B: the identical setup as Scenario A, but with the watcher turned off; because no response is submitted, the hub's stale challenge with state N stands; after finalization the payout to the user, read from the Shield logs, is the state N amount net of the shield fee \u2014 clearly below the midpoint of 1,500,000 and above 0; no watcher response transaction exists."
+    },
+    {
+      "id": "RC3",
+      "text": "The Scenario A payout and the Scenario B payout differ: Scenario A's payout is above 1,500,000 while Scenario B's payout is below 1,500,000, showing the watcher's timely response is what wins the user the larger, newer-state payout."
+    },
+    {
+      "id": "RC4",
+      "text": "For both Scenario A and Scenario B, the job prints the hub's challenge transaction, the final payout amount, and a line stating whether the scenario's check passed."
+    },
+    {
+      "id": "RC5",
+      "text": "For Scenario A, the job additionally prints the watcher's response transaction and how many seconds it took the watcher to respond."
+    },
+    {
+      "id": "RC6",
+      "text": "The gate job armada-watchtower-e2e exits 0 after it has printed a recorded challenge transaction for both Scenario A and Scenario B."
+    }
+  ],
+  "goal": "Build and verify the armada-watchtower-e2e fixturenet gate job, which prints observable, checkable evidence that a timely watcher response lets a newer channel state defeat a stale force-close, and that losing the watcher loses that advantage, per docs/tasks/E15-watchtower-response.md (Scenarios A and B).",
+  "acceptance_criteria": [
+    "When Scenario A finishes, the watcher is shown as active and the amount the user is finally paid is clearly the larger amount tied to the newer signed state, not the smaller amount tied to the older one.",
+    "When Scenario B finishes with the watcher turned off, no watcher response transaction appears, and the amount the user is finally paid is clearly the smaller amount tied to the older signed state, not the larger one.",
+    "The amount paid out in Scenario A is clearly higher than the amount paid out in Scenario B, showing the watcher's presence is what changes the outcome.",
+    "For both scenarios, the printed output shows the transaction the hub used to open its challenge, the final payout amount, and a line stating whether the scenario's check passed.",
+    "For Scenario A, the printed output shows the transaction the watcher used to respond and how long the watcher took to respond.",
+    "The job finishes without error, and its output shows that a challenge transaction was recorded for both Scenario A and Scenario B."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "When Scenario A finishes, the watcher is shown as active and the amount the user is finally paid is clearly the larger amount tied to the newer signed state, not the smaller amount tied to the older one."
+    },
+    {
+      "id": "c2",
+      "text": "When Scenario B finishes with the watcher turned off, no watcher response transaction appears, and the amount the user is finally paid is clearly the smaller amount tied to the older signed state, not the larger one."
+    },
+    {
+      "id": "c3",
+      "text": "The amount paid out in Scenario A is clearly higher than the amount paid out in Scenario B, showing the watcher's presence is what changes the outcome."
+    },
+    {
+      "id": "c4",
+      "text": "For both scenarios, the printed output shows the transaction the hub used to open its challenge, the final payout amount, and a line stating whether the scenario's check passed."
+    },
+    {
+      "id": "c5",
+      "text": "For Scenario A, the printed output shows the transaction the watcher used to respond and how long the watcher took to respond."
+    },
+    {
+      "id": "c6",
+      "text": "The job finishes without error, and its output shows that a challenge transaction was recorded for both Scenario A and Scenario B."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "When Scenario A finishes, the watcher is shown as active and the amount the user is finally paid is clearly the larger amount tied to the newer signed state, not the smaller amount tied to the older one.",
+      "proves": "Proves that when the watcher answers in time, the participant holding the newer channel state keeps that state's larger payout.",
+      "restatement_clause_id": "RC1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "scenario_a.watcher_enabled",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "scenario_a.payout_lamports",
+          "observe": "stdout_json",
+          "op": "gt",
+          "value": 1500000
+        },
+        {
+          "field": "scenario_a.payout_lamports",
+          "observe": "stdout_json",
+          "op": "le",
+          "value": 2000000
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "description": "When Scenario B finishes with the watcher turned off, no watcher response transaction appears, and the amount the user is finally paid is clearly the smaller amount tied to the older signed state, not the larger one.",
+      "proves": "Proves that without an active watcher, the hub's stale challenge stands and the participant is paid only the older state's smaller amount.",
+      "restatement_clause_id": "RC2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "scenario_b.watcher_enabled",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "field": "scenario_b.response_tx",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": ""
+        },
+        {
+          "field": "scenario_b.payout_lamports",
+          "observe": "stdout_json",
+          "op": "lt",
+          "value": 1500000
+        },
+        {
+          "field": "scenario_b.payout_lamports",
+          "observe": "stdout_json",
+          "op": "gt",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "description": "The amount paid out in Scenario A is clearly higher than the amount paid out in Scenario B, showing the watcher's presence is what changes the outcome.",
+      "proves": "Proves the watcher's timely response, not some unrelated factor, causes the participant to receive the larger payout.",
+      "restatement_clause_id": "RC3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "scenario_a.payout_lamports",
+          "observe": "stdout_json",
+          "op": "gt",
+          "value": 1500000
+        },
+        {
+          "field": "scenario_b.payout_lamports",
+          "observe": "stdout_json",
+          "op": "lt",
+          "value": 1500000
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "description": "For both scenarios, the printed output shows the transaction the hub used to open its challenge, the final payout amount, and a line stating whether the scenario's check passed.",
+      "proves": "Proves the job reports the evidence a person would need to see the challenge and its outcome for both scenarios.",
+      "restatement_clause_id": "RC4",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "scenario_a.challenge_tx",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_b.challenge_tx",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_a.check_line",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_b.check_line",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "description": "For Scenario A, the printed output shows the transaction the watcher used to respond and how long the watcher took to respond.",
+      "proves": "Proves the job reports the watcher's response and its timing, so a person can confirm the response happened inside the dispute window.",
+      "restatement_clause_id": "RC5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "scenario_a.response_tx",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_a.response_latency_seconds",
+          "observe": "stdout_json",
+          "op": "ge",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "description": "The job finishes without error, and its output shows that a challenge transaction was recorded for both Scenario A and Scenario B.",
+      "proves": "Proves the job actually completed both scenarios rather than exiting cleanly without doing the work.",
+      "restatement_clause_id": "RC6",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "exit_code",
+          "observe": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "scenario_a.challenge_tx",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_b.challenge_tx",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-watchtower-e2e.py"
+  ]
+}
