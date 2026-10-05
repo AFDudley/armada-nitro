@@ -1,0 +1,4 @@
+# Runtime artifacts written by scenario.sh/helper.ts each run.
+held-state.json
+challenge.json
+.watcher-out

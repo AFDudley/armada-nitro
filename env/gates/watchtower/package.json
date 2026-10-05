@@ -1,0 +1,9 @@
+{
+  "name": "armada-nitro-watchtower",
+  "private": true,
+  "devDependencies": {
+    "ethers": "^6.12.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.2"
+  }
+}
