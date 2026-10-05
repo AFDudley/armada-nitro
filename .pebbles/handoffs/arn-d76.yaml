@@ -1,0 +1,52 @@
+status: completed
+pebble_id: arn-d76
+summary: >
+  Built the armada-watchtower-e2e fixturenet gate (docs/tasks/E15-watchtower-response.md,
+  Scenarios A and B). env/gates/watchtower/prepare.ts (a parameterized hardhat sibling of
+  env/gates/nitro-e2e/prepare.ts) builds a real Groth16-proved depositFromNote deposit for two
+  channels (one per scenario), fully funded by the user. script/WatchtowerScenario.s.sol runs
+  the on-chain scenario between two plain EOA participants (deliberately not the shared
+  HubCustodian/FROST delegate, which is orthogonal to E15's actual ForceMove dispute/response
+  claim and whose current group-key state on this shared fixturenet would have made the gate
+  depend on another ticket's unrelated state): the hub challenges with a stale, co-signed state
+  N; scenario A's watcher answers with the newer, final, fully-signed state N+1 via
+  concludeAndTransferAllAssets (a single transaction that finalizes and pays out immediately,
+  which ForceMove.sol's _conclude allows regardless of an outstanding challenge -- a simpler and
+  faster, equally valid response than checkpoint+later-settle); scenario B gets no response and
+  settles the stale state N once the window elapses. Payouts are read from the Shield logs.
+  stack/scripts/armada-watchtower-e2e.py is the declared new entrypoint: it stages a repo-local
+  copy of the manifest/keys (forge's fs_permissions only allows "./deployments" and "/env", not
+  an arbitrary host path), builds both deposits, runs both scenarios via the forge script,
+  extracts tx hashes from forge's broadcast JSON and response latency from on-chain block
+  timestamps (cast receipt/block), and prints one JSON object with each scenario's
+  watcher_enabled, challenge_tx, response_tx, response_latency_seconds, payout_lamports and
+  check_line (narration goes to stderr, matching env/gates/hub-custodian-frost/verify.py's
+  convention). stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml wraps it as the gate
+  job; it and a matching deployment.yml jobs-list entry are also installed into the
+  operator-managed deployment (~/deployments/armada-fixturenet-e12) so `laconic-so deployment
+  run-job armada-watchtower-e2e` works. Verified by running the exact acceptance-spec invocation
+  against the live fixturenet three times (once after discovering and fixing two real bugs: a
+  channelId mismatch between the deposit script and the scenario script, and an off-by-one in
+  the Shield-log scan's start block that let scenario A's payout note leak into scenario B's
+  scan) -- the final, post-mypy-fix, committed script run: exit 0, scenario_a.payout_lamports =
+  1990000 (state N+1's 2000000 net of the pool's 50bps shield fee, > 1.5M midpoint, <= 2M),
+  scenario_a.response_tx and response_latency_seconds present, scenario_b.watcher_enabled =
+  false, response_tx = "", payout_lamports = 995000 (state N's 1000000 net of the fee, < 1.5M, >
+  0); all six of the spec's acceptance_tests clauses checked programmatically against the output
+  and pass. E15c's negative cases (watcher answers with a user-only-signed state; watcher
+  answers after the window) are out of scope per the brief and this ticket's acceptance
+  criteria.
+cost: "~140k tokens"
+commits:
+  - "a4fe94b"
+verify_transcript:
+  hooks:
+    - name: spec-acceptance-run
+      outcome: passed
+      duration_s: 57
+e2e_gate:
+  spec: contracts/specs/derived-arn-d76.spec.json
+  command: "python3 stack/scripts/armada-watchtower-e2e.py --state-n-allocation-lamports 1000000 --state-n-plus1-allocation-lamports 2000000"
+  result: passed
+  ran_at_sha: "a4fe94b"
+  mocks_in_path: false
