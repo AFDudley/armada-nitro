@@ -1,0 +1,40 @@
+services:
+  armada-watchtower-e2e:
+    image: cerc/armada-nitro-env:local
+    # Host networking: lib/sdk/chain-config.ts's merkle-tree scan (used by
+    # env/gates/watchtower/prepare.ts, the same as env/gates/nitro-e2e/prepare.ts) hardcodes the
+    # RPC for chain 31337 to http://localhost:8545 -- see docker-compose-armada-nitro-e2e.yml for
+    # the identical reasoning.
+    network_mode: host
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Gates spend test-account USDC (shields, channel deposits); top the accounts back up to
+        # the funding target first (funding.py mints only the shortfall).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc http://127.0.0.1:8545 \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (docs/tasks/E9-operability.md); verify rather than
+        # download -- see docker-compose-armada-nitro-e2e.yml for the same step.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        exec python3 stack/scripts/armada-watchtower-e2e.py \
+          --state-n-allocation-lamports "$$STATE_N_ALLOCATION_LAMPORTS" \
+          --state-n-plus1-allocation-lamports "$$STATE_N_PLUS1_ALLOCATION_LAMPORTS"
+    environment:
+      ARMADA_STATE_DIR: /env
+      ARMADA_RPC_URL: http://127.0.0.1:8545
+      ARMADA_POC_DIR: /src/armada-poc
+      DEPLOYER_KEY: ${DEPLOYER_KEY:-}
+      CHALLENGE_DURATION_SECONDS: ${CHALLENGE_DURATION_SECONDS:-20}
+      STATE_N_ALLOCATION_LAMPORTS: ${STATE_N_ALLOCATION_LAMPORTS:-1000000}
+      STATE_N_PLUS1_ALLOCATION_LAMPORTS: ${STATE_N_PLUS1_ALLOCATION_LAMPORTS:-2000000}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:

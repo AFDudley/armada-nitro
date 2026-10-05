@@ -14,6 +14,7 @@ out/
 
 # Local-chain deployment artifacts
 /deployments/31337*
+/deployments/watchtower-e2e*
 
 # forge-generated linking helpers
 /foundry-pp/

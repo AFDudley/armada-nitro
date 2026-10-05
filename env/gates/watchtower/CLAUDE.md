@@ -41,3 +41,20 @@ directly on the host.
 
 `held-state.json`/`challenge.json`/`.watcher-out` are per-run scratch files
 (gitignored), not committed state.
+
+E15b adds the payout gate (docs/tasks/E15-watchtower-response.md): a participant holding a newer
+co-signed state defeats a stale force-close if its watcher answers within the dispute window, and
+loses that advantage if the watcher is off.
+
+- `prepare.ts` — stage 1: real-proof deposit builder (Groth16-proved
+  `depositFromNote` unshield), for two channels (one per scenario), run via
+  `npx hardhat run` from `/src/armada-poc` (same pattern as
+  `env/gates/nitro-e2e/prepare.ts`). Parameterized by `DEPOSIT_AMOUNT_UNITS`
+  (base units, the user funds the whole channel).
+
+The on-chain scenario itself is `script/WatchtowerScenario.s.sol` (challenge,
+response/settlement, Shield-log payout read); the orchestrator that runs both
+scenarios end to end and prints the gate's JSON result is
+`stack/scripts/armada-watchtower-e2e.py`. The compose job wrapper is
+`stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml` (job name
+`armada-watchtower-e2e`).
