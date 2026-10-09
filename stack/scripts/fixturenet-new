@@ -60,18 +60,13 @@ wait_for_blocks() {
   return 1
 }
 
-# The full target's armada_nitro module reads the hub custodian's FROST group key
-# from group-pubkey.json in its state dir (/env). Write it from frost-signer's
-# deterministic trusted-dealer keygen -- the same group the custodian e2e gate signs
-# with -- so the full reconcile can deploy the custodian.
-install_group_key() {
-  local bin="${REPO_ROOT}/target/release/frost-signer" tmp
-  [ -x "$bin" ] || cargo build -q --release -p frost-signer --manifest-path "${REPO_ROOT}/Cargo.toml"
-  tmp=$(mktemp -d)
-  "$bin" keygen --out "$tmp" >/dev/null
-  sudo cp "${tmp}/group-pubkey.json" "${DEP}/data/armada_env/group-pubkey.json"
-  rm -rf "$tmp"
-  echo "fixturenet-new: installed FROST group key into armada_env"
+# Runs the armada-frost-keygen job (arn-1be) instead of the host-side FROST keygen
+# + sudo cp that 8f59884 added (install_group_key). The job keygens the 2-of-3 FROST
+# group (default seed) into the deployment's state dir (/env), where the full target's
+# armada_nitro module reads the group key, so the full reconcile can deploy the custodian.
+run_frost_keygen() {
+  echo "fixturenet-new: generating the 2-of-3 FROST group key via the job ..."
+  "$LACONIC" deployment --dir "$DEP" run-job armada-frost-keygen
 }
 
 run_reconcile() {  # run_reconcile <label> [RECONCILER_TARGET-in-container]
@@ -143,7 +138,7 @@ if [ "$MODE" = warm ]; then
   "$LACONIC" deployment --dir "$DEP" start
   wait_for_blocks
   tf=$(now)
-  install_group_key
+  run_frost_keygen
   run_reconcile full
   echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
 else
@@ -168,7 +163,7 @@ else
   echo "fixturenet-new: snapshot took $(secs $(($(now)-ts)))"
   wait_for_blocks   # the snapshot stopped/restarted the chain
   tf=$(now)
-  install_group_key
+  run_frost_keygen
   run_reconcile full
   echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
 fi

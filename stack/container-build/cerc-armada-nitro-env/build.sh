@@ -45,6 +45,10 @@ while read -r name; do
   docker build --target "src-${name}" -t "cerc/armada-nitro-env-src-${name}:local" "${common[@]}"
 done < <(jq -r '.sources[].name' "$LOCK")
 docker build --target circuits -t cerc/armada-nitro-env-circuits:local "${common[@]}"
+# Tag the frost-signer stage (the 2-of-3 FROST tool, arn-1be) so its image ID is
+# readable; the final image below copies the built binary into /usr/local/bin.
+docker build --target frost-signer -t cerc/armada-nitro-env-frost-signer:local "${common[@]}"
+
 
 # The final image.
 docker build -t cerc/armada-nitro-env:local "${common[@]}"

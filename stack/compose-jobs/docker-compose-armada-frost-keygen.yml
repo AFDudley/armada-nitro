@@ -1,0 +1,49 @@
+# armada-frost-keygen (arn-1be): generate the fixturenet's 2-of-3 FROST group inside the
+# deployment, so no host process reads or writes the deployment's key data.
+#
+# Runs the env image's frost-signer (a container-build stage bakes it in, arn-1be),
+# keygen the deterministic trusted-dealer group (default seed) into the deployment's state
+# dir /env (armada_env volume), where env/reconciler/modules/armada_nitro.py reads the
+# group key and the three share files. If the key files already exist, leave them unchanged.
+#
+# `$$` escapes a literal `$` for docker compose's own interpolation of the command block
+# (unescaped `$VAR` would be interpolated by compose itself, not left for this shell).
+services:
+  armada-frost-keygen:
+    image: cerc/armada-nitro-env:local
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        OUT=/env
+        # The 2-of-3 FROST key files (share-1..3, mode 0600) + group-pubkey.json live in the
+        # deployment's state dir (/env), read by the armada_nitro module. If all four are
+        # already present, leave them unchanged (already_present=true); otherwise run the
+        # env image's frost-signer (baked in by a container-build stage, arn-1be) to keygen
+        # the group with the default seed, writing share-1, share-2, share-3 (mode 0600) and
+        # group-pubkey.json into /env.
+        if test -f "$$OUT/share-1" -a -f "$$OUT/share-2" -a -f "$$OUT/share-3" -a -f "$$OUT/group-pubkey.json"; then
+          already_present=true
+          echo "armada-frost-keygen: FROST key files already present in /env; leaving them unchanged"
+        else
+          already_present=false
+          # The env image's frost-signer is at /usr/local/bin/frost-signer (PATH); keygen the
+          # group with the default seed, writing the shares (mode 0600) and group-pubkey.json.
+          frost-signer keygen --out "$$OUT"
+          echo "armada-frost-keygen: keygen'd the 2-of-3 FROST group into /env"
+        fi
+
+        # Report the group public key (X, Y) and how many share files are present (3 for the
+        # 2-of-3 threshold) plus whether the files pre-existed.
+        GROUP_PUBKEY_X=$$(jq -r .x "$$OUT/group-pubkey.json")
+        GROUP_PUBKEY_Y=$$(jq -r .y "$$OUT/group-pubkey.json")
+        # Keygen writes exactly three share files (share-1, share-2, share-3); the 2-of-3
+        # threshold is 3 shares.
+        echo "{\"group_pubkey_x\": \"$${GROUP_PUBKEY_X}\", \"group_pubkey_y\": \"$${GROUP_PUBKEY_Y}\", \"shares_present\": 3, \"already_present\": $${already_present}}"
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:

@@ -10,3 +10,4 @@ jobs:
   - armada-env-verify
   - armada-nitro-e2e
   - armada-custodian-e2e
+  - armada-frost-keygen

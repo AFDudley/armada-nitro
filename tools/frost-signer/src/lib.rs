@@ -9,6 +9,8 @@
 //! share-3, and group-pubkey.json. The group secret scalar is never written to disk.
 
 use std::collections::BTreeMap;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use frost_secp256k1_evm as frost;
@@ -57,10 +59,13 @@ pub fn keygen_into(out_dir: &Path, seed: u64) -> Result<(), Error> {
         let hex = format!("0x{}", hex::encode(&serialized));
         let path = out_dir.join(format!("share-{share_index}"));
         std::fs::write(
-            path,
+            &path,
             json::to_string_pretty(&ShareFile { key_package: hex }).unwrap() + "\n",
         )
         .unwrap();
+        // Each share file holds a secret key share; restrict it to the owner (arn-1be).
+        #[cfg(unix)]
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         share_index += 1;
     }
 

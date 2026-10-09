@@ -173,6 +173,32 @@ COPY test /src/armada-nitro/test
 COPY lib /src/armada-nitro/lib
 RUN set -e && cd /src/armada-nitro && forge build
 
+# ============================ frost-signer ==================================
+# Build the 2-of-3 FROST tool (tools/frost-signer) into the env image at
+# /usr/local/bin/frost-signer, so the armada-frost-keygen job can run `frost-signer keygen`
+# inside the deployment without a host bind mount (arn-1be). The repo's Cargo.lock is
+# v4, so the stage uses rustup's current stable toolchain (bookworm's apt cargo 0.66/Rust
+# 1.63 cannot parse the v4 lock file).
+FROM toolchain AS frost-signer
+RUN set -e \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends curl ca-certificates
+RUN set -e \
+  && curl -sSf https://sh.rustup.rs | sh -s -- -y
+# A C linker (gcc) plus the C runtime start files (libc6-dev's crt1.o/crti.o/crtn.o)
+# are required to link the Rust binary.
+RUN set -e \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends gcc libc6-dev
+# rustup's rust-lld (the default linker) does not search Debian's multilib library path;
+# use the system gcc as the linker instead, which finds the C libraries (libc, libm,
+# libpthread, librt, libdl, crtn.o) in /usr/lib/x86_64-linux-gnu via its own search paths.
+ENV RUSTFLAGS=-Clinker=gcc
+COPY . /src/armada-nitro
+RUN set -e && cd /src/armada-nitro \
+  && /root/.cargo/bin/cargo build --release -p frost-signer \
+  && cp target/release/frost-signer /usr/local/bin/frost-signer
+
 # ============================ final image ==================================
 FROM toolchain AS final
 
@@ -218,6 +244,9 @@ RUN git config --system "url.file:///src/community-staking-module.insteadOf" \
 # This repository (env/, stack/, the real env/sources.lock.json, ...), then the
 # contracts build output and the circuits on top.
 COPY . /src/armada-nitro
+# The env image's 2-of-3 FROST tool (tools/frost-signer) at a fixed PATH location so the
+# armada-frost-keygen job runs it inside the deployment (arn-1be).
+COPY --from=frost-signer /usr/local/bin/frost-signer /usr/local/bin/frost-signer
 COPY --from=contracts /src/armada-nitro/out   /src/armada-nitro/out
 COPY --from=contracts /src/armada-nitro/cache /src/armada-nitro/cache
 COPY --from=circuits  /src/armada-circuits    /src/armada-circuits
