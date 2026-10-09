@@ -1,0 +1,36 @@
+status: completed
+pebble_id: arn-1be
+summary: >
+  Added a laconic-so job (armada-frost-keygen, stack/compose-jobs/docker-compose-armada-frost-keygen.yml,
+  registered in the armada-nitro-fixturenet stack) that mounts armada_env:/env and runs frost-signer keygen
+  with the default seed inside the deployment, writing share-1..3 (mode 0600, set by frost-signer's
+  keygen_into itself) and group-pubkey.json into /env where env/reconciler/modules/armada_nitro.py reads
+  them, leaving them unchanged if already present; frost-signer is compiled into the env image by a new
+  container-build stage (rustup's stable toolchain + system gcc linker, since the repo's Cargo.lock v4
+  needs a newer cargo than bookworm's apt package and rust-lld cannot find Debian's multilib C runtime),
+  not mounted from the host. Added scripts/run-frost-keygen-check.py, which runs the job on the
+  operator-managed E12 fixturenet via laconic-so run-job (copying the job's compose file into E12's
+  compose-jobs only if missing -- otherwise it touches the deployment solely through run-job and a
+  geth-RPC cast call, never its data directory), reads the hub custodian's on-chain group key, and prints
+  one JSON line with the job's four fields plus custodian_group_key_matches. stack/scripts/fixturenet-new
+  now calls the job (run_frost_keygen) before the full reconcile in place of the deleted install_group_key
+  and its host-side frost-signer build + sudo cp. Verified by rebuilding cerc/armada-nitro-env:local with
+  the new stage and running scripts/run-frost-keygen-check.py against the live E12 deployment: it printed
+  the exact required JSON (group_pubkey_x/y, shares_present=3, custodian_group_key_matches=true) on a
+  fresh run and already_present=true on a rerun (idempotent, exit 0 both times); grep_absent checked by
+  hand on all four required (file, pattern) pairs; ran frost-signer's cargo test suite (10 passed) after
+  the mode-0600 change.
+cost: "~140k tokens"
+commits:
+  - "7433116"
+verify_transcript:
+  hooks:
+    - name: pre-commit (full suite)
+      outcome: passed
+      duration_s: 2
+e2e_gate:
+  spec: contracts/specs/derived-arn-1be.spec.json
+  command: python3 scripts/run-frost-keygen-check.py
+  result: passed
+  ran_at_sha: "7433116"
+  mocks_in_path: false
