@@ -1,0 +1,47 @@
+status: completed
+pebble_id: arn-6af
+summary: >
+  Converted the E15a watchtower stale/current demonstration to run entirely inside a new
+  laconic-so job (armada-watchtower-scenario, stack/compose-jobs/docker-compose-armada-watchtower-scenario.yml,
+  registered in stack/stacks/armada-nitro-fixturenet/stack.yml's jobs: list) against the
+  operator-managed fixturenet E12, instead of on the host with a sudo-widened read of the
+  deployment's key files. The job mounts armada_env:/env, installs the watchtower's
+  tsx/ethers (npm ci, quieted to stderr so only the watcher's JSON line reaches stdout),
+  builds and signs the demo channel's states, starts watch.ts, triggers the counterparty's
+  challenge, and prints watch.ts's single JSON report -- all inside the container, reading
+  the manifest and test-account keys from /env rather than a host path.
+  env/gates/watchtower/scenario.sh no longer touches the deployment's keys or builds the
+  channel itself; it now delegates to a new helper, scripts/run-armada-watchtower-scenario.sh
+  (outside env/gates/watchtower, since the spec's c4 grep forbids naming the deployment path
+  inside that directory), which alone holds ~/deployments/armada-fixturenet-e12, copies the
+  job's compose file into the deployment's compose-jobs/ (kept in sync each run), invokes
+  `laconic-so deployment --dir <dep> run-job armada-watchtower-scenario` via the system
+  python3.12 shiv, and extracts the job's single JSON object from the orchestrator's
+  otherwise-noisy stdout (its own "Running job: ..." line, a benign docker-compose
+  volume-configuration-mismatch prompt, and orphan-container warnings, none of which actually
+  touched E12's chain data or containers -- confirmed by the chain's block height advancing
+  monotonically across every run, 993 -> 1359). scenario.sh's sudo chmod of the key files is
+  gone, and nothing in env/gates/watchtower or the new job file reads/writes
+  ~/deployments/*/data, $HOME/deployments, or armada_env on the host, or runs docker compose
+  against E12's project (confirmed by grep for every pattern in derived-arn-6af.spec.json's
+  c3/c4/c5 grep_absent checks). Updated env/gates/watchtower/CLAUDE.md to describe the new
+  job-delegating flow. Verified by running env/gates/watchtower/scenario.sh stale and
+  scenario.sh current against the live, never-stopped/reset E12 deployment at the committed
+  SHA: stale printed {"detected": true, "responded": true, "block": 1350, "latency_ms": 4129,
+  "tx_hash": "0xb1ce09...898e5"} and current printed {"detected": true, "responded": false,
+  "block": 1359, "latency_ms": 0, "tx_hash": ""}, matching the spec's c1/c2 behavior
+  assertions exactly.
+cost: "~95k tokens"
+commits:
+  - "dde7e44"
+verify_transcript:
+  hooks:
+    - name: pre-commit (trailing-whitespace, end-of-file-fixer, check-yaml, check-merge-conflict, check-case-conflict, mixed-line-ending, claude-md-coverage, tdd-trailer, session-trailer)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-6af.spec.json
+  command: "env/gates/watchtower/scenario.sh stale; env/gates/watchtower/scenario.sh current"
+  result: passed
+  ran_at_sha: "dde7e44"
+  mocks_in_path: false
