@@ -1,0 +1,50 @@
+status: completed
+pebble_id: arn-752
+summary: >
+  Built the armada-watchtower-e2e fixturenet gate (E15b). The job definition
+  (stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml) is registered
+  in stack/stacks/armada-nitro-fixturenet/stack.yml; it mounts armada_env at
+  /env and runs the scenario inside the job container: the orchestrator
+  (stack/scripts/armada-watchtower-e2e-job.py) builds the two real-proof
+  channel deposits via env/gates/watchtower/prepare.ts, then runs the on-chain
+  scenario (script/WatchtowerScenario.s.sol) for both scenarios, then prints
+  the single JSON line. The thin host runner (stack/scripts/armada-watchtower-
+  e2e.py) calls laconic-so run-job for the job on E12 and relays the job's
+  JSON line unchanged, reaching the deployment only through laconic-so run-job
+  + geth RPC at 127.0.0.1:8545 (never reading/writing the deployment's data
+  files). Verified end to end against the live fixturenet: scenario A (watcher
+  on) pays 1990000 lamports (state N+1's 2000000 net of the 50bps shield
+  fee), scenario B (watcher off) pays 995000 (state N's 1000000 net of the
+  fee); every c4 acceptance field holds, and all six grep clauses (c1 c2 c3
+  c5 c6 c7) pass.
+cost: "~120k tokens (repo/deployment/laconic-so investigation, the job job
+  definition + orchestrator + thin runner, mypy/ruff annotation fixes, and two
+  real gate runs against the live fixturenet E12)."
+commits:
+  - "a1892492ce213b87a598eb8e62034badf591b488"
+verify_transcript:
+  hooks:
+    - name: "pre-commit claude-md-coverage"
+      outcome: passed
+      duration_s: 0.5
+    - name: "pre-commit tdd-trailer"
+      outcome: passed
+      duration_s: 0.5
+    - name: "pre-commit session-trailer"
+      outcome: passed
+      duration_s: 0.3
+    - name: "ruff-format (stack/scripts/armada-watchtower-e2e-job.py)"
+      outcome: passed
+      duration_s: 1.0
+    - name: "mypy (stack/scripts/*.py)"
+      outcome: passed
+      duration_s: 1.5
+    - name: "pre-commit (full hook run, commit a189249)"
+      outcome: passed
+      duration_s: 3.0
+e2e_gate:
+  spec: contracts/specs/derived-arn-752.spec.json
+  command: "python3 stack/scripts/armada-watchtower-e2e.py --state-n-allocation-lamports 1000000 --state-n-plus1-allocation-lamports 2000000"
+  result: passed
+  ran_at_sha: "a1892492ce213b87a598eb8e62034badf591b488"
+  mocks_in_path: false
