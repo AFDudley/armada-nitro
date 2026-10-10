@@ -1,0 +1,61 @@
+# armada-watchtower-e2e (E15b): proves, from a laconic-so job inside the deployment, that a
+# participant holding a newer co-signed channel state defeats a stale force-close when its
+# watcher answers in time (scenario A), and loses that advantage when the watcher is off
+# (scenario B).
+#
+# Runs entirely inside the job:
+#   1. Funds the test accounts (reconciler) and ensures the circuits are fetched.
+#   2. Builds two real-proof channel deposits (env/gates/watchtower/prepare.ts).
+#   3. Runs the on-chain scenario (script/WatchtowerScenario.s.sol) for both scenarios.
+#   4. Prints exactly one JSON line to stdout:
+#        {"scenario_a": {"watcher_enabled": true, "challenge_tx": "0x..", "response_tx": "0x..",
+#                         "response_latency_seconds": <float>, "payout_lamports": <int>,
+#                         "check_line": "..."},
+#         "scenario_b": {"watcher_enabled": false, "challenge_tx": "0x..", "response_tx": "",
+#                         "payout_lamports": <int>, "check_line": "..."}}
+#
+# All state/keys come from the mounted armada_env volume at /env (RC2); the job reaches the
+# deployment only through geth RPC at 127.0.0.1:8545 (network_mode host), never by reading or
+# writing files under the deployment's own data directory (RC7). The job needs no elevated
+# privileges and no file-ownership changes (RC5).
+services:
+  armada-watchtower-e2e:
+    image: cerc/armada-nitro-env:local
+    # Host networking so 127.0.0.1:8545 resolves to geth's host-published port ($$ escapes a
+    # literal $ from the orchestrator's own template interpolation).
+    network_mode: host
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Fund the test accounts (reconciler mints only the shortfall).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (docs/tasks/E9-operability.md); verify rather than
+        # download -- see docker-compose-armada-nitro-e2e.yml for the same step.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # Run the job's orchestrator: builds the two channel deposits (prepare.ts), runs the
+        # on-chain scenario for scenario A (watcher answers in time) and scenario B (watcher off,
+        # window elapses, stale state settles), then prints the single JSON line to stdout.
+        exec python3 /src/armada-nitro/stack/scripts/armada-watchtower-e2e-job.py
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/watchtower-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      STATE_N_USER: ${STATE_N_USER:-1000000}
+      STATE_N1_USER: ${STATE_N1_USER:-2000000}
+      HUB_RESERVE: ${HUB_RESERVE:-50000}
+    volumes:
+      - armada_env:/env
+      - /home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-752/stack/scripts/armada-watchtower-e2e-job.py:/src/armada-nitro/stack/scripts/armada-watchtower-e2e-job.py
+      - /home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-752/script/WatchtowerScenario.s.sol:/src/armada-nitro/script/WatchtowerScenario.s.sol
+      - /home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-752/env/gates/watchtower/prepare.ts:/src/armada-nitro/env/gates/watchtower/prepare.ts
+
+volumes:
+  armada_env:

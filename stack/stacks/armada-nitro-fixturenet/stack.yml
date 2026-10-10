@@ -12,3 +12,4 @@ jobs:
   - armada-custodian-e2e
   - armada-frost-keygen
   - armada-watchtower-scenario
+  - armada-watchtower-e2e
