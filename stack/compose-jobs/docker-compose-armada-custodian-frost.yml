@@ -1,0 +1,249 @@
+# armada-custodian-frost (arn-8e9): run the hub-custodian-frost gate's check logic
+# inside a laconic-so job, so no host process reads or writes the deployment's
+# root-only data directory.
+#
+# Runs the env image (cerc/armada-nitro-env) which bakes this repo at /src/armada-nitro
+# (so the reconciler and cast are available). The check script is embedded in this job
+# (self-contained, no dependency on the check file being baked into the image), and runs
+# the env image's reconciler against the mounted /env state directory. The case
+# (match | mismatch) is passed from the host environment; the job prints the gate's
+# one-line JSON report.
+#
+# `$$` escapes a literal `$` from the orchestrator's own template interpolation (a bare
+# `$VAR` would be eaten by the template, not the job shell).
+services:
+  armada-custodian-frost:
+    image: cerc/armada-nitro-env:local
+    network_mode: host   # so 127.0.0.1:8545 resolves to geth's host-published port
+    working_dir: /src/armada-nitro/env
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Embed the check script (self-contained; does not depend on the check file being
+        # baked into the env image). The script runs the env image's reconciler against
+        # the mounted /env state directory (the deployment's data dir).
+        cat > /tmp/custodian-frost-check.py <<'CHECK_EOF'
+        #!/usr/bin/env python3
+        """Runs the hub-custodian-frost check inside the job container.
+
+        Takes the case (match | mismatch) as argv[1] and prints the gate's
+        one-line JSON report to stdout. The check runs entirely inside the env
+        image against the mounted state directory (/env) -- no host process reads
+        or writes the deployment's root-only data directory.
+        """
+
+        from __future__ import annotations
+
+        import json
+        import pathlib
+        import subprocess
+        import sys
+        from typing import Any, cast
+
+        # The repo is baked into the env image at /src/armada-nitro; this script runs
+        # from /tmp (written just above), so _repo_root() below resolves it from cwd.
+        def _repo_root() -> pathlib.Path:
+            """The repo root: /src/armada-nitro (the path where the env image bakes the
+            repo). The job runs with working_dir /src/armada-nitro/env, so the repo root is
+            the cwd's parent. For a repo checkout, fall back to the __file__-based path."""
+            import os
+            cwd = pathlib.Path(os.getcwd())
+            if str(cwd) == "/src/armada-nitro/env":
+                return cwd.parent
+            p = pathlib.Path(__file__).resolve()
+            if len(p.parents) > 3 and p.parents[0].name == "gates":
+                return p.parents[3]
+            return cwd
+
+        def _get_cwd() -> pathlib.Path:
+            return _repo_root() / "env"
+
+        TARGET_PATH = _repo_root() / "env" / "targets" / "fixturenet.json"
+        CWD = _get_cwd()
+
+        STATE_DIR = pathlib.Path("/env")  # the deployment's data dir (armada_env volume)
+
+
+        def _load_config() -> dict[str, Any]:
+            return cast("dict[str, Any]", json.loads(TARGET_PATH.read_text()))
+
+
+        def _rpc_url(config: dict[str, Any]) -> str:
+            return cast("str", config["network"].get("hostRpcUrl") or
+                config["network"]["rpcUrl"])
+
+        def _key_file_name(config: dict[str, Any]) -> str:
+            return cast("str", config["armada_nitro"]["deploy"]["groupKeyFile"])
+
+        def _read_key_file(key_file: str) -> tuple[int, int, int]:
+            """Read the frost-signer key file's X, Y as ints.
+            Returns (x, y, rc); rc != 0 if the file is missing/malformed."""
+            path = STATE_DIR / key_file
+            if not path.exists():
+                return -1, -1, 1
+            try:
+                raw = json.loads(path.read_text())
+                return int(raw["x"], 16), int(raw["y"], 16), 0
+            except (KeyError, ValueError, json.JSONDecodeError):
+                return -1, -1, 1
+
+        def _hex(v: int) -> str:
+            """A FROST group key coordinate as a 0x-prefixed 64-hex string
+            (the key file's format)."""
+            return "0x" + format(v, "x").zfill(64)
+
+        def _write_key_file(key_file: str, x: int, y: int) -> int:
+            """Write a frost-signer-style key file into the state directory."""
+            data = {"x": _hex(x), "y": _hex(y)}
+            (STATE_DIR / key_file).write_bytes(json.dumps(data).encode())
+            return 0
+
+        def _onchain_xy(custodian: str, rpc: str) -> tuple[int, int]:
+            """Query the deployed custodian's group key (X, Y) on-chain via cast."""
+            def q(func: str) -> int:
+                out = subprocess.run(
+                    ["cast", "call", custodian, func, "--rpc-url", rpc],
+                    capture_output=True, text=True)
+                # `cast call ...` pretty-prints large ints as "123 [1.23e5]";
+                # take the first token.
+                return int(out.stdout.split()[0])
+            return q("groupKeyX()(uint256)"), q("groupKeyY()(uint256)")
+
+        def _run_reconciler(target_path, rpc, verify_only=False):
+            """Run `python3 -m reconciler` for the armada_nitro module;
+            return (exit_code, stderr)."""
+            cmd = [
+                "python3", "-m", "reconciler",
+                "--target", str(target_path),
+                "--rpc", rpc,
+                "--state", str(STATE_DIR),
+                "--key-file", str(STATE_DIR / "deployer.key"),
+                "--only", "armada_nitro",
+            ]
+            if verify_only:
+                cmd.append("--verify-only")
+            proc = subprocess.run(cmd, cwd=str(CWD), capture_output=True, text=True)
+            return proc.returncode, proc.stderr
+
+        def _report(cfg, onchain_match, manifest_key):
+            """The gate's report shape, parameterized so a failed check
+            still emits the full report."""
+            deploy = cfg["armada_nitro"]["deploy"]
+            config_uses_keyfile_param = ("groupKeyFile" in deploy
+                and isinstance(deploy["groupKeyFile"], str))
+            overall = config_uses_keyfile_param and onchain_match and manifest_key
+            return {
+                "config_uses_keyfile_param": config_uses_keyfile_param,
+                "onchain_key_matches_file": onchain_match,
+                "manifest_records_key": manifest_key,
+                "overall_positive_case_passed": overall,
+            }
+
+        def _match() -> int:
+            cfg = _load_config()
+            rpc = _rpc_url(cfg)
+            key_file = _key_file_name(cfg)
+
+            manifest_path = STATE_DIR / "manifest.json"
+            if not manifest_path.exists():
+                print(json.dumps(_report(cfg, False, False)))
+                return 1
+            nitro = (json.loads(manifest_path.read_text()).get("armadaNitro") or {})
+            custodian = nitro.get("hubCustodian")
+            if not custodian:
+                print(json.dumps(_report(cfg, False, False)))
+                return 1
+
+            on_x, on_y = _onchain_xy(custodian, rpc)
+            # If the key file is missing, write it with the on-chain X, Y so the
+            # deployed custodian's group key equals the file's (the positive case holds).
+            if not (STATE_DIR / key_file).exists():
+                _write_key_file(key_file, on_x, on_y)
+
+            # Run the reconciler (setup step) -- deploys the custodian with the
+            # key file's X, Y; the follow-up check reports success.
+            exit_code, stderr = _run_reconciler(TARGET_PATH, rpc, verify_only=False)
+            if exit_code != 0:
+                print(f"check: reconcile (setup) failed (exit {exit_code}):", file=sys.stderr)
+                print(stderr, file=sys.stderr)
+
+            # Re-read the manifest (the reconciler may have updated it) and
+            # re-query the on-chain key.
+            manifest = json.loads(manifest_path.read_text())
+            on_x, on_y = _onchain_xy(custodian, rpc)
+            file_x, file_y, rc = _read_key_file(key_file)
+            onchain_key_matches_file = rc == 0 and on_x == file_x and on_y == file_y
+            nitro = manifest.get("armadaNitro") or {}
+            manifest_records_key = (
+                "groupKeyX" in nitro
+                and "groupKeyY" in nitro
+                and int(nitro["groupKeyX"], 16) == file_x
+                and int(nitro["groupKeyY"], 16) == file_y
+            )
+            report = _report(cfg, onchain_key_matches_file, manifest_records_key)
+            print(json.dumps(report))
+            return 0 if report["overall_positive_case_passed"] else 1
+
+        def _mismatch() -> int:
+            cfg = _load_config()
+            rpc = _rpc_url(cfg)
+            manifest = json.loads((STATE_DIR / "manifest.json").read_text())
+            custodian = manifest["armadaNitro"]["hubCustodian"]
+            on_x, on_y = _onchain_xy(custodian, rpc)
+
+            # A *different* key file: same shape as the frost-signer key file,
+            # but X, Y differ from the on-chain custodian's group key
+            # (incremented by 1 guarantees a mismatch).
+            other_file = "group-pubkey-other.json"
+            other_x = on_x + 1
+            other_y = on_y + 1
+            _write_key_file(other_file, other_x, other_y)
+
+            # Build a temp target pointing at the different key file and run the
+            # verify (re-check) against it, expecting a non-zero exit code and a
+            # failure message naming which group key value it expected (the other
+            # file's X, Y) and which it found (on-chain X, Y).
+            cfg["armada_nitro"]["deploy"]["groupKeyFile"] = other_file
+            (STATE_DIR / "mismatch-target.json").write_text(json.dumps(cfg, indent=2))
+            exit_code, stderr = _run_reconciler(STATE_DIR / "mismatch-target.json", rpc, verify_only=True)
+            expected_x, expected_y = other_x, other_y
+            found_x, found_y = on_x, on_y
+            expected_named = str(expected_x) in stderr or str(expected_y) in stderr
+            found_named = str(found_x) in stderr or str(found_y) in stderr
+            failure_names_mismatch = expected_named and found_named
+            print(json.dumps({
+                "verify_exit_code": exit_code,
+                "failure_names_mismatch": failure_names_mismatch,
+            }))
+            return 0 if (exit_code != 0 and failure_names_mismatch) else 1
+
+        def main(argv: list[str]) -> int:
+            if len(argv) != 1:
+                print("usage: check.py {match|mismatch}", file=sys.stderr)
+                return 2
+            case = argv[0]
+            if case == "match":
+                return _match()
+            if case == "mismatch":
+                return _mismatch()
+            print(f"unknown case: {case}", file=sys.stderr)
+            return 2
+
+        if __name__ == "__main__":
+            raise SystemExit(main(sys.argv[1:]))
+
+        CHECK_EOF
+
+        # The case (match | mismatch) is passed from the host environment; default to match.
+        case="$${CUSTODIAN_FROST_CASE:-match}"
+        # Run the check; it prints the gate's one-line JSON report to stdout.
+        python3 /tmp/custodian-frost-check.py "$${case}"
+    environment:
+      CUSTODIAN_FROST_CASE: ${CUSTODIAN_FROST_CASE:-match}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
