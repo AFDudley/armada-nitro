@@ -53,9 +53,6 @@ services:
       HUB_RESERVE: ${HUB_RESERVE:-50000}
     volumes:
       - armada_env:/env
-      - /home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-752/stack/scripts/armada-watchtower-e2e-job.py:/src/armada-nitro/stack/scripts/armada-watchtower-e2e-job.py
-      - /home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-752/script/WatchtowerScenario.s.sol:/src/armada-nitro/script/WatchtowerScenario.s.sol
-      - /home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-752/env/gates/watchtower/prepare.ts:/src/armada-nitro/env/gates/watchtower/prepare.ts
 
 volumes:
   armada_env:
