@@ -46,7 +46,12 @@ fixturenet_slice_description: "Fixturenet chain processes (reserved cores)"
 fixturenet_tmpfs_mounts: []
 
 fixturenet_tmpfs_default_size: "3G"
-fixturenet_tmpfs_default_mode: "0755"
+# root-only: the deployment's state (keys, manifest) is reachable only from inside
+# the deployment's containers (docker's daemon is root and still bind-mounts the
+# volumes). Host code reaches it through `laconic-so deployment run-job` and RPC,
+# never by reading files here, so a host-side gate fails on its first run instead
+# of passing whenever an earlier script happened to chmod the keys.
+fixturenet_tmpfs_default_mode: "0700"
 
 # --- 3. Opt-in host-wide isolation ------------------------------------------
 

@@ -52,7 +52,7 @@ vars are required only if you turn isolation on. See
 | --- | --- | --- |
 | `fixturenet_slice_name` | `fixturenet.slice` | Slice the containers run under. Must match the compose `FIXTURENET_SLICE` config var. |
 | `fixturenet_slice_allowed_cpus` | *(required)* | `AllowedCPUs` list for the slice, e.g. `10-15,26-31`. |
-| `fixturenet_tmpfs_mounts` | `[]` | List of `{path, size?, mode?}` — a capped tmpfs per deployment `data/` dir. |
+| `fixturenet_tmpfs_mounts` | `[]` | List of `{path, size?, mode?}` — a capped tmpfs per deployment `data/` dir, root-only (mode `0700`) by default: host code reaches deployment state through `run-job` and RPC, not these files. |
 | `fixturenet_tmpfs_default_size` | `3G` | Default tmpfs size. |
 | `fixturenet_host_isolation` | `false` | Opt-in host-wide isolation (below). |
 | `fixturenet_host_other_cpus` | `""` | `AllowedCPUs` for `system.slice`/`user.slice`/`init.scope` — the complement of the reserved cores. Required when isolation is on. |
