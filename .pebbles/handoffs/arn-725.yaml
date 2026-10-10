@@ -1,0 +1,41 @@
+status: completed
+pebble_id: arn-725
+summary: >
+  Restored the armada-watchtower-e2e fixturenet gate so it runs entirely
+  from the rebuilt env image (cerc/armada-nitro-env:local) with no
+  dependency on the reaped worker worktree. The E15b job
+  (stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml) bound-mounted
+  three source files (stack/scripts/armada-watchtower-e2e-job.py,
+  script/WatchtowerScenario.s.sol, env/gates/watchtower/prepare.ts) from
+  .worktrees/worker-arn-752, which exophial reaps when arn-752 lands.
+  Fix: removed those three bind-mount lines (c1), so the job's code now
+  comes from the image. I rebuilt the env image from this branch (lib
+  submodules initialized so the contracts stage compiles), synced the E12
+  deployment's job copy to the fixed definition, and ran the gate end-to-end
+  against the live fixturenet E12. The e2e script's JSON now shows
+  scenario_a (watcher on) paying 1990000 lamports (1500000 < x <= 2000000)
+  and scenario_b (watcher off) paying 995000 lamports (0 < x < 1500000) —
+  c2 and c3 all hold.
+cost: >
+  ~40k tokens (reading the compose job file, the e2e orchestrator and
+  thin runner, rebuilding the env image, and running the e2e gate against
+  the live E12 fixturenet).
+commits:
+  - "f4d62312dc9f880fd5ab2d95d8d2900ff8085ca8"
+verify_transcript:
+  hooks:
+    - name: "pre-commit tdd-trailer"
+      outcome: passed
+      duration_s: 0.5
+    - name: "pre-commit check-yaml"
+      outcome: passed
+      duration_s: 0.3
+    - name: "e2e_gate (armada-watchtower-e2e)"
+      outcome: passed
+      duration_s: 74.8
+e2e_gate:
+  spec: contracts/specs/derived-arn-725.spec.json
+  command: "python3 stack/scripts/armada-watchtower-e2e.py --state-n-allocation-lamports 1000000 --state-n-plus1-allocation-lamports 2000000"
+  result: passed
+  ran_at_sha: "f4d62312dc9f880fd5ab2d95d8d2900ff8085ca8"
+  mocks_in_path: false
