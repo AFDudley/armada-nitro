@@ -1,0 +1,253 @@
+{
+  "id": "derived-arn-8e9",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. env/gates/hub-custodian-frost/verify.py line 51 sets _DEFAULT_STATE_DIR = ~/deployments/armada-fixturenet-e12/data/armada_env and, as user rix on the host, reads manifest.json, deployer.key and group-pubkey.json there, writes group-pubkey.json if missing, and runs the reconciler on the host against that directory. Run 'python3 env/gates/hub-custodian-frost/verify.py match' as rix: it cannot read the root-only directory.\nWhat did you expect to happen? The gate's logic runs inside a laconic-so job (stack/compose-jobs, registered in the stack, mounting armada_env:/env, code from the env image) that takes the case (match or mismatch) and prints the same one-line JSON; env/gates/hub-custodian-frost/verify.py becomes a thin runner that runs the job through 'laconic-so deployment --dir <deployment> run-job' (syncing the deployment's job files with laconic-so's 'deploy create --update', as scripts/run-armada-watchtower-scenario.sh does) and prints the job's JSON unchanged. Checks: 1) Behavior: 'python3 env/gates/hub-custodian-frost/verify.py match' prints JSON with config_uses_keyfile_param = true, onchain_key_matches_file = true, manifest_records_key = true, overall_positive_case_passed = true. 2) Behavior: 'python3 env/gates/hub-custodian-frost/verify.py mismatch' prints JSON with verify_exit_code != 0 and failure_names_mismatch = true. 3) grep_absent: patterns 'armada_env', 'sudo', 'chmod' and 'chown' in env/gates/hub-custodian-frost/verify.py. 4) grep_absent: patterns '/home/' and '.worktrees/' in the new job's compose file.\nWhat actually happened? Include the exact error text or output. verify.py reads and writes files under the deployment's data directory as a host process, so it fails with a permission error now that the directory is root-only.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) env/gates/hub-custodian-frost/verify.py (E14b, arn-3ef)\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main 564ef7f; fixturenet E12 (~/deployments/armada-fixturenet-e12, compose) whose data/ tmpfs is root-only (mode 0700, f149321); env image cerc/armada-nitro-env:local\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? The E14b custodian gate fails on every run since the deployment's data directory was made root-only; any gate re-run or base replay that includes it is red.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) operational use: checking landed gates against the root-only data directory (f149321)\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) the deployment data tmpfs became mode 0700 (root-only)",
+  "restatement": "The hub-custodian-frost gate today runs as a host process. It reads and writes files directly under the deployment's armada_env data directory at ~/deployments/armada-fixturenet-e12/data/armada_env. That directory is now root-only (mode 0700). The gate fails with a permission error on every run because of this. The fix moves the gate's check logic into a laconic-so job that runs inside a container. The container mounts the armada_env volume at /env and runs code from the env image. The job is registered in the stack under stack/compose-jobs. env/gates/hub-custodian-frost/verify.py becomes a thin runner: it first syncs the deployment's job files with laconic-so's 'deploy create --update' (the same step scripts/run-armada-watchtower-scenario.sh takes), then runs the job through 'laconic-so deployment --dir <deployment> run-job', then prints the job's JSON output unchanged. After the fix, the match case must still print the same four passing fields, and the mismatch case must still print a failing verify_exit_code and a true failure_names_mismatch field. verify.py itself must no longer read or write the state directory or escalate privileges. The new job's compose file must name no host-specific or worktree-specific path.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The check's logic runs inside a laconic-so job registered in the stack under stack/compose-jobs, not as a host process."
+    },
+    {
+      "id": "c2",
+      "text": "The job mounts armada_env:/env and runs code from the env image."
+    },
+    {
+      "id": "c3",
+      "text": "verify.py becomes a thin runner that syncs the deployment's job files with laconic-so's 'deploy create --update' (as scripts/run-armada-watchtower-scenario.sh does) before running the job."
+    },
+    {
+      "id": "c4",
+      "text": "verify.py runs the check through 'laconic-so deployment --dir <deployment> run-job' and prints the job's JSON output unchanged."
+    },
+    {
+      "id": "c5",
+      "text": "Running 'python3 env/gates/hub-custodian-frost/verify.py match' prints JSON with config_uses_keyfile_param = true, onchain_key_matches_file = true, manifest_records_key = true, overall_positive_case_passed = true."
+    },
+    {
+      "id": "c6",
+      "text": "Running 'python3 env/gates/hub-custodian-frost/verify.py mismatch' prints JSON with verify_exit_code != 0 and failure_names_mismatch = true."
+    },
+    {
+      "id": "c7",
+      "text": "env/gates/hub-custodian-frost/verify.py contains none of the patterns 'armada_env', 'sudo', 'chmod', and 'chown'."
+    },
+    {
+      "id": "c8",
+      "text": "The new job's compose file contains none of the patterns '/home/' and '.worktrees/'."
+    }
+  ],
+  "goal": "Move the hub-custodian-frost gate's check logic out of the host process and into a laconic-so container job, so the gate works again now that the deployment's data directory is root-only, with verify.py reduced to a thin runner over that job.",
+  "acceptance_criteria": [
+    "The stack's job list (stack/stacks/armada-nitro-fixturenet/stack.yml) names a custodian-frost job.",
+    "The new custodian-frost job's compose file mounts the shared armada_env data at /env.",
+    "The new custodian-frost job's compose file runs the cerc/armada-nitro-env image.",
+    "env/gates/hub-custodian-frost/verify.py passes the --update flag when it syncs the deployment before the job runs.",
+    "env/gates/hub-custodian-frost/verify.py calls laconic-so's run-job command.",
+    "Running the match check prints one line of JSON. The JSON reports the config takes the group key from a file, the on-chain key matches that file, the manifest records the key, and the overall positive case passed.",
+    "Running the mismatch check prints one line of JSON. The JSON reports a non-zero verify exit code and a true failure_names_mismatch field.",
+    "env/gates/hub-custodian-frost/verify.py contains none of the words armada_env, sudo, chmod, or chown.",
+    "The new custodian-frost job's compose file names no path under /home/ or .worktrees/."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The stack's job list (stack/stacks/armada-nitro-fixturenet/stack.yml) names a custodian-frost job."
+    },
+    {
+      "id": "c2",
+      "text": "The new custodian-frost job's compose file mounts the shared armada_env data at /env."
+    },
+    {
+      "id": "c3",
+      "text": "The new custodian-frost job's compose file runs the cerc/armada-nitro-env image."
+    },
+    {
+      "id": "c4",
+      "text": "env/gates/hub-custodian-frost/verify.py passes the --update flag when it syncs the deployment before the job runs."
+    },
+    {
+      "id": "c5",
+      "text": "env/gates/hub-custodian-frost/verify.py calls laconic-so's run-job command."
+    },
+    {
+      "id": "c6",
+      "text": "Running the match check prints one line of JSON. The JSON reports the config takes the group key from a file, the on-chain key matches that file, the manifest records the key, and the overall positive case passed."
+    },
+    {
+      "id": "c7",
+      "text": "Running the mismatch check prints one line of JSON. The JSON reports a non-zero verify exit code and a true failure_names_mismatch field."
+    },
+    {
+      "id": "c8",
+      "text": "env/gates/hub-custodian-frost/verify.py contains none of the words armada_env, sudo, chmod, or chown."
+    },
+    {
+      "id": "c9",
+      "text": "The new custodian-frost job's compose file names no path under /home/ or .worktrees/."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep",
+      "description": "The stack's job list (stack/stacks/armada-nitro-fixturenet/stack.yml) names a custodian-frost job.",
+      "proves": "A job for the custodian-frost check is registered in the stack, per clause c1.",
+      "restatement_clause_id": "c1",
+      "pattern": "custodian-frost",
+      "files": [
+        "stack/stacks/armada-nitro-fixturenet/stack.yml"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "The new custodian-frost job's compose file mounts the shared armada_env data at /env.",
+      "proves": "The job reads and writes the same deployment data the gate used to touch on the host, per clause c2.",
+      "restatement_clause_id": "c2",
+      "pattern": "armada_env:/env",
+      "files": [
+        "stack/compose-jobs/docker-compose-*custodian-frost*.yml"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep",
+      "description": "The new custodian-frost job's compose file runs the cerc/armada-nitro-env image.",
+      "proves": "The job runs the env image's code, per clause c2.",
+      "restatement_clause_id": "c2",
+      "pattern": "cerc/armada-nitro-env",
+      "files": [
+        "stack/compose-jobs/docker-compose-*custodian-frost*.yml"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep",
+      "description": "env/gates/hub-custodian-frost/verify.py passes the --update flag when it syncs the deployment before the job runs.",
+      "proves": "verify.py syncs the deployment's job files first, per clause c3.",
+      "restatement_clause_id": "c3",
+      "pattern": "--update",
+      "files": [
+        "env/gates/hub-custodian-frost/verify.py"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep",
+      "description": "env/gates/hub-custodian-frost/verify.py calls laconic-so's run-job command.",
+      "proves": "verify.py runs the check through the job, not on the host, per clause c4.",
+      "restatement_clause_id": "c4",
+      "pattern": "run-job",
+      "files": [
+        "env/gates/hub-custodian-frost/verify.py"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the match check prints one line of JSON. The JSON reports the config takes the group key from a file, the on-chain key matches that file, the manifest records the key, and the overall positive case passed.",
+      "proves": "The positive case still passes end to end after the move to a job, per clause c5.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/gates/hub-custodian-frost/verify.py",
+        "args": [
+          "match"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "config_uses_keyfile_param",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "onchain_key_matches_file",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "manifest_records_key",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "overall_positive_case_passed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the mismatch check prints one line of JSON. The JSON reports a non-zero verify exit code and a true failure_names_mismatch field.",
+      "proves": "The negative case still correctly catches a key mismatch after the move to a job, per clause c6.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "python3",
+        "script": "env/gates/hub-custodian-frost/verify.py",
+        "args": [
+          "mismatch"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "verify_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "failure_names_mismatch",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c7"
+    },
+    {
+      "type": "grep_absent",
+      "description": "env/gates/hub-custodian-frost/verify.py contains none of the words armada_env, sudo, chmod, or chown.",
+      "proves": "verify.py no longer touches the state directory or escalates privileges itself, per clause c7.",
+      "restatement_clause_id": "c7",
+      "pattern": "armada_env",
+      "additional_patterns": [
+        "sudo",
+        "chmod",
+        "chown"
+      ],
+      "files": [
+        "env/gates/hub-custodian-frost/verify.py"
+      ],
+      "clause_id": "c8"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The new custodian-frost job's compose file names no path under /home/ or .worktrees/.",
+      "proves": "The job's compose file carries no host-specific or worktree-specific path, per clause c8.",
+      "restatement_clause_id": "c8",
+      "pattern": "/home/",
+      "additional_patterns": [
+        ".worktrees/"
+      ],
+      "files": [
+        "stack/compose-jobs/docker-compose-*custodian-frost*.yml"
+      ],
+      "clause_id": "c9"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "env/gates/hub-custodian-frost/verify.py"
+  ]
+}
