@@ -1,0 +1,74 @@
+# armada-watchtower-scenario (E15a): a watcher that detects a counterparty's stale
+# ChallengeRegistered event and answers it on-chain with the newer fully-signed state.
+#
+# Runs entirely inside the job (reads the deployment's manifest and test-account keys from
+# the mounted armada_env volume at /env), with no host access to the deployment's key files.
+# The job prints the watcher's single JSON line to stdout:
+#   {detected, responded, block, latency_ms, tx_hash}
+#
+# `$$` escapes a literal `$` from the orchestrator's own template interpolation (a bare
+# `$` would be eaten by the template, not the job shell). SCENARIO (stale | current) is
+# passed through from the host's environment (laconic-so run-job passes the host env to
+# the job container).
+services:
+  armada-watchtower-scenario:
+    image: cerc/armada-nitro-env:local
+    network_mode: host   # so 127.0.0.1:8545 resolves to geth's host-published port
+    working_dir: /src/armada-nitro/env/gates/watchtower
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        cd /src/armada-nitro/env/gates/watchtower
+
+        # Ensure tsx + ethers are installed (idempotent from the locked dependency set).
+        # npm's own chatter goes to stderr, keeping stdout limited to the watcher's JSON line.
+        if [ ! -e node_modules/.bin/tsx ]; then
+          npm ci --no-audit --no-fund --loglevel=error 1>&2
+        fi
+
+        # The deployment's manifest and test-account keys come from the mounted
+        # armada_env volume (/env), not from a host path.
+        export MANIFEST_PATH="$${MANIFEST_PATH:-/env/manifest.json}"
+        export KEYS_DIR="$${KEYS_DIR:-/env}"
+        export WATCH_STATE_FILE="$${WATCH_STATE_FILE:-held-state.json}"
+        export WATCH_RPC="$${WATCH_RPC:-http://127.0.0.1:8545}"
+
+        # 1. Build + sign the demo channel's states; the helper writes held-state.json
+        #    (the state the watcher holds) and challenge.json (the counterparty's
+        #    stale challenge).
+        build_json="$(./node_modules/.bin/tsx helper.ts build $$SCENARIO)"
+        channel_id="$(echo "$$build_json" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["channelId"])')"
+
+        # 2. Resolve the adjudicator address and the user (watcher side) key from the
+        #    manifest + the /env keys dir.
+        adjudicator="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["armadaNitro"]["adjudicator"])' "$$MANIFEST_PATH")"
+        user_addr="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["testAccounts"][0]["address"])' "$$MANIFEST_PATH")"
+        user_key="$(cat "$$KEYS_DIR/keys/$$user_addr.key")"
+
+        export WATCH_CHANNEL="$$channel_id"
+        export WATCH_ADJUDICATOR="$$adjudicator"
+        export WATCH_SIGNER_KEY="$$user_key"
+        export WATCH_WINDOW_S="$${WATCH_WINDOW_S:-60}"
+
+        # 3. Start the watcher (subscribes to ChallengeRegistered for the demo channel);
+        #    capture its single JSON line.
+        watcher_out="$(mktemp)"
+        ./node_modules/.bin/tsx watch.ts > "$$watcher_out" &
+        watcher_pid=$$!
+        # 4. Give the watcher time to connect and subscribe before the challenge lands,
+        #    then trigger the counterparty's stale challenge (the hub challenges with
+        #    state N).
+        sleep 2
+        ./node_modules/.bin/tsx helper.ts challenge > /dev/null
+
+        # 5. Wait for the watcher to finish and print its JSON line (the job's stdout).
+        wait "$$watcher_pid" || true
+        cat "$$watcher_out"
+    environment:
+      SCENARIO: ${SCENARIO:-stale}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:

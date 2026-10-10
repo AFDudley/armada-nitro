@@ -24,20 +24,24 @@ fixturenet.
   that is E15b); `challenge`/`checkpoint` only touch ForceMove's channel
   status, not `MultiAssetHolder`'s holdings, so the demo channel need not be
   funded.
-- `scenario.sh <stale|current>` — the gate's entry point. Builds the demo
-  channel, starts `watch.ts` in the background, triggers the challenge, and
-  prints `watch.ts`'s JSON report on stdout. `stale`: the challenge carries
-  turn 12 while the watcher holds turn 13, so it answers (`responded: true`).
-  `current`: the challenge already carries the turn the watcher holds, so it
-  does not answer (`responded: false`).
+- `scenario.sh <stale|current>` — the gate's entry point. Delegates to
+  `scripts/run-armada-watchtower-scenario.sh` (outside this directory, so it
+  alone names the deployment path), which runs the `armada-watchtower-scenario`
+  laconic-so job and prints the watcher's JSON report on stdout. Inside the
+  job, `helper.ts build`/`watch.ts`/`helper.ts challenge` run exactly as
+  described above, reading the manifest and keys from `/env`. `stale`: the
+  challenge carries turn 12 while the watcher holds turn 13, so it answers
+  (`responded: true`). `current`: the challenge already carries the turn the
+  watcher holds, so it does not answer (`responded: false`).
 
-Runs against the operator-managed fixturenet
-(`$MANIFEST_PATH`/`$KEYS_DIR` default to
-`~/deployments/armada-fixturenet-e12/data/armada_env`, `$WATCH_RPC` defaults
-to `http://127.0.0.1:8545`). The deployment's test-account key files are
-root-owned `600` by default (only the env container, running as root, reads
-them); `scenario.sh` best-effort `sudo chmod`s them readable so it can run
-directly on the host.
+Runs against the operator-managed fixturenet via the `armada-watchtower-scenario`
+laconic-so job (`scenario.sh` invokes the job through a helper in `scripts/`).
+The job mounts the `armada_env` volume at `/env`, so the manifest and the
+test-account keys are read from `/env` (not a host path), with no host access
+to the deployment's key files. The job runs with host networking, so
+`$WATCH_RPC` (default `http://127.0.0.1:8545`) resolves to geth's host-published
+port.
 
 `held-state.json`/`challenge.json`/`.watcher-out` are per-run scratch files
-(gitignored), not committed state.
+written inside the job's container (gitignored on the off chance anything
+ever runs these scripts on the host directly), not committed state.
