@@ -1,0 +1,192 @@
+{
+  "id": "derived-arn-725",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml lines 56-58 bind-mount /home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-752/stack/scripts/armada-watchtower-e2e-job.py, .../script/WatchtowerScenario.s.sol and .../env/gates/watchtower/prepare.ts into /src/armada-nitro. That worktree was deleted when arn-752 landed (exophial reaps it), so 'python3 stack/scripts/armada-watchtower-e2e.py --state-n-allocation-lamports 1000000 --state-n-plus1-allocation-lamports 2000000' now runs the job against missing mount sources.\nWhat did you expect to happen? The job takes all of its code from the env image (cerc/armada-nitro-env:local), rebuilt from this repo so it contains stack/scripts/armada-watchtower-e2e-job.py, script/WatchtowerScenario.s.sol and env/gates/watchtower/prepare.ts; the job file has no host bind mounts of repo files. Checks: 1) Behavior: 'python3 stack/scripts/armada-watchtower-e2e.py --state-n-allocation-lamports 1000000 --state-n-plus1-allocation-lamports 2000000' prints JSON where scenario_a.watcher_enabled = true, scenario_a.challenge_tx, scenario_a.response_tx and scenario_a.check_line are non-empty, scenario_a.response_latency_seconds >= 0, 1500000 < scenario_a.payout_lamports <= 2000000; scenario_b.watcher_enabled = false, scenario_b.challenge_tx and scenario_b.check_line are non-empty, scenario_b.response_tx is empty, 0 < scenario_b.payout_lamports < 1500000. 2) grep_absent: patterns '/home/' and '.worktrees/' in stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml.\nWhat actually happened? Include the exact error text or output. The job file bind-mounts three source files from /home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-752/, which no longer exists; the gate passed only while that worktree was present.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml (E15b, arn-752)\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main 564ef7f; fixturenet E12 (~/deployments/armada-fixturenet-e12, compose); env image cerc/armada-nitro-env:local\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? The landed E15b gate cannot run: its job's code comes from host paths that no longer exist, so E15c (arn-78f), which builds on this gate, is blocked.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) operational use: reviewing landed fixturenet jobs after E15b (arn-752) merged\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) the worker's worktree .worktrees/worker-arn-752 was reaped when arn-752 landed",
+  "restatement": "The armada-watchtower-e2e fixturenet gate's compose job file bind-mounts three source files from a worker worktree (.worktrees/worker-arn-752/...) that exophial deletes once the worker's pebble lands, so the gate can no longer run. The job must instead get all of its code from the env image cerc/armada-nitro-env:local, rebuilt from this repository so the image already contains stack/scripts/armada-watchtower-e2e-job.py, script/WatchtowerScenario.s.sol, and env/gates/watchtower/prepare.ts. The compose job file must carry no bind mount of a file under a host path. With that fix in place, running the e2e script with the stated lamport amounts must print JSON showing the watched-payout scenario and the unwatched-payout scenario each behaving as the report specifies.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The compose job file stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml must contain no reference to a path under /home/ and no reference to a .worktrees/ directory."
+    },
+    {
+      "id": "c2",
+      "text": "Running `python3 stack/scripts/armada-watchtower-e2e.py --state-n-allocation-lamports 1000000 --state-n-plus1-allocation-lamports 2000000` must print JSON where scenario_a.watcher_enabled = true, scenario_a.challenge_tx, scenario_a.response_tx and scenario_a.check_line are non-empty, scenario_a.response_latency_seconds >= 0, and 1500000 < scenario_a.payout_lamports <= 2000000."
+    },
+    {
+      "id": "c3",
+      "text": "The same run's JSON must show scenario_b.watcher_enabled = false, scenario_b.challenge_tx and scenario_b.check_line are non-empty, scenario_b.response_tx is empty, and 0 < scenario_b.payout_lamports < 1500000."
+    }
+  ],
+  "goal": "Restore the armada-watchtower-e2e fixturenet gate so it runs entirely from the rebuilt env image, with no dependency on a deleted worker worktree.",
+  "acceptance_criteria": [
+    "The watchtower e2e gate's compose file no longer names a file under a host user directory or under a worker worktree directory.",
+    "When the gate runs the first scenario, the watcher catches the operator's late challenge, the operator answers it, and the payout lands in the expected higher range.",
+    "When the gate runs the second scenario, no watcher is present, the operator's challenge goes unanswered, and the payout lands in the expected lower range."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The watchtower e2e gate's compose file no longer names a file under a host user directory or under a worker worktree directory."
+    },
+    {
+      "id": "c2",
+      "text": "When the gate runs the first scenario, the watcher catches the operator's late challenge, the operator answers it, and the payout lands in the expected higher range."
+    },
+    {
+      "id": "c3",
+      "text": "When the gate runs the second scenario, no watcher is present, the operator's challenge goes unanswered, and the payout lands in the expected lower range."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep_absent",
+      "description": "The watchtower e2e gate's compose file no longer names a file under a host user directory or under a worker worktree directory.",
+      "proves": "Proves the gate's job file no longer depends on bind-mounting files from a worker's host worktree.",
+      "restatement_clause_id": "c1",
+      "pattern": "/home/",
+      "additional_patterns": [
+        "\\.worktrees/"
+      ],
+      "files": [
+        "stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "When the gate runs the first scenario, the watcher catches the operator's late challenge, the operator answers it, and the payout lands in the expected higher range.",
+      "proves": "Proves the gate's watched-payout scenario produces every value the report specifies, showing the fix did not break the gate's live watcher-response path.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_a.watcher_enabled",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_a.challenge_tx",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_a.response_tx",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_a.check_line",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_a.response_latency_seconds",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_a.payout_lamports",
+          "op": "gt",
+          "value": 1500000
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_a.payout_lamports",
+          "op": "le",
+          "value": 2000000
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "When the gate runs the second scenario, no watcher is present, the operator's challenge goes unanswered, and the payout lands in the expected lower range.",
+      "proves": "Proves the gate's unwatched-payout scenario produces every value the report specifies, showing the fix did not break the gate's no-watcher path.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_b.watcher_enabled",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_b.challenge_tx",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_b.check_line",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_b.response_tx",
+          "op": "eq",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_b.payout_lamports",
+          "op": "gt",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_b.payout_lamports",
+          "op": "lt",
+          "value": 1500000
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c3"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-watchtower-e2e.py"
+  ]
+}
