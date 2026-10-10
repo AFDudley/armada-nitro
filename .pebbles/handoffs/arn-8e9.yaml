@@ -1,0 +1,39 @@
+status: completed
+pebble_id: arn-8e9
+summary: >
+  Moved the hub-custodian-frost gate's check logic out of the host process and into a new
+  armada-custodian-frost laconic-so job, because the deployment's armada_env data directory
+  became root-only (mode 0700) and the old host process could no longer read
+  manifest.json/deployer.key/the key file or write the key file there. Added
+  stack/compose-jobs/docker-compose-armada-custodian-frost.yml (registered in
+  stack/stacks/armada-nitro-fixturenet/stack.yml), which mounts armada_env:/env, runs the
+  cerc/armada-nitro-env image with network_mode: host (for the geth RPC), and embeds the
+  check script directly in the compose file's command block (self-contained, so it needs no
+  env-image rebuild -- the image's forge-build stage currently fails on this worktree's
+  uninitialized lib/ submodules, a pre-existing condition unrelated to this change).
+  env/gates/hub-custodian-frost/verify.py is now a thin runner: it syncs the deployment's job
+  files via laconic-so deploy create --update (mirroring
+  scripts/run-armada-watchtower-scenario.sh), runs the job via laconic-so deployment --dir
+  <deployment> run-job with the case passed as $CUSTODIAN_FROST_CASE, extracts the job's
+  one-line JSON from its stdout, and prints it unchanged; verify.py itself never touches the
+  state directory and contains none of armada_env/sudo/chmod/chown. Verified end to end
+  against the operator-managed E12 fixturenet: `python3 env/gates/hub-custodian-frost/verify.py
+  match` now prints {"config_uses_keyfile_param": true, "onchain_key_matches_file": true,
+  "manifest_records_key": true, "overall_positive_case_passed": true} and `... mismatch`
+  prints {"verify_exit_code": 1, "failure_names_mismatch": true}, both exiting 0 (the runner's
+  own exit code reflects whether the case behaved as expected, mirroring the old verify.py).
+  All grep/grep_absent acceptance patterns were checked directly against the modified files.
+cost: ~145k tokens
+commits:
+  - "4d9be4e20b72370de5f6f04aca40e355c48a5c0d"
+verify_transcript:
+  hooks:
+    - name: pre-commit (ruff, ruff-format, mypy, tdd-trailer, etc.)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-8e9.spec.json
+  command: python3 env/gates/hub-custodian-frost/verify.py match && python3 env/gates/hub-custodian-frost/verify.py mismatch
+  result: passed
+  ran_at_sha: "4d9be4e20b72370de5f6f04aca40e355c48a5c0d"
+  mocks_in_path: false
