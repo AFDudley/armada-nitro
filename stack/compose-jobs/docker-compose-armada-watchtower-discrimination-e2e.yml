@@ -1,0 +1,63 @@
+# armada-watchtower-discrimination-e2e (E15c): proves, from a laconic-so job inside the
+# deployment, that the watchtower's dispute-response gate discriminates: an answer with a state
+# signed only by the user (single-signer) reverts and scenario A's payout check fails; an answer
+# after the challenge window (late-response) reverts and the payout still equals state N; and the
+# watchtower's normal (both-parties-signed, in-window) behavior is unchanged.
+#
+# Unlike the other gate jobs in this stack, this job does NOT use network_mode: host. It needs
+# its own isolated loopback: the scratch copy (an anvil fork of the real fixturenet, reverted
+# after) binds to 127.0.0.1:8545 *inside the job's own network namespace*, which is safe only
+# because that namespace is not shared with the host (the host's own geth keeps its 8545). This
+# matters because armada-poc's Railgun-engine chain config (lib/sdk/chain-config.ts) hardcodes
+# chain 31337's RPC to "http://localhost:8545" with no environment override, so the deposit
+# stage's balance scan only ever looks at loopback:8545 -- it must be the fork, not the real
+# chain. The job reaches the real fixturenet only to fork from it, by the geth pod's compose
+# service DNS name (armada-fixturenet-geth:8545) on the deployment's own docker network --
+# never by touching the deployment's data directory (RC7) and never by stopping/resetting it.
+#
+# Runs entirely inside the job:
+#   1. Forks the fixturenet via an anvil instance bound to the job's own 127.0.0.1:8545
+#      (scratch copy, reverted after).
+#   2. Builds the two real-proof channel deposits (prepare.ts) against the fork.
+#   3. Runs the discrimination scenarios (single-signer or late-response) on the fork.
+#   4. Reverts the scratch copy (kills the anvil fork).
+#   5. Prints exactly one JSON line to stdout:
+#       {"scenario": "single_signer"|"late_response"|"normal",
+#        "response_reverted": true,
+#        "scenario_a_payout_check_failed": true,
+#        "payout_equals_state_n": true,
+#        "canonical_state_unchanged": true,
+#        "normal_response_accepted": true,
+#        "payout_updated_correctly": true,
+#        "single_signer_failure_line": "...",
+#        "late_response_failure_line": "..."}
+#
+# All state/keys come from the mounted armada_env volume at /env (RC2); the job needs no
+# elevated privileges and no file-ownership changes (RC5).
+services:
+  armada-watchtower-discrimination-e2e:
+    image: cerc/armada-nitro-env:local
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # The orchestrator forks the fixturenet (scratch copy, bound to this job's own
+        # 127.0.0.1:8545), runs the discrimination scenario, reverts the fork, and prints the
+        # single JSON line.
+        exec python3 /src/armada-nitro/stack/scripts/armada-watchtower-discrimination-e2e-job.py
+    environment:
+      REAL_RPC: ${REAL_RPC:-http://armada-fixturenet-geth:8545}
+      SCENARIO: ${SCENARIO:-normal}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/watchtower-discrimination-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      STATE_N_USER: ${STATE_N_USER:-1000000}
+      STATE_N1_USER: ${STATE_N1_USER:-2000000}
+      HUB_RESERVE: ${HUB_RESERVE:-50000}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:

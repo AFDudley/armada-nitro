@@ -141,6 +141,40 @@ contract WatchtowerScenario is Script {
 
     /// @dev Scenario B: no response arrived; after the challenge window has elapsed, pay out the
     /// stale challenged state N (mirrors script/FixturenetScenario.s.sol's `settle()`).
+    /// @dev Single-signer discrimination (E15c): the watcher answers with the newer final state
+    /// N+1 signed ONLY by the user (not both parties), so the response reverts on '!unanimous'
+    /// in _conclude; scenario A's payout check fails (the note for the user is never paid).
+    function respondSingleSigner(uint256 index) external {
+        Ctx memory c = _ctx();
+        Deposit memory d = _deposit(index);
+        INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
+        INitroTypes.VariablePart memory stateN1 = _stateN1(c);
+        INitroTypes.SignedVariablePart memory signedN1 = ChannelStates.signedByUser(
+            c.userKey,
+            fp,
+            stateN1
+        );
+        vm.broadcast(c.deployerKey);
+        c.adjudicator.concludeAndTransferAllAssets(fp, signedN1);
+    }
+
+    /// @dev Late-response discrimination (E15c): the watcher answers AFTER the challenge window
+    /// has elapsed; the channel is in Challenge mode (not finalized), so a direct
+    /// transferAllAssets reverts (channel not finalized) and the payout still equals state N
+    /// once the stale challenge settles.
+    function respondLate(uint256 index) external {
+        Ctx memory c = _ctx();
+        Deposit memory d = _deposit(index);
+        INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
+        INitroTypes.VariablePart memory stateN1 = _stateN1(c);
+        vm.broadcast(c.deployerKey);
+        c.adjudicator.transferAllAssets(
+            NitroUtils.getChannelId(fp),
+            stateN1.outcome,
+            NitroUtils.hashState(fp, stateN1)
+        );
+    }
+
     function settleStale(uint256 index) external {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(index);
