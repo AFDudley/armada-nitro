@@ -1,0 +1,190 @@
+{
+  "id": "derived-arn-6af",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? E15a's watcher scenario (a watcher detects a counterparty's challenge with a stale state and answers it on-chain with the newer fully signed state) runs entirely as a laconic-so job reading /env, with no host access to the deployment's keys.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying watchtower behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. 'laconic-so deployment --dir ~/deployments/armada-fixturenet-e12 run-job armada-watchtower-scenario' with SCENARIO=stale prints one JSON line where detected is true, responded is true, tx_hash is a non-empty transaction hash, block >= 0 and latency_ms >= 0; with SCENARIO=current it prints detected true and responded false. env/gates/watchtower/scenario.sh's sudo chmod of the deployment's key files is removed, and nothing in env/gates/watchtower reads ~/deployments/*/data. Never stop, reset or recreate the operator-managed fixturenet E12 (~/deployments/armada-fixturenet-e12); never run docker compose against its project. No sudo, no chmod/chown, and no host reads or writes under ~/deployments/*/data or armada_env: everything that needs deployment state runs inside a laconic-so job that mounts armada_env:/env, and host code only calls 'laconic-so deployment --dir <D> run-job <job>' and reads its stdout, or geth RPC at 127.0.0.1:8545.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. Both job runs against E12 produce the JSON above (stale: detected true, responded true, tx_hash non-empty; current: detected true, responded false), and grep finds no sudo, chmod, or path into deployments/*/data or armada_env in env/gates/watchtower or the new job file.\nWhat are the non-goals / constraints? What must this NOT do? Changing the watcher's detection or response logic beyond what running in a job requires; armada-client's watchtower; resetting E12.\nAny examples or references? (links, prior art, a similar thing you like) contracts/specs/derived-arn-59c.spec.json (current host-script behaviors); env/gates/watchtower/scenario.sh; stack/compose-jobs/docker-compose-armada-custodian-e2e.yml (E14c, a gate that runs as a job).\nWhat priority is this? (P0\u2013P4) and why now? 2",
+  "restatement": "This request converts the E15a watchtower stale-challenge demonstration (specified in contracts/specs/derived-arn-59c.spec.json, implemented in env/gates/watchtower as scenario.sh, watch.ts, and helper.ts) so it runs entirely inside a laconic-so job against the operator-managed fixturenet E12, instead of running on the host with sudo-widened access to the deployment's key files. armada-nitro developers use this to keep verifying watchtower behavior on the fixturenet ahead of the Sepolia milestone E8, without the host ever touching the deployment's keys. The job mounts the armada_env volume at /env inside its container, so the watcher and its helper read the manifest and the test-account keys from that mount, not from a host path under ~/deployments/armada-fixturenet-e12/data. The host-visible demonstration stays the same: running 'laconic-so deployment --dir ~/deployments/armada-fixturenet-e12 run-job armada-watchtower-scenario' with SCENARIO=stale still shows the watcher detecting a counterparty's stale challenge and answering it on-chain with its newer signed state, and running it with SCENARIO=current still shows the watcher detecting the challenge and sending no answer, each reported as the one JSON line watch.ts already prints. The conversion removes scenario.sh's sudo chmod of the deployment's key files, since the job no longer needs host-side permission changes to read them, and it removes every other host read or write under the deployment's data directory from env/gates/watchtower and the new job file. Host code shrinks to invoking laconic-so's run-job command and reading its output, or talking to geth over RPC at 127.0.0.1:8545. The shared fixturenet E12 itself is never stopped, reset, or recreated by this work, and nothing here runs docker compose directly against E12's project, because other developers rely on that deployment staying up. This conversion does not change the watcher's detection or response logic beyond whatever running inside the job requires, and it does not touch armada-client's separate watchtower implementation.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Running 'laconic-so deployment --dir ~/deployments/armada-fixturenet-e12 run-job armada-watchtower-scenario' with SCENARIO=stale prints one JSON line where detected is true, responded is true, tx_hash is a non-empty transaction hash, block >= 0 and latency_ms >= 0."
+    },
+    {
+      "id": "c2",
+      "text": "Running the same job with SCENARIO=current prints one JSON line where detected is true and responded is false."
+    },
+    {
+      "id": "c3",
+      "text": "env/gates/watchtower/scenario.sh's sudo chmod of the deployment's key files is removed."
+    },
+    {
+      "id": "c4",
+      "text": "Nothing in env/gates/watchtower or the new job file reads from or writes to ~/deployments/*/data or the armada_env host directory."
+    },
+    {
+      "id": "c5",
+      "text": "The watchtower scenario never stops, resets, or recreates the operator-managed fixturenet E12 (~/deployments/armada-fixturenet-e12), and never runs docker compose against its project."
+    }
+  ],
+  "goal": "Make the E15a watchtower stale/current demonstration run entirely as a laconic-so job against fixturenet E12, with no host access to the deployment's keys.",
+  "acceptance_criteria": [
+    "A person runs the stale-challenge scenario through the job and sees one line of output showing the watcher noticed the stale challenge, answered it on chain, and reported a block number, a response time, and a real transaction hash for its answer.",
+    "A person runs the current-state scenario through the job and sees one line of output showing the watcher noticed the challenge but sent no answer, because the challenge already carried the watcher's latest state.",
+    "Reading the scenario's launch script shows it no longer asks for administrator rights to loosen the permissions on the deployment's key files.",
+    "Reading every file in the watchtower gate's folder and the new job file shows none of them names a path into the shared deployment's data directory on the host.",
+    "Reading every file in the watchtower gate's folder and the new job file shows none of them runs docker compose directly against the shared fixturenet's project."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A person runs the stale-challenge scenario through the job and sees one line of output showing the watcher noticed the stale challenge, answered it on chain, and reported a block number, a response time, and a real transaction hash for its answer."
+    },
+    {
+      "id": "c2",
+      "text": "A person runs the current-state scenario through the job and sees one line of output showing the watcher noticed the challenge but sent no answer, because the challenge already carried the watcher's latest state."
+    },
+    {
+      "id": "c3",
+      "text": "Reading the scenario's launch script shows it no longer asks for administrator rights to loosen the permissions on the deployment's key files."
+    },
+    {
+      "id": "c4",
+      "text": "Reading every file in the watchtower gate's folder and the new job file shows none of them names a path into the shared deployment's data directory on the host."
+    },
+    {
+      "id": "c5",
+      "text": "Reading every file in the watchtower gate's folder and the new job file shows none of them runs docker compose directly against the shared fixturenet's project."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "A person runs the stale-challenge scenario through the job and sees one line of output showing the watcher noticed the stale challenge, answered it on chain, and reported a block number, a response time, and a real transaction hash for its answer.",
+      "proves": "The stale scenario, now running entirely inside the job, still produces the detected/responded/tx_hash/block/latency_ms result the request names.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/watchtower/scenario.sh",
+        "args": [
+          "stale"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "detected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "responded",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "tx_hash",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "observe": "stdout_json",
+          "field": "block",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "latency_ms",
+          "op": "ge",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "A person runs the current-state scenario through the job and sees one line of output showing the watcher noticed the challenge but sent no answer, because the challenge already carried the watcher's latest state.",
+      "proves": "The current scenario, now running entirely inside the job, still produces the detected-true/responded-false result the request names.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/watchtower/scenario.sh",
+        "args": [
+          "current"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "detected",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "responded",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep_absent",
+      "description": "Reading the scenario's launch script shows it no longer asks for administrator rights to loosen the permissions on the deployment's key files.",
+      "proves": "Confirms scenario.sh's sudo chmod of the deployment's key files, named in the request, is gone.",
+      "restatement_clause_id": "c3",
+      "pattern": "sudo",
+      "additional_patterns": [
+        "chmod"
+      ],
+      "files": [
+        "env/gates/watchtower/scenario.sh"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep_absent",
+      "description": "Reading every file in the watchtower gate's folder and the new job file shows none of them names a path into the shared deployment's data directory on the host.",
+      "proves": "Confirms nothing in env/gates/watchtower or the new job file reads or writes ~/deployments/*/data or the armada_env host directory, as the request requires.",
+      "restatement_clause_id": "c4",
+      "pattern": "deployments/[^\"'\\s:]*armada_env",
+      "additional_patterns": [
+        "\\$HOME/deployments",
+        "~/deployments"
+      ],
+      "files": [
+        "env/gates/watchtower/*",
+        "stack/compose-jobs/docker-compose-armada-watchtower-scenario.yml"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep_absent",
+      "description": "Reading every file in the watchtower gate's folder and the new job file shows none of them runs docker compose directly against the shared fixturenet's project.",
+      "proves": "Confirms nothing here stops, resets, or recreates fixturenet E12 by shelling out to docker compose against its project, as the request requires.",
+      "restatement_clause_id": "c5",
+      "pattern": "docker compose",
+      "additional_patterns": [
+        "docker-compose",
+        "compose down",
+        "compose stop",
+        "compose rm"
+      ],
+      "files": [
+        "env/gates/watchtower/*",
+        "stack/compose-jobs/docker-compose-armada-watchtower-scenario.yml"
+      ],
+      "clause_id": "c5"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "env/gates/watchtower/scenario.sh"
+  ]
+}
