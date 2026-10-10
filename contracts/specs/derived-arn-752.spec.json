@@ -1,0 +1,275 @@
+{
+  "id": "derived-arn-752",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? The fixturenet proves, from a laconic-so job inside the deployment, that a participant holding a newer co-signed state defeats a stale force-close when its watcher answers in time and loses that advantage when the watcher is off.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying watchtower behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. A new job armada-watchtower-e2e (stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml, registered in the stack) mounts armada_env:/env, reads every key it needs from /env, and runs scenario A (watcher on) and scenario B (watcher off) with state N allocation 1000000 and state N+1 allocation 2000000. stack/scripts/armada-watchtower-e2e.py becomes a thin runner: it calls laconic-so run-job for that job on E12 and prints the job's one JSON line unchanged. Build on the parked work on branch worker/arn-d76 (commits c547e53, 40fc80e: env/gates/watchtower/prepare.ts, script/WatchtowerScenario.s.sol, stack/scripts/armada-watchtower-e2e.py), moving the scenario into the job and deleting stage_env's copying of private keys into the repo.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. 1) Behavior: 'python3 stack/scripts/armada-watchtower-e2e.py --state-n-allocation-lamports 1000000 --state-n-plus1-allocation-lamports 2000000' prints JSON where scenario_a.watcher_enabled = true, scenario_a.challenge_tx, scenario_a.response_tx and scenario_a.check_line are non-empty, scenario_a.response_latency_seconds >= 0, 1500000 < scenario_a.payout_lamports <= 2000000; scenario_b.watcher_enabled = false, scenario_b.challenge_tx and scenario_b.check_line are non-empty, scenario_b.response_tx is empty, 0 < scenario_b.payout_lamports < 1500000. 2) grep_absent: patterns 'sudo', 'chmod', 'chown' in stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml, stack/scripts/armada-watchtower-e2e.py and env/gates/watchtower/*. 3) grep_absent: patterns 'copyfile', 'shutil.copy' and 'privateKeyFile' in stack/scripts/armada-watchtower-e2e.py.\nWhat are the non-goals / constraints? What must this NOT do? Changing the adjudicator or watcher logic; armada-client's watchtower. Never stop, reset or recreate the operator-managed fixturenet E12 (~/deployments/armada-fixturenet-e12) and never run docker compose against its project; host code reaches the deployment only through 'laconic-so deployment --dir <D> run-job <job>' (reading its stdout) and geth RPC at 127.0.0.1:8545, never by reading or writing files under the deployment's data directory.\nAny examples or references? (links, prior art, a similar thing you like) branch worker/arn-d76 (the parked E15b work); contracts/specs/derived-arn-d76.spec.json; docs/tasks/E15-watchtower-response.md; stack/compose-jobs/docker-compose-armada-custodian-e2e.yml (E14c). Supersedes arn-d76 and arn-d49 (whose filing produced unparseable checks).\nWhat priority is this? (P0\u2013P4) and why now? 2",
+  "restatement": "This request builds a fixturenet gate job, armada-watchtower-e2e, that proves two facts about armada-nitro payment channels. First, a participant who holds a newer co-signed channel state defeats a stale force-close when its watcher answers in time. Second, the same participant loses that advantage when the watcher is off. The job replaces the parked work on branch worker/arn-d76 (commits c547e53 and 40fc80e) and supersedes the derivations arn-d76 and arn-d49. The job's definition lives in stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml and is registered in the fixturenet stack. The job mounts the armada_env volume at /env and reads every key it needs from /env, not from the deployment's own data directory. In one job run, the job executes Scenario A (watcher on) and Scenario B (watcher off), each with channel state N allocating 1,000,000 lamports and state N+1 allocating 2,000,000 lamports. The scenario logic that env/gates/watchtower/prepare.ts and script/WatchtowerScenario.s.sol carried on the parked branch moves into this job. The script stack/scripts/armada-watchtower-e2e.py becomes a thin runner: it calls laconic-so run-job for the armada-watchtower-e2e job on the operator-managed fixturenet E12, and prints the job's one JSON output line unchanged. The runner never stops, resets, or recreates E12, and never runs docker compose against E12's project. The runner reaches the deployment only through laconic-so run-job (reading its stdout) and through geth RPC at 127.0.0.1:8545. The runner never reads or writes a file under the deployment's data directory. This last rule fixes the defect carried on the parked branch: its stage_env function copied private key files out of the deployment's data directory with shutil.copyfile, and that copy failed with a permission error. This request deletes that key-copying code. Neither the job, the runner, nor the watchtower scripts under env/gates/watchtower use sudo, chmod, or chown. Out of scope: changing the adjudicator contract, the watcher's own response logic, armada-client's watchtower, and negative-case scenarios (tracked separately as E15c).",
+  "restatement_clauses": [
+    {
+      "id": "RC1",
+      "text": "A new job named armada-watchtower-e2e exists in stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml and is registered in the stack."
+    },
+    {
+      "id": "RC2",
+      "text": "The job mounts armada_env:/env and reads every key it needs from /env."
+    },
+    {
+      "id": "RC3",
+      "text": "stack/scripts/armada-watchtower-e2e.py becomes a thin runner: it calls laconic-so run-job for the armada-watchtower-e2e job on E12, and prints the job's one JSON line unchanged."
+    },
+    {
+      "id": "RC4",
+      "text": "Running 'python3 stack/scripts/armada-watchtower-e2e.py --state-n-allocation-lamports 1000000 --state-n-plus1-allocation-lamports 2000000' prints JSON where scenario_a.watcher_enabled = true, scenario_a.challenge_tx, scenario_a.response_tx and scenario_a.check_line are non-empty, scenario_a.response_latency_seconds >= 0, 1500000 < scenario_a.payout_lamports <= 2000000; scenario_b.watcher_enabled = false, scenario_b.challenge_tx and scenario_b.check_line are non-empty, scenario_b.response_tx is empty, and 0 < scenario_b.payout_lamports < 1500000."
+    },
+    {
+      "id": "RC5",
+      "text": "The patterns 'sudo', 'chmod', and 'chown' are absent from stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml, stack/scripts/armada-watchtower-e2e.py, and env/gates/watchtower/*."
+    },
+    {
+      "id": "RC6",
+      "text": "The patterns 'copyfile', 'shutil.copy', and 'privateKeyFile' are absent from stack/scripts/armada-watchtower-e2e.py."
+    },
+    {
+      "id": "RC7",
+      "text": "The runner reaches the deployment only through laconic-so run-job and geth RPC; it never stops, resets, or recreates E12, never runs docker compose against E12's project, and never reads or writes a file under the deployment's data directory."
+    }
+  ],
+  "goal": "Build and verify the armada-watchtower-e2e fixturenet job and its thin runner script, so a timely watcher response lets a newer channel state defeat a stale force-close, an absent watcher loses that advantage, no private key is copied out of the deployment, and the runner reaches the deployment only through laconic-so run-job and geth RPC.",
+  "acceptance_criteria": [
+    "The new job's definition file exists, and the fixturenet's job list names it.",
+    "The job's definition mounts the shared environment volume at /env.",
+    "The runner script calls laconic-so to run the job, instead of running the scenario itself.",
+    "Running the runner script with the stated allocations prints one line of JSON. In that JSON, the watcher-on scenario shows an active watcher, a challenge, a response, a passed check line, a non-negative response time, and a payout above 1,500,000 and at or below 2,000,000. The watcher-off scenario shows an inactive watcher, a challenge, a passed check line, no response, and a payout above 0 and below 1,500,000.",
+    "None of the job's definition, the runner script, or the watchtower scripts run a command that raises privileges or changes file ownership.",
+    "The runner script contains no code that copies a private key file.",
+    "The runner script never runs docker compose against the deployment, and never names a path inside the deployment's own data directory."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The new job's definition file exists, and the fixturenet's job list names it."
+    },
+    {
+      "id": "c2",
+      "text": "The job's definition mounts the shared environment volume at /env."
+    },
+    {
+      "id": "c3",
+      "text": "The runner script calls laconic-so to run the job, instead of running the scenario itself."
+    },
+    {
+      "id": "c4",
+      "text": "Running the runner script with the stated allocations prints one line of JSON. In that JSON, the watcher-on scenario shows an active watcher, a challenge, a response, a passed check line, a non-negative response time, and a payout above 1,500,000 and at or below 2,000,000. The watcher-off scenario shows an inactive watcher, a challenge, a passed check line, no response, and a payout above 0 and below 1,500,000."
+    },
+    {
+      "id": "c5",
+      "text": "None of the job's definition, the runner script, or the watchtower scripts run a command that raises privileges or changes file ownership."
+    },
+    {
+      "id": "c6",
+      "text": "The runner script contains no code that copies a private key file."
+    },
+    {
+      "id": "c7",
+      "text": "The runner script never runs docker compose against the deployment, and never names a path inside the deployment's own data directory."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep",
+      "description": "The new job's definition file exists, and the fixturenet's job list names it.",
+      "proves": "Proves the armada-watchtower-e2e job is defined and wired into the stack, not just planned.",
+      "restatement_clause_id": "RC1",
+      "pattern": "armada-watchtower-e2e",
+      "files": [
+        "stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml",
+        "stack/stacks/armada-nitro-fixturenet/stack.yml"
+      ],
+      "count": {
+        "unit": "files_without_match",
+        "op": "eq",
+        "value": 0
+      },
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "The job's definition mounts the shared environment volume at /env.",
+      "proves": "Proves the job reads its keys and settings from the shared environment, not from a private copy.",
+      "restatement_clause_id": "RC2",
+      "pattern": "armada_env:/env",
+      "files": [
+        "stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep",
+      "description": "The runner script calls laconic-so to run the job, instead of running the scenario itself.",
+      "proves": "Proves the script is a thin runner that delegates the scenario to the job.",
+      "restatement_clause_id": "RC3",
+      "pattern": "laconic-so",
+      "additional_patterns": [
+        "run-job"
+      ],
+      "files": [
+        "stack/scripts/armada-watchtower-e2e.py"
+      ],
+      "count": {
+        "unit": "patterns",
+        "op": "eq",
+        "value": 2
+      },
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the runner script with the stated allocations prints one line of JSON. In that JSON, the watcher-on scenario shows an active watcher, a challenge, a response, a passed check line, a non-negative response time, and a payout above 1,500,000 and at or below 2,000,000. The watcher-off scenario shows an inactive watcher, a challenge, a passed check line, no response, and a payout above 0 and below 1,500,000.",
+      "proves": "Proves a timely watcher response wins the newer state's larger payout, and an absent watcher loses that advantage.",
+      "restatement_clause_id": "RC4",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-watchtower-e2e.py",
+        "args": [
+          "--state-n-allocation-lamports",
+          "1000000",
+          "--state-n-plus1-allocation-lamports",
+          "2000000"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "scenario_a.watcher_enabled",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "scenario_a.challenge_tx",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_a.response_tx",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_a.check_line",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_a.response_latency_seconds",
+          "observe": "stdout_json",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "field": "scenario_a.payout_lamports",
+          "observe": "stdout_json",
+          "op": "gt",
+          "value": 1500000
+        },
+        {
+          "field": "scenario_a.payout_lamports",
+          "observe": "stdout_json",
+          "op": "le",
+          "value": 2000000
+        },
+        {
+          "field": "scenario_b.watcher_enabled",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "field": "scenario_b.challenge_tx",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_b.check_line",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        },
+        {
+          "field": "scenario_b.response_tx",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": ""
+        },
+        {
+          "field": "scenario_b.payout_lamports",
+          "observe": "stdout_json",
+          "op": "gt",
+          "value": 0
+        },
+        {
+          "field": "scenario_b.payout_lamports",
+          "observe": "stdout_json",
+          "op": "lt",
+          "value": 1500000
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep_absent",
+      "description": "None of the job's definition, the runner script, or the watchtower scripts run a command that raises privileges or changes file ownership.",
+      "proves": "Proves the job and its scripts need no elevated privileges to run.",
+      "restatement_clause_id": "RC5",
+      "pattern": "sudo",
+      "additional_patterns": [
+        "chmod",
+        "chown"
+      ],
+      "files": [
+        "stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml",
+        "stack/scripts/armada-watchtower-e2e.py",
+        "env/gates/watchtower/*"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The runner script contains no code that copies a private key file.",
+      "proves": "Proves the fix removes the key-copying defect that caused the earlier permission-denied failure.",
+      "restatement_clause_id": "RC6",
+      "pattern": "copyfile",
+      "additional_patterns": [
+        "shutil.copy",
+        "privateKeyFile"
+      ],
+      "files": [
+        "stack/scripts/armada-watchtower-e2e.py"
+      ],
+      "clause_id": "c6"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The runner script never runs docker compose against the deployment, and never names a path inside the deployment's own data directory.",
+      "proves": "Proves the runner reaches the fixturenet only through laconic-so run-job and geth RPC, never by touching the deployment's files directly.",
+      "restatement_clause_id": "RC7",
+      "pattern": "docker compose",
+      "additional_patterns": [
+        "docker-compose",
+        "deployments/armada-fixturenet-e12",
+        "/data/armada_env"
+      ],
+      "files": [
+        "stack/scripts/armada-watchtower-e2e.py"
+      ],
+      "clause_id": "c7"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-watchtower-e2e.py"
+  ]
+}
