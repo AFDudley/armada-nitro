@@ -1,0 +1,207 @@
+{
+  "id": "derived-arn-78f",
+  "original_statement": "In one sentence, what is the user-facing outcome you want? The watchtower gate is shown to discriminate: an answer with a state not signed by both parties, or an answer after the challenge window, does not change the outcome.\nWho is it for? Who uses this and in what situation? armada-nitro developers verifying the reconciler and custody/channel behavior on the fixturenet before Sepolia (E8).\nHow does a person USE the finished thing \u2014 what do they SEE and DO? Describe the observable behavior, i.e. how you would demo it. In scratch copies (reverted after): (a) the watcher answers with a state signed only by the user: the response reverts and scenario A's payout check fails; (b) the watcher answers after the window: the response reverts and the payout equals state N.\nWhat does 'done' look like in plain language? State the acceptance you could check without reading any code. Both discrimination runs print their failure lines. Spec: docs/tasks/E15-watchtower-response.md (Discrimination).\nWhat are the non-goals / constraints? What must this NOT do? Changing the watcher's normal behavior.\nAny examples or references? (links, prior art, a similar thing you like) armada-watchtower-e2e from E15b.\nWhat priority is this? (P0\u2013P4) and why now? P2",
+  "restatement": "This request asks for two throwaway, fixturenet demonstrations that prove the watchtower's dispute-response gate discriminates against invalid responses, ahead of moving the reconciler and custody/channel code from the fixturenet to Sepolia (E8). In the first demonstration, the watchtower answers a dispute with a channel state signed by only the user, not by both parties in the channel; the on-chain response must revert, and the check for scenario A's expected payout must fail. In the second demonstration, the watchtower answers a dispute only after the challenge window has closed; the on-chain response must revert, and the resulting payout must still equal state N, the correct prior state. Both demonstrations run against scratch copies of the fixturenet state, and those copies are reverted after the run, leaving no permanent change. Both demonstration runs must print their own failure line, so a developer watching the run can see each invalid response was rejected. This work must not change how the watchtower behaves when it answers correctly, with a state signed by both parties inside the challenge window. The behavior being demonstrated is defined in docs/tasks/E15-watchtower-response.md (Discrimination), and the reference implementation is armada-watchtower-e2e from E15b.",
+  "restatement_clauses": [
+    {
+      "id": "rc1",
+      "text": "When the watchtower answers with a state not signed by both parties (signed only by the user), the on-chain response reverts and scenario A's payout check fails."
+    },
+    {
+      "id": "rc2",
+      "text": "When the watchtower answers after the challenge window, the on-chain response reverts and the payout equals state N."
+    },
+    {
+      "id": "rc3",
+      "text": "Both discrimination scenarios run in scratch copies of the fixturenet state, and those copies are reverted after the run."
+    },
+    {
+      "id": "rc4",
+      "text": "Both discrimination runs print their failure lines."
+    },
+    {
+      "id": "rc5",
+      "text": "The demonstration does not change the watchtower's normal behavior, i.e. when it answers with a state signed by both parties inside the challenge window."
+    }
+  ],
+  "goal": "Prove, through two fixturenet demonstrations, that the watchtower's dispute-response gate rejects a state signed by only one party and rejects a response submitted after the challenge window, in both cases leaving the correct payout unchanged, without altering the watchtower's normal accepted-response behavior.",
+  "acceptance_criteria": [
+    "A developer runs a scratch scenario where the watchtower answers a dispute with a channel state signed by only the user. The on-chain transaction is rejected, and the check for scenario A's expected payout fails, showing the single-signer state was refused.",
+    "A developer runs a scratch scenario where the watchtower answers a dispute only after the challenge window has closed. The on-chain transaction is rejected, and the final payout still equals state N, showing the late answer changed nothing.",
+    "After both discrimination scenarios run in scratch copies of the fixturenet, the original fixturenet state is unchanged, showing the scratch copies were reverted and left no permanent trace.",
+    "When both discrimination scenarios run, each one prints its own failure line to the screen, so a developer watching the run can see both rejections happen.",
+    "A developer runs the watchtower's normal answer, signed by both parties and inside the challenge window, in a scratch copy. The response is accepted and the payout updates as expected, showing the discrimination checks did not change normal behavior."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A developer runs a scratch scenario where the watchtower answers a dispute with a channel state signed by only the user. The on-chain transaction is rejected, and the check for scenario A's expected payout fails, showing the single-signer state was refused."
+    },
+    {
+      "id": "c2",
+      "text": "A developer runs a scratch scenario where the watchtower answers a dispute only after the challenge window has closed. The on-chain transaction is rejected, and the final payout still equals state N, showing the late answer changed nothing."
+    },
+    {
+      "id": "c3",
+      "text": "After both discrimination scenarios run in scratch copies of the fixturenet, the original fixturenet state is unchanged, showing the scratch copies were reverted and left no permanent trace."
+    },
+    {
+      "id": "c4",
+      "text": "When both discrimination scenarios run, each one prints its own failure line to the screen, so a developer watching the run can see both rejections happen."
+    },
+    {
+      "id": "c5",
+      "text": "A developer runs the watchtower's normal answer, signed by both parties and inside the challenge window, in a scratch copy. The response is accepted and the payout updates as expected, showing the discrimination checks did not change normal behavior."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "A developer runs a scratch scenario where the watchtower answers a dispute with a channel state signed by only the user. The on-chain transaction is rejected, and the check for scenario A's expected payout fails, showing the single-signer state was refused.",
+      "proves": "Confirms the watchtower gate rejects a state that both parties did not sign, per rc1.",
+      "restatement_clause_id": "rc1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/e15/discrimination_single_signer.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "response_reverted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_a_payout_check_failed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "A developer runs a scratch scenario where the watchtower answers a dispute only after the challenge window has closed. The on-chain transaction is rejected, and the final payout still equals state N, showing the late answer changed nothing.",
+      "proves": "Confirms the watchtower gate rejects a response submitted after the challenge window, per rc2.",
+      "restatement_clause_id": "rc2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/e15/discrimination_late_response.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "response_reverted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "payout_equals_state_n",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "After both discrimination scenarios run in scratch copies of the fixturenet, the original fixturenet state is unchanged, showing the scratch copies were reverted and left no permanent trace.",
+      "proves": "Confirms both discrimination scenarios run against reverted scratch copies with no lasting side effect, per rc3.",
+      "restatement_clause_id": "rc3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/e15/discrimination_scratch_isolation.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "canonical_state_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "When both discrimination scenarios run, each one prints its own failure line to the screen, so a developer watching the run can see both rejections happen.",
+      "proves": "Confirms both discrimination runs print their failure lines, per rc4.",
+      "restatement_clause_id": "rc4",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/e15/discrimination_failure_lines.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "single_signer_failure_line_printed",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "late_response_failure_line_printed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "A developer runs the watchtower's normal answer, signed by both parties and inside the challenge window, in a scratch copy. The response is accepted and the payout updates as expected, showing the discrimination checks did not change normal behavior.",
+      "proves": "Confirms the watchtower's normal, valid-response behavior is unchanged, per rc5.",
+      "restatement_clause_id": "rc5",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/e15/normal_response_unaffected.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "normal_response_accepted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "payout_updated_correctly",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c5"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/e15/discrimination_failure_lines.py",
+    "scripts/e15/discrimination_late_response.py",
+    "scripts/e15/discrimination_scratch_isolation.py",
+    "scripts/e15/discrimination_single_signer.py",
+    "scripts/e15/normal_response_unaffected.py"
+  ]
+}
