@@ -9,14 +9,8 @@ SCENARIO="${SCENARIO:-stale}"
 
 # The operator-managed fixturenet deployment (E12). Never stopped/reset/recreated here.
 DEP_DIR="${DEP_DIR:-$HOME/deployments/armada-fixturenet-e12}"
-# The job's compose file lives in the repo's stack/compose-jobs; copy it into
-# the deployment's compose-jobs each run, so an edited job definition takes effect.
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HELPER_DIR/.." && pwd)"
-JOB_FILE="$REPO_ROOT/stack/compose-jobs/docker-compose-armada-watchtower-scenario.yml"
-
-mkdir -p "$DEP_DIR/compose-jobs"
-cp "$JOB_FILE" "$DEP_DIR/compose-jobs/docker-compose-armada-watchtower-scenario.yml"
 
 # laconic-so is a self-contained shiv (a zipapp) that only loads under the system's
 # python3.12 (the bare-python3.12 shiv; a PATH lookup would resolve to a pipx wrapper
@@ -26,6 +20,13 @@ PYTHON="/usr/bin/python3.12"
 if [ ! -e "$PYTHON" ]; then
   PYTHON="$(command -v python3.12 || echo python3)"
 fi
+
+# Sync the deployment's generated files (compose, compose-jobs) with this checkout's
+# stack, so the job definition takes effect: laconic-so's own `deploy create --update`,
+# which rewrites each job's volumes for the deployment and leaves data/ and config.env
+# alone (copying a raw job file in instead makes compose prompt to recreate volumes).
+(cd "$REPO_ROOT" && "$PYTHON" "$LACONIC_SO" --stack stack/stacks/armada-nitro-fixturenet \
+  deploy create --spec-file "${DEP_DIR}-spec.yml" --deployment-dir "$DEP_DIR" --update) >&2
 
 # Run the job; the orchestrator's run-job (tty=True, non-detached) streams the job's
 # own stdout (which also carries the orchestrator's own "Running job: ..." line and any
@@ -40,12 +41,12 @@ output="$(SCENARIO="$SCENARIO" "$PYTHON" "$LACONIC_SO" deployment --dir "$DEP_DI
 json_line="$(printf '%s' "$output" | "$PYTHON" -c '
 import json, sys
 data = sys.stdin.read()
+dec = json.JSONDecoder()
 idx = data.rfind("{")
 while idx != -1:
-    candidate = data[idx:].strip()
     try:
-        obj = json.loads(candidate)
-    except Exception:
+        obj, _ = dec.raw_decode(data, idx)
+    except ValueError:
         idx = data.rfind("{", 0, idx)
         continue
     print(json.dumps(obj))
