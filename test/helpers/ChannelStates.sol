@@ -92,6 +92,17 @@ library ChannelStates {
         return INitroTypes.SignedVariablePart({variablePart: vp, sigs: sigs});
     }
 
+/// @dev Single-signer variant: the state is signed only by the user (not both parties).
+    function signedByUser(
+        uint256 userKey,
+        INitroTypes.FixedPart memory fp,
+        INitroTypes.VariablePart memory vp
+    ) internal pure returns (INitroTypes.SignedVariablePart memory) {
+        INitroTypes.Signature[] memory sigs = new INitroTypes.Signature[](1);
+        sigs[0] = sign(userKey, fp, vp);
+        return INitroTypes.SignedVariablePart({variablePart: vp, sigs: sigs});
+    }
+
     function challengerSig(
         uint256 key,
         INitroTypes.FixedPart memory fp,
