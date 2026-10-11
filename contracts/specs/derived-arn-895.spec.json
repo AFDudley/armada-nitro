@@ -1,0 +1,140 @@
+{
+  "id": "derived-arn-895",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. All ten files in stack/compose-jobs name image cerc/armada-nitro-env:local or cerc/armada-nitro-foundry:local. stack/container-build/cerc-armada-nitro-env/build.sh tags its final image cerc/armada-nitro-env:local, built from the working tree it is run in. On 2026-10-10 the env image was built from .worktrees/worker-arn-78f. On 2026-10-11 'exophial integrate .worktrees/worker-arn-78f' reported PASS 5/5 on the branch and PASS 5/5 on the base replay at 3337f68, a tree without stack/compose-jobs/docker-compose-armada-watchtower-discrimination-e2e.yml or stack/scripts/armada-watchtower-discrimination-e2e-job.py. None of the runners build or select an image before calling 'laconic-so deployment run-job'. The fixturenet's own services (geth, lighthouse, genesis generator) name pinned upstream versions.\nWhat did you expect to happen? Every job runs an image built from the committed content of the checkout running it and tagged with that commit's hash: build.sh (env and foundry) builds from 'git archive HEAD' (committed content only, never uncommitted or overlaid files) and tags cerc/armada-nitro-env:<HEAD sha> and cerc/armada-nitro-foundry:<HEAD sha>; every compose job names its image as cerc/armada-nitro-env:${ARMADA_IMAGE_TAG} (or foundry); one shared runner helper used by every job runner builds the tag for HEAD if it is missing, sets ARMADA_IMAGE_TAG to HEAD's sha for the deployment (via laconic-so 'deploy create --update' config), then calls run-job. A base replay with the branch's test files overlaid therefore runs the base commit's image. Checks: (a) grep_absent: pattern ':local' in stack/compose-jobs/*.yml; (b) grep: pattern 'ARMADA_IMAGE_TAG' in every stack/compose-jobs/*.yml; (c) behavior: 'python3 scripts/check-job-image.py' runs the armada-frost-keygen job through the shared helper and prints JSON {head_commit, job_image_tag, tags_match: true, built_from_committed_content: true}; (d) behavior: 'python3 scripts/check-job-image.py --dirty' first writes an uncommitted change to a file under stack/scripts, runs the same job, and prints JSON with tags_match true and image_contains_uncommitted_change false.\nWhat actually happened? Include the exact error text or output. All jobs run the shared :local images; arn-78f's base replay passed 5/5 on files absent from the replayed commit.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) stack/compose-jobs/*.yml, stack/container-build/cerc-armada-nitro-{env,foundry}/build.sh, job runners (scripts/run-armada-custodian-e2e-check.py, scripts/run-armada-watchtower-scenario.sh, scripts/run-frost-keygen-check.py, stack/scripts/armada-watchtower-e2e.py, env/gates/hub-custodian-frost/verify.py, scripts/e15/job_runner.py on worker/arn-78f)\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main cb8b3b6; fixturenet E12 (~/deployments/armada-fixturenet-e12, compose); exophial 0.2.1+10c40ed6 (exo-295 filed for the grader side)\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? A job's result depends on whichever image was last built on the host from any tree. arn-78f's base replay (3337f68) passed 5/5 on a job and job script absent from that tree, so the pebble parked green_on_base and E15c cannot land; every job-based gate (E14b, E14c, E15a, E15b, the frost keygen) has the same exposure.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) operational use: landing armada-nitro arn-78f (E15c)\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) base replay of a branch whose acceptance tests run laconic-so jobs",
+  "restatement": "The compose job files in stack/compose-jobs name a fixed tag, ':local', for the env and foundry images. build.sh builds each image from the working tree that runs it. The working tree can hold uncommitted or overlaid files. No job runner builds or selects an image before it calls run-job. Each job run uses whichever image was last built on the host. This let a base replay of commit 3337f68 report PASS 5/5 on a job and a job script that do not exist in that commit. The fix must change build.sh for both images. Each build.sh must build the image from 'git archive HEAD' only. Each build.sh must tag the image with HEAD's commit sha. Each compose job file must select its image through the ARMADA_IMAGE_TAG setting. No compose job file may use the ':local' tag. One shared helper must run before every job. The helper must build the HEAD image if it is missing. The helper must set ARMADA_IMAGE_TAG to HEAD's commit sha through 'laconic-so deploy create --update'. The helper must then call run-job. Every job runner must call this one helper.",
+  "restatement_clauses": [
+    {
+      "id": "no-local-tag",
+      "text": "No file in stack/compose-jobs/*.yml may contain the pattern ':local'."
+    },
+    {
+      "id": "uses-armada-image-tag",
+      "text": "Every file in stack/compose-jobs/*.yml must contain the pattern 'ARMADA_IMAGE_TAG'."
+    },
+    {
+      "id": "build-from-committed-content",
+      "text": "build.sh for the env and foundry images must build the image from 'git archive HEAD' only. The image must never include uncommitted or overlaid files. A check with an uncommitted change in a file under stack/scripts must print JSON with tags_match true and image_contains_uncommitted_change false."
+    },
+    {
+      "id": "shared-helper-builds-and-selects",
+      "text": "One shared helper used by every job runner must build the HEAD image if it is missing. The helper must set ARMADA_IMAGE_TAG to HEAD's commit sha via 'laconic-so deploy create --update'. The helper must then call run-job. A check of the armada-frost-keygen job through this helper must print JSON with head_commit, job_image_tag, tags_match true, and built_from_committed_content true."
+    }
+  ],
+  "goal": "Every job must run an image built from its own commit. The image tag must match that commit. One shared helper must build and select the image before every job runs.",
+  "acceptance_criteria": [
+    "No job file in stack/compose-jobs still names the ':local' image tag.",
+    "Every job file in stack/compose-jobs names its image through the ARMADA_IMAGE_TAG setting.",
+    "A person edits a file under stack/scripts and does not commit it. The person then runs a job. The image used for that job does not hold the edit. The image still matches the current commit.",
+    "A person runs the frost-keygen job. The report shows the image matches the current commit. The report shows the build used only committed content."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "No job file in stack/compose-jobs still names the ':local' image tag."
+    },
+    {
+      "id": "c2",
+      "text": "Every job file in stack/compose-jobs names its image through the ARMADA_IMAGE_TAG setting."
+    },
+    {
+      "id": "c3",
+      "text": "A person edits a file under stack/scripts and does not commit it. The person then runs a job. The image used for that job does not hold the edit. The image still matches the current commit."
+    },
+    {
+      "id": "c4",
+      "text": "A person runs the frost-keygen job. The report shows the image matches the current commit. The report shows the build used only committed content."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep_absent",
+      "description": "No job file in stack/compose-jobs still names the ':local' image tag.",
+      "proves": "Every job no longer depends on a fixed tag on the host.",
+      "restatement_clause_id": "no-local-tag",
+      "pattern": ":local",
+      "files": [
+        "stack/compose-jobs/*.yml"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "Every job file in stack/compose-jobs names its image through the ARMADA_IMAGE_TAG setting.",
+      "proves": "Every job's image tag can match the commit under test.",
+      "restatement_clause_id": "uses-armada-image-tag",
+      "pattern": "ARMADA_IMAGE_TAG",
+      "files": [
+        "stack/compose-jobs/*.yml"
+      ],
+      "count": {
+        "unit": "files_without_match",
+        "op": "eq",
+        "value": 0
+      },
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "A person edits a file under stack/scripts and does not commit it. The person then runs a job. The image used for that job does not hold the edit. The image still matches the current commit.",
+      "proves": "The image build packages only committed content.",
+      "restatement_clause_id": "build-from-committed-content",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-job-image.py",
+        "args": [
+          "--dirty"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "tags_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "image_contains_uncommitted_change",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "A person runs the frost-keygen job. The report shows the image matches the current commit. The report shows the build used only committed content.",
+      "proves": "One shared helper builds and selects the right image before every job runs.",
+      "restatement_clause_id": "shared-helper-builds-and-selects",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-job-image.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "tags_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "built_from_committed_content",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c4"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check-job-image.py"
+  ]
+}
