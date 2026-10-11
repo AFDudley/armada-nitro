@@ -61,9 +61,11 @@ Notes:
   reference host (kelce) values, so a different host retargets them at `deploy
   init` time without editing the compose file. This isolates fixturenet block
   production from other host load; the slice, its CPU reservation and the tmpfs
-  below are set up by the ansible role in `ops/ansible/` (**see
-  `ops/ansible/README.md`** for the outsider-facing setup, including how to pick
-  CPUs and pass the config vars). See `docs/tasks/E12-lido-full-scratch.md`'s
+  below are set up and continuously enforced by the `host_cpu_policy` role in
+  **laconic-tech-ops `infra/kelce`** (applied by ansible-pull; **see that repo's
+  `infra/kelce/README.md`** for the host CPU partition, how to pick cores, and
+  how the per-service cpusets must stay inside the reserved half). See
+  `docs/tasks/E12-lido-full-scratch.md`'s
   "As built" section for the full host-side rationale (validators cut from 64 to
   4, and why) and measurements.
 - geth's HTTP server's default `IdleTimeout` (120s) closes a keep-alive connection that has
@@ -74,9 +76,9 @@ Notes:
   only `[Node.HTTPTimeouts] IdleTimeout` (1 hour), leaving every other timeout/flag at its
   default.
 - **Chain data lives in RAM, capped.** A size-capped tmpfs goes over the
-  deployment's `data/` directory (the `ops/ansible/` role installs a systemd
-  mount unit with `Options=size=3G` on `~/deployments/<name>/data`; mount it
-  *after* `deploy create` and *before* `... start`). Two reasons: on
+  deployment's `data/` directory (the laconic-tech-ops `infra/kelce`
+  host_cpu_policy role installs a systemd mount unit with `Options=size=3G` on
+  `~/deployments/<name>/data`; it is provisioned before `... start`). Two reasons: on
   kelce every disk-backed path shares devices with other heavy writers, and the chain's fsyncs waiting
   behind them caused reorgs and late blocks (measurements in `docs/tasks/E12-lido-full-scratch.md`'s
   "As built"); and the cap makes a forgotten fixturenet fill its RAM disk and die instead of growing on
@@ -256,7 +258,8 @@ every other `armada-fixturenet-base-*` snapshot and key file.
 # Bring up ~/deployments/<name>, restoring the cached base if the key matches,
 # else building + snapshotting it first. Prints the warm/cold decision and
 # per-phase timings. The tmpfs over data/ must already be provided by the
-# ops/ansible/ role (see ops/ansible/README.md); the script refuses to mount it
+# laconic-tech-ops infra/kelce host_cpu_policy role (see that repo's
+# infra/kelce/README.md); the script refuses to mount it
 # itself and stops with instructions if it is missing. Because `deploy create`
 # runs before the tmpfs mount and refuses an existing dir, the script is
 # resumable: run it, mount the tmpfs when told, run it again.

@@ -18,7 +18,8 @@ repos:
   # policy; the script is repo-agnostic).
   # Gates and job runners reach the fixturenet only through `laconic-so deployment
   # run-job` and geth RPC. The deployment's data directory is root-only (mode 0700,
-  # fixturenet_host), so host code that reads it fails at run time; these hooks refuse
+  # set by the laconic-tech-ops infra/kelce host_cpu_policy role), so host code that
+  # reads it fails at run time; these hooks refuse
   # such code at commit time instead, including the sudo/chmod workarounds a worker
   # might reach for (rix has passwordless sudo). Operator tooling that manages the
   # deployment itself (fixturenet-new, the base-snapshot scripts) is exempt. Inside a

@@ -1,9 +1,0 @@
----
-# Configure a Linux host to run the armada-nitro fixturenet reproducibly:
-# a persistent CPU-pinned systemd slice, capped tmpfs data mounts, and (opt-in)
-# host-wide CPU isolation. See ops/ansible/README.md.
-- name: Configure a host for the armada-nitro fixturenet
-  hosts: fixturenet
-  become: true
-  roles:
-    - fixturenet_host

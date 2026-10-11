@@ -11,11 +11,12 @@
 #   cold (no snapshot):      start a fresh chain, run the BASE reconcile (~24m),
 #         snapshot it, then run the full reconcile.
 #
-# The tmpfs over data/ is owned by the ops/ansible/ role, not this script: if it
-# is not mounted this script stops and tells you to run the playbook. Because
-# `deploy create` must run before the tmpfs is mounted and refuses an existing
-# dir, the script is resumable -- run it, mount the tmpfs via ansible when told,
-# then run it again to continue.
+# The tmpfs over data/ is owned by laconic-tech-ops infra/kelce (the
+# host_cpu_policy role, applied continuously by ansible-pull), not this script:
+# if it is not mounted this script stops and tells you where to provision it.
+# Because `deploy create` must run before the tmpfs is mounted and refuses an
+# existing dir, the script is resumable -- run it, provision the tmpfs when
+# told, then run it again to continue.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
@@ -25,7 +26,7 @@ source "${SCRIPT_DIR}/fixturenet-base-common.sh"
 
 LACONIC="${LACONIC_SO:-${HOME}/bin/laconic-so}"
 STACK="stack/stacks/armada-nitro-fixturenet"
-CONFIG="ops/ansible/examples/deployment-config.example.env"
+CONFIG="stack/config/deployment-config.example.env"
 RPC="http://127.0.0.1:8545"
 
 usage() { echo "usage: $0 <name>" >&2; exit 2; }
@@ -105,21 +106,24 @@ else
   echo "fixturenet-new: ${DEP} exists -- resuming (skipping init/create)"
 fi
 
-# --- tmpfs must be provided by the ansible role, not us ----------------------
+# --- tmpfs must be provided by laconic-tech-ops infra/kelce, not us ----------
 if ! findmnt --mountpoint "${DEP}/data" >/dev/null 2>&1; then
   cat >&2 <<EOF
 fixturenet-new: ${DEP}/data is not a tmpfs mount.
-The capped RAM disk is owned by the ops/ansible/ role, not this script. Add it
-to your ansible vars and run the playbook, then re-run this command:
+The capped RAM disk is owned by laconic-tech-ops infra/kelce (the host_cpu_policy
+role), not this script. Add this deployment's data dir to that role's
+host_cpu_policy_tmpfs_mounts and apply it, then re-run this command:
 
-  # in ops/ansible/examples/<your-vars>.yml, add under fixturenet_tmpfs_mounts:
+  # in laconic-tech-ops infra/kelce/inventory/kelce.yml, under
+  # host_cpu_policy_tmpfs_mounts, add:
   #   - path: ${DEP}/data
   #     size: 3G
-  cd ${REPO_ROOT}/ops/ansible
-  ansible-playbook -i inventory.example.ini site.yml -e @examples/<your-vars>.yml
+  cd <laconic-tech-ops>/infra/kelce
+  ansible-playbook site.yml
 
-(See ops/ansible/README.md, "Bring up the fixturenet ...": the tmpfs goes on
-AFTER 'deploy create' and BEFORE 'start', which is why this script stops here.)
+(ansible-pull reapplies it every 30 min; see that repo's infra/kelce/README.md.
+The tmpfs goes on AFTER 'deploy create' and BEFORE 'start', which is why this
+script stops here.)
 EOF
   exit 1
 fi
