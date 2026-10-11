@@ -1,10 +1,12 @@
 # E11 Aave and Lido end to end through channels
 
-Depends on: E10, E12 (Lido with all scratch steps). Read `docs/ENVIRONMENT.md` §1–§2 and §6–§8, the "As built" sections
-of `docs/tasks/E4-aave.md` and `E5-lido.md`, `src/ArmadaNitroAdjudicator.sol`, `src/nitro/` (multi-asset outcomes,
-`deposit`), `script/FixturenetScenario.s.sol`, `env/gates/nitro-e2e/prepare.ts`, and the armada-laconic design for the
-hub games (the "option 2" yield design: channel asset `waUSDC`; swaps USDC↔`waUSDC` and WETH↔wstETH are state
-updates).
+Depends on: E10, E12 (Lido with all scratch steps), E16 (adjudicator hardening). Read `docs/ENVIRONMENT.md` §1–§2
+and §6–§8, the "As built" sections of `docs/tasks/E4-aave.md` and `E5-lido.md`, `src/ArmadaNitroAdjudicator.sol`,
+`src/nitro/` (multi-asset outcomes, `deposit`), `script/FixturenetScenario.s.sol`, `env/gates/nitro-e2e/prepare.ts`, and
+the armada-laconic design this task exercises:
+[15 · Hub yield and swaps as channel state](https://afdudley.github.io/armada-laconic/engineering/15-hub-yield-and-swaps.html)
+(ADR-0017: channel asset `waUSDC`; swaps USDC↔`waUSDC` and WETH↔wstETH are co-signed state updates; the user signs a
+swap state first and the hub countersigns).
 
 ## Goal
 The environment's Aave and Lido deployments are exercised through the armada-nitro construction the way the hub design

@@ -159,10 +159,11 @@ after the fixturenet is green.
 | E8 | Sepolia target (deferred) | E7 green on the fixturenet; a funded Sepolia deployer key |
 | E9 | Circuits baked into the image; deployer key from laconic-so deployment config | E7 |
 | E10 | Gate fixes: our own pool e2e (shield/transfer/unshield); challenge window enforced | E9 |
-| E11 | Aave and Lido end to end through channels (`waUSDC`, wstETH, real yield) | E10, E12 |
+| E11 | Aave and Lido end to end through channels (`waUSDC`, wstETH, real yield) | E10, E12, E16 |
 | E12 | Lido: run the skipped scratch steps (0135/0140/0150) without impersonation | E9 |
 | E13 | Exercise adopt mode on the fixturenet | E12 |
 | E14 | Hub custodian with real 2-of-3 FROST signing | E10 |
 | E15 | Challenge response (watchtower behavior) | E10 |
+| E16 | Adjudicator hardening for multi-asset hub channels (asset allow-list, balance-delta deposit, reentrancy guard, per-asset exit) | E10 |
 
 E1 and E2 run in parallel. So do E4, E5 and E6. E9–E15 run serially: E9, E10, E12, E11, E13, E14, E15.
