@@ -1,0 +1,58 @@
+status: completed
+pebble_id: arn-895
+summary: >
+  Fixed fixturenet jobs running under the mutable cerc/armada-nitro-{env,foundry}:local
+  tag instead of an image built from the checkout. Every stack/compose-jobs/*.yml (10
+  files) now selects its image via ${ARMADA_IMAGE_TAG} instead of ':local'. Both
+  container-build/cerc-armada-nitro-{env,foundry}/build.sh now build exclusively from
+  'git archive HEAD' (the parent repo plus each lib/ submodule's committed content at its
+  gitlink sha, concatenated with 'tar --concatenate' so the combined context tar is read
+  past the first archive's own end-of-archive terminator -- a plain '>>' silently
+  truncated everything appended after it) and tag the final image with ARMADA_IMAGE_TAG,
+  defaulting to HEAD's commit sha. scripts/armada_job_helper.py is the one shared helper
+  (ensure_image/set_image_tag/run_job) that every in-branch job runner now calls instead
+  of invoking 'laconic-so deployment run-job' directly: scripts/run-armada-custodian-e2e-check.py,
+  scripts/run-armada-watchtower-scenario.sh, scripts/run-frost-keygen-check.py,
+  stack/scripts/armada-watchtower-e2e.py, and env/gates/hub-custodian-frost/verify.py.
+  scripts/check-job-image.py is the arn-895 acceptance checker, running the
+  armada-frost-keygen job through the helper. Verified by: (a)/(b) grep checks over
+  stack/compose-jobs/*.yml; (c) running 'python3 scripts/check-job-image.py', which built
+  both images fresh (debugging and fixing three real bugs in the build.sh submodule
+  handling along the way: git ls-tree's tab-only IFS mis-parsed mode/type/sha, a missing
+  closing quote broke bash parsing, and '>>' tar concatenation silently dropped
+  submodule content past the first archive's terminator) and printed the required JSON
+  with tags_match/built_from_committed_content true; (d) running
+  'python3 scripts/check-job-image.py --dirty', which wrote an uncommitted marker under
+  stack/scripts and confirmed the HEAD-sha image does not contain it; and smoke-running
+  all five in-branch job runners end-to-end (each printed its job's real JSON report with
+  exit 0, against the live E12 fixturenet over real laconic-so run-job + geth RPC, no
+  mocks). pyproject.toml's mypy_path gained scripts/ so the shared helper's
+  cross-directory import type-checks under --strict; ruff/ruff-format/mypy and the repo's
+  two local pre-commit gate hooks (no-host-deployment-access, no-host-deployment-path)
+  all passed on commit.
+cost: "~230k tokens"
+commits:
+  - "131ffa4"
+verify_transcript:
+  hooks:
+    - name: gate-no-host-deployment-access
+      outcome: passed
+      duration_s: 1
+    - name: job-no-host-deployment-path
+      outcome: passed
+      duration_s: 1
+    - name: ruff
+      outcome: passed
+      duration_s: 1
+    - name: ruff-format
+      outcome: passed
+      duration_s: 1
+    - name: mypy
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: scripts/check-job-image.py
+  command: "python3 scripts/check-job-image.py && python3 scripts/check-job-image.py --dirty"
+  result: passed
+  ran_at_sha: "131ffa416943169943905b61212373309abbca1d"
+  mocks_in_path: false
