@@ -13,7 +13,7 @@
 # `$VAR` would be eaten by the template, not the job shell).
 services:
   armada-custodian-frost:
-    image: cerc/armada-nitro-env:local
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     network_mode: host   # so 127.0.0.1:8545 resolves to geth's host-published port
     working_dir: /src/armada-nitro/env
     entrypoint: ["sh", "-c"]

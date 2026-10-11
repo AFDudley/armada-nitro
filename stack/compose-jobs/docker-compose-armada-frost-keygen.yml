@@ -10,7 +10,7 @@
 # (unescaped `$VAR` would be interpolated by compose itself, not left for this shell).
 services:
   armada-frost-keygen:
-    image: cerc/armada-nitro-env:local
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     working_dir: /src/armada-nitro
     entrypoint: ["sh", "-c"]
     command:
