@@ -2,9 +2,11 @@
 """armada-watchtower-e2e gate (E15b) -- thin runner.
 
 The runner does NOT run the scenario itself. It invokes the job `armada-watchtower-e2e` on the
-operator-managed fixturenet (E12) via `laconic-so deployment --dir <E12> run-job armada-watchtower-
-e2e`, passing the two scenario allocations as environment variables (STATE_N_USER / STATE_N1_USER),
-reads the job's single JSON line from the job's stdout, and prints it unchanged.
+operator-managed fixturenet (E12) through the shared job helper (scripts/armada_job_helper.py,
+arn-895), which builds the job's image from this checkout's committed content if it is missing,
+selects it (ARMADA_IMAGE_TAG via `laconic-so deploy create --update`), and calls run-job --
+passing the two scenario allocations as environment variables (STATE_N_USER / STATE_N1_USER).
+It reads the job's single JSON line from the job's stdout, and prints it unchanged.
 
 The job definition (stack/compose-jobs, registered in stack/stacks) does the actual work: builds
 two real-proof channel deposits and runs the on-chain watchtower scenario (script/WatchtowerScenario.
@@ -26,8 +28,11 @@ import argparse
 import json
 import os
 import pathlib
-import subprocess
 import sys
+
+_repo_root = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_repo_root / "scripts"))
+from armada_job_helper import run_job as _helper_run_job  # noqa: E402
 
 DEFAULT_DIR = pathlib.Path.home() / "deployments" / "armada-fixturenet-e12"
 DEFAULT_RPC = "http://127.0.0.1:8545"
@@ -44,28 +49,28 @@ def rpc_url() -> str:
 
 
 def run_job(state_n_user: int, state_n1_user: int) -> str:
-    """Invoke the job and return its single JSON line (printed unchanged by the caller)."""
+    """Invoke the job through the shared helper and return its single JSON line (printed
+    unchanged by the caller)."""
     e12_dir = deployment_dir()
     if not e12_dir.is_dir():
         print(f"no deployment dir at {e12_dir}", file=sys.stderr)
         raise SystemExit(2)
 
-    env = dict(os.environ)
-    env["STATE_N_USER"] = str(state_n_user)
-    env["STATE_N1_USER"] = str(state_n1_user)
-    env["HUB_RPC"] = rpc_url()
-
-    cmd = ["laconic-so", "deployment", "--dir", str(e12_dir), "run-job", JOB_NAME]
-    p = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    if p.stderr:
-        print(p.stderr, file=sys.stderr, end="" if p.stderr.endswith("\n") else "\n")
-    if p.returncode != 0:
-        print(f"laconic-so run-job exited {p.returncode}", file=sys.stderr)
-        raise SystemExit(p.returncode)
+    extra_env = {
+        "STATE_N_USER": str(state_n_user),
+        "STATE_N1_USER": str(state_n1_user),
+        "HUB_RPC": rpc_url(),
+        "ARMADA_IMAGE_DEP_DIR": str(e12_dir),
+    }
+    stdout, returncode = _helper_run_job(JOB_NAME, extra_env=extra_env)
+    if returncode != 0:
+        print(f"laconic-so run-job exited {returncode}", file=sys.stderr)
+        print(stdout, file=sys.stderr)
+        raise SystemExit(returncode if returncode >= 0 else 1)
 
     # The job prints exactly one JSON line to its stdout; laconic-so may frame it, so find the
     # line that parses as the job's JSON (contains scenario_a + scenario_b) and return it.
-    for line in p.stdout.splitlines():
+    for line in stdout.splitlines():
         line = line.strip()
         if line.startswith("{") and "scenario_a" in line and "scenario_b" in line:
             try:

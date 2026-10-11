@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """armada-custodian-frost gate (arn-8e9).
 
-Thin runner over the laconic-so job: first syncs the deployment's job files with
-laconic-so's "deploy create --update" (the same step scripts/run-armada-watchtower-scenario.sh
-takes), then runs the check job through "laconic-so deployment --dir <deployment> run-job" and
-prints the job's one-line JSON output unchanged. The check logic lives in the job (env image),
-so no host process reads or writes the deployment's root-only data directory.
+Thin runner over the laconic-so job: delegates to the shared job helper
+(scripts/armada_job_helper.py, arn-895), which builds the job's image from this checkout's
+committed content if it is missing, selects it (ARMADA_IMAGE_TAG via laconic-so's "deploy
+create --update" -- this also syncs the deployment's compose + compose-jobs, preserving
+data/ volumes and config.env), and calls "laconic-so deployment --dir <deployment> run-job".
+This prints the job's one-line JSON output unchanged. The check logic lives in the job (env
+image), so no host process reads or writes the deployment's root-only data directory.
 
 Usage:
     python3 env/gates/hub-custodian-frost/verify.py match
@@ -15,15 +17,14 @@ Usage:
 import json
 import os
 import pathlib
-import subprocess
 import sys
 from typing import Any
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(_REPO_ROOT / "scripts"))
+from armada_job_helper import run_job as _helper_run_job  # noqa: E402
 
-LAONIC_SO = os.environ.get("LACONIC_SO") or "/home/rix/bin/laconic-so"
-PYTHON = os.environ.get("LACONIC_SO_PYTHON") or "/usr/bin/python3.12"
-STACK_DIR = _REPO_ROOT / "stack" / "stacks" / "armada-nitro-fixturenet"
+JOB = "armada-custodian-frost"
 
 
 def _dep_dir() -> pathlib.Path:
@@ -33,43 +34,13 @@ def _dep_dir() -> pathlib.Path:
     return pathlib.Path.home() / "deployments" / "armada-fixturenet-e12"
 
 
-def _sync_deployment() -> None:
-    """Sync the deployment's job files with the stack (the same step
-    scripts/run-armada-watchtower-scenario.sh does): laconic-so's "deploy create --update"
-    regenerates the compose + compose-jobs, preserving data/ volumes and config.env."""
-    dep = _dep_dir()
-    spec_file = dep.parent / f"{dep.name}-spec.yml"
-    cmd = [
-        PYTHON,
-        LAONIC_SO,
-        "--stack",
-        str(STACK_DIR),
-        "deploy",
-        "create",
-        "--spec-file",
-        str(spec_file),
-        "--deployment-dir",
-        str(dep),
-        "--update",
-    ]
-    subprocess.run(cmd, capture_output=True, text=True)
-
-
 def _run_check_job(case: str) -> str:
-    """Run the check job through laconic-so and return its stdout (which carries
+    """Run the check job through the shared helper (which builds/selects the job's
+    HEAD-sha image and syncs the deployment first) and return its stdout (which carries
     the job's JSON line plus the orchestrator's own "Running job" chatter)."""
-    cmd = [
-        PYTHON,
-        LAONIC_SO,
-        "deployment",
-        "--dir",
-        str(_dep_dir()),
-        "run-job",
-        "armada-custodian-frost",
-    ]
-    env = {**os.environ, "CUSTODIAN_FROST_CASE": case}
-    proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    return proc.stdout
+    extra_env = {"CUSTODIAN_FROST_CASE": case, "ARMADA_IMAGE_DEP_DIR": str(_dep_dir())}
+    stdout, _returncode = _helper_run_job(JOB, extra_env=extra_env)
+    return stdout
 
 
 def _extract_json(output: str) -> str:
@@ -104,8 +75,8 @@ def main(argv: list[str]) -> int:
     if case not in ("match", "mismatch"):
         print(f"unknown case: {case}", file=sys.stderr)
         return 2
-    # Sync the deployment's job files first (the --update step), then run the check job.
-    _sync_deployment()
+    # The shared helper syncs the deployment's job files (via deploy create --update)
+    # before running the check job.
     output = _run_check_job(case)
     json_line = _extract_json(output)
     if not json_line:

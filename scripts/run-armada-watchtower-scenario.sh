@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Runs the armada-watchtower-scenario job against the operator-managed fixturenet E12.
-# Holds the deployment path, copies the job's compose file into the deployment's
-# compose-jobs (kept in sync each run), then calls laconic-so run-job and prints the
-# single JSON line to stdout.
+# Delegates to the shared job helper (scripts/armada_job_helper.py, arn-895), which builds
+# the job's image from this checkout's committed content if it is missing, selects it
+# (ARMADA_IMAGE_TAG via `laconic-so deploy create --update`), then calls run-job -- every
+# job runner uses this one helper.
 set -euo pipefail
 
 SCENARIO="${SCENARIO:-stale}"
@@ -14,26 +15,18 @@ REPO_ROOT="$(cd "$HELPER_DIR/.." && pwd)"
 
 # laconic-so is a self-contained shiv (a zipapp) that only loads under the system's
 # python3.12 (the bare-python3.12 shiv; a PATH lookup would resolve to a pipx wrapper
-# that needs its own venv).
-LACONIC_SO="/home/rix/bin/laconic-so"
+# that needs its own venv). The shared helper uses the same default; this picks the same
+# binary so job-specific invocations (laconic-so, python3.12) stay consistent.
 PYTHON="/usr/bin/python3.12"
 if [ ! -e "$PYTHON" ]; then
   PYTHON="$(command -v python3.12 || echo python3)"
 fi
 
-# Sync the deployment's generated files (compose, compose-jobs) with this checkout's
-# stack, so the job definition takes effect: laconic-so's own `deploy create --update`,
-# which rewrites each job's volumes for the deployment and leaves data/ and config.env
-# alone (copying a raw job file in instead makes compose prompt to recreate volumes).
-(cd "$REPO_ROOT" && "$PYTHON" "$LACONIC_SO" --stack stack/stacks/armada-nitro-fixturenet \
-  deploy create --spec-file "${DEP_DIR}-spec.yml" --deployment-dir "$DEP_DIR" --update) >&2
-
-# Run the job; the orchestrator's run-job (tty=True, non-detached) streams the job's
-# own stdout (which also carries the orchestrator's own "Running job: ..." line and any
-# docker/compose chatter) to its own stdout. Extract and print only the last line that
-# parses as JSON -- the watcher's single-line report -- so scenario.sh's stdout is exactly
-# that one line.
-output="$(SCENARIO="$SCENARIO" "$PYTHON" "$LACONIC_SO" deployment --dir "$DEP_DIR" run-job armada-watchtower-scenario)"
+# The shared helper builds/selects the job's HEAD-sha image, then calls run-job itself
+# (inheriting SCENARIO from this script's own environment); its stdout is the job's raw
+# stdout (the orchestrator's own "Running job: ..." line, any docker/compose chatter, and
+# the watcher's single JSON line).
+output="$(ARMADA_IMAGE_DEP_DIR="$DEP_DIR" SCENARIO="$SCENARIO" "$PYTHON" "$HELPER_DIR/armada_job_helper.py" armada-watchtower-scenario)"
 
 # The watcher's JSON object can land on the same physical line as preceding chatter (the
 # orchestrator's volume-recreate prompt has no trailing newline), so scan for the

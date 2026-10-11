@@ -2,11 +2,12 @@
 """armada-custodian-e2e gate checker (E14c steps 1-2).
 
 Builds frost-signer for the container's glibc (a static musl binary -- the host's glibc is
-newer than the `cerc/armada-nitro-env:local` image's Debian bookworm, so a glibc-linked
-build would not run there), then runs the `armada-custodian-e2e` job via `laconic-so
-deployment --dir <dep> run-job armada-custodian-e2e` (laconic-so is a Python shiv that only
-loads under the system python3.12, not the venv's python3.14), then parses the job's
-structured JSON output and re-emits the six required fields:
+newer than the env image's Debian bookworm, so a glibc-linked build would not run there),
+then runs the `armada-custodian-e2e` job through the shared job helper
+(scripts/armada_job_helper.py, arn-895), which builds the job's image from this checkout's
+committed content if it is missing, selects it (ARMADA_IMAGE_TAG via `laconic-so deploy
+create --update`), and calls run-job, then parses the job's structured JSON output and
+re-emits the six required fields:
 
   authorize_delegate_success, authorize_delegate_tx_hash, close_success, close_tx_hash,
   is_active_delegate, payout_matches_allocations.
@@ -21,21 +22,12 @@ import os
 import subprocess
 import sys
 
-# The deployment the job runs against (operator-managed fixturenet deployed per E14b).
-DEP_DIR = os.path.expanduser("~/deployments/armada-fixturenet-e12")
-# /home/rix/bin/laconic-so is the self-contained shiv (a bundled zipapp needing only a bare
-# python3.12, no installed packages) -- a literal absolute path, not `~`-expanded, because
-# exophial's oracle re-run sandboxes $HOME for the re-run subprocess, which would otherwise
-# resolve `~` to a scratch directory with no laconic-so at all. PATH (shutil.which) is not a
-# safe fallback: on this host it resolves first to ~/.local/bin/laconic-so, a thin pipx
-# console-script wrapper that imports `stack_orchestrator` from its own dedicated venv --
-# forcing it through a bare python3.12 (below) raises ModuleNotFoundError.
-_LITERAL_SHIV = "/home/rix/bin/laconic-so"
-LA_CONIC_SO = _LITERAL_SHIV if os.path.isfile(_LITERAL_SHIV) else os.path.expanduser("~/bin/laconic-so")
-PYTHON_312 = "/usr/bin/python3.12"
-
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))  # <repo>/scripts
 _repo_root = os.path.dirname(_scripts_dir)  # <repo>
+sys.path.insert(0, _scripts_dir)
+from armada_job_helper import run_job as _helper_run_job  # noqa: E402
+
+JOB = "armada-custodian-e2e"
 # The container has no cargo/rustc; the checker builds a static musl binary on the host and
 # the job's compose file volume-mounts it in (FROST_SIGNER_BIN is a host path).
 FROST_SIGNER_BIN = os.path.join(_repo_root, "target/x86_64-unknown-linux-musl/release/frost-signer")
@@ -68,33 +60,17 @@ def build_frost_signer() -> None:
 
 
 def run_job() -> int:
-    """Run the gate job and capture its stdout (the final JSON line)."""
-    cmd = [
-        PYTHON_312,
-        LA_CONIC_SO,
-        "deployment",
-        "--dir",
-        DEP_DIR,
-        "run-job",
-        "armada-custodian-e2e",
-    ]
-    env = os.environ.copy()
+    """Run the gate job through the shared helper (which builds/selects the job's
+    HEAD-sha image first) and capture its stdout (the final JSON line)."""
     # The job's compose file mounts this host binary into the container.
-    env["FROST_SIGNER_BIN"] = FROST_SIGNER_BIN
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=900,
-            env=env,
-        )
-    except subprocess.TimeoutExpired:
+    job_stdout, returncode = _helper_run_job(
+        JOB, extra_env={"FROST_SIGNER_BIN": FROST_SIGNER_BIN}, timeout=900
+    )
+    if not job_stdout and returncode != 0:
         print("TIMEOUT: job did not finish within 900s", file=sys.stderr)
         return 1
 
-    job_stdout = result.stdout or ""
-    job_stderr = result.stderr or ""
+    job_stderr = ""
 
     # The job emits a final JSON line like:
     # {"authorize_delegate_success": true, "authorize_delegate_tx_hash": "0x...",
@@ -111,7 +87,7 @@ def run_job() -> int:
             except json.JSONDecodeError:
                 continue
     if job_json is None:
-        print(f"run-job failed (exit={result.returncode}).", file=sys.stderr)
+        print(f"run-job failed (exit={returncode}).", file=sys.stderr)
         print(job_stdout, file=sys.stderr)
         if job_stderr:
             print(job_stderr, file=sys.stderr)
@@ -157,7 +133,7 @@ def run_job() -> int:
             "discrimination_d_wrong_hash_rejected_evidence", ""
         ),
         "all_passed": None,
-        "exit_code": result.returncode,
+        "exit_code": returncode,
     }
     # c8: all_passed is the logical AND of the seven named E14d checks.
     all_passed = (
@@ -172,7 +148,7 @@ def run_job() -> int:
     out["all_passed"] = all_passed
     print(json.dumps(out))
     # The checker exits 0 only when the job succeeded AND all seven E14d checks are true.
-    return 0 if (result.returncode == 0 and out["all_passed"]) else 1
+    return 0 if (returncode == 0 and out["all_passed"]) else 1
 
 
 def main() -> int:

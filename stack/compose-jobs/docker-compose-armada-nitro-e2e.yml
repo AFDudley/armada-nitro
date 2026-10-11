@@ -1,6 +1,6 @@
 services:
   armada-nitro-e2e:
-    image: cerc/armada-nitro-env:local
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     # Same reason as armada-env-verify: env/gates/nitro-e2e/prepare.ts uses
     # lib/sdk/chain-config.ts's hardcoded http://localhost:8545 for chain 31337 (merkle-tree
     # scan). Host networking makes that resolve to geth's host-published 127.0.0.1:8545.

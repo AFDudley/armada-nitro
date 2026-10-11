@@ -14,6 +14,7 @@ line-length = 110
 
 [tool.mypy]
 python_version = "3.11"
-# `from reconciler.x import y` resolves against env/.
-mypy_path = "env"
+# `from reconciler.x import y` resolves against env/; `from armada_job_helper import y`
+# (the shared job runner helper, arn-895) resolves against scripts/.
+mypy_path = "env:scripts"
 explicit_package_bases = true

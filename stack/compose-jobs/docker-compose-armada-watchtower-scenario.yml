@@ -12,7 +12,7 @@
 # the job container).
 services:
   armada-watchtower-scenario:
-    image: cerc/armada-nitro-env:local
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     network_mode: host   # so 127.0.0.1:8545 resolves to geth's host-published port
     working_dir: /src/armada-nitro/env/gates/watchtower
     entrypoint: ["sh", "-c"]

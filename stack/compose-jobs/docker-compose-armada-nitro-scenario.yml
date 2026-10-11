@@ -1,6 +1,6 @@
 services:
   armada-nitro-scenario:
-    image: cerc/armada-nitro-foundry:local
+    image: cerc/armada-nitro-foundry:${ARMADA_IMAGE_TAG}
     entrypoint: ["armada-nitro-local"]
     command: ["scenario"]
     environment:

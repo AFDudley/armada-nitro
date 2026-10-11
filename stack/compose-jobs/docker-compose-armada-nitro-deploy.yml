@@ -1,6 +1,6 @@
 services:
   armada-nitro-deploy:
-    image: cerc/armada-nitro-foundry:local
+    image: cerc/armada-nitro-foundry:${ARMADA_IMAGE_TAG}
     entrypoint: ["armada-nitro-local"]
     command: ["deploy"]
     environment:

@@ -1,6 +1,6 @@
 services:
   armada-env-verify:
-    image: cerc/armada-nitro-env:local
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     # lib/sdk/chain-config.ts (loadNetworkIntoEngine's merkle-tree scan, used by
     # env/gates/pool-e2e/pool-e2e.ts) hardcodes the RPC for chain 31337 to
     # http://localhost:8545 -- it ignores HUB_RPC. Host networking is what makes that

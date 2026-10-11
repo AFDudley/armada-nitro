@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """armada-frost-keygen checker (arn-1be).
 
-Runs the armada-frost-keygen job on the E12 fixturenet via
-`laconic-so deployment --dir <dep> run-job armada-frost-keygen`, then reads the hub
-custodian's on-chain group key via geth RPC (http://127.0.0.1:8545), and re-emits one JSON
-line:
+Runs the armada-frost-keygen job on the E12 fixturenet through the shared job helper
+(scripts/armada_job_helper.py, arn-895), which builds the job's image from this
+checkout's committed content if it is missing, selects it (ARMADA_IMAGE_TAG via
+`laconic-so deploy create --update` -- this also syncs the deployment's compose-jobs, so
+the job registers without a manual file copy), and calls run-job. The job's stdout is
+parsed for its JSON line; this checker then reads the hub custodian's on-chain group key
+via geth RPC (http://127.0.0.1:8545), and re-emits one JSON line:
 
   {"group_pubkey_x", "group_pubkey_y", "shares_present", "already_present",
    "custodian_group_key_matches"}
@@ -19,60 +22,30 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 
-# The operator-managed E12 fixturenet (arn-1be's target deployment).
-DEP_DIR = os.path.expanduser("~/deployments/armada-fixturenet-e12")
+_scripts_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _scripts_dir)
+from armada_job_helper import run_job as _helper_run_job  # noqa: E402
+
+JOB = "armada-frost-keygen"
 # E12's hub custodian: the FROST group key the full reconcile deployed (from the
 # deployment's manifest, not the data dir).
 CUSTODIAN = "0xae2abbde6c9829141675fa0a629a675badbb0d9f"
 HOST_RPC = "http://127.0.0.1:8545"
 
-# laconic-so is a self-contained shiv (bundled zipapp) loaded under the system python3.12
-# (not the venv's python3.14).
-_LITERAL_SHIV = "/home/rix/bin/laconic-so"
-LA_CONIC_SO = _LITERAL_SHIV if os.path.isfile(_LITERAL_SHIV) else os.path.expanduser("~/bin/laconic-so")
-PYTHON_312 = "/usr/bin/python3.12"
-
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-_repo_root = os.path.dirname(_scripts_dir)
-JOB_FILE_SRC = os.path.join(_repo_root, "stack", "compose-jobs", "docker-compose-armada-frost-keygen.yml")
-JOB_FILE_DST = os.path.join(DEP_DIR, "compose-jobs", "docker-compose-armada-frost-keygen.yml")
-
-
-def _ensure_job_registered() -> None:
-    """The check script reaches E12 only through `run-job` + geth RPC; copy the job file into
-    the deployment's compose-jobs (not its data dir) if it is missing, written atomically so a
-    half-file is never observed."""
-    if os.path.exists(JOB_FILE_DST):
-        return
-    os.makedirs(os.path.dirname(JOB_FILE_DST), exist_ok=True)
-    tmp = JOB_FILE_DST + ".tmp"
-    shutil.copyfile(JOB_FILE_SRC, tmp)
-    os.rename(tmp, JOB_FILE_DST)
-
 
 def run_job() -> dict[str, object]:
-    """Run the job and capture its final JSON line from the job's stdout."""
-    cmd = [
-        PYTHON_312,
-        LA_CONIC_SO,
-        "deployment",
-        "--dir",
-        DEP_DIR,
-        "run-job",
-        "armada-frost-keygen",
-    ]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    except subprocess.TimeoutExpired:
+    """Run the job through the shared helper and capture its final JSON line from the
+    job's stdout."""
+    job_stdout, returncode = _helper_run_job(JOB, timeout=300)
+    if not job_stdout:
         print("TIMEOUT: run-job did not finish within 300s", file=sys.stderr)
         return {}
 
     job_json: dict[str, object] | None = None
-    for line in reversed((result.stdout or "").splitlines()):
+    for line in reversed(job_stdout.splitlines()):
         line = line.strip()
         if line.startswith("{"):
             try:
@@ -81,11 +54,8 @@ def run_job() -> dict[str, object]:
             except json.JSONDecodeError:
                 continue
     if job_json is None:
-        print(f"run-job failed (exit={result.returncode}):", file=sys.stderr)
-        if result.stdout:
-            print(result.stdout, file=sys.stderr)
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
+        print(f"run-job failed (exit={returncode}):", file=sys.stderr)
+        print(job_stdout, file=sys.stderr)
         return {}
     return job_json
 
@@ -131,7 +101,6 @@ def custodian_key_matches(job_json: dict[str, object] | None) -> bool:
 
 
 def main() -> int:
-    _ensure_job_registered()
     job_json = run_job()
 
     # Re-emit the job's four fields as the job reported them (group_pubkey_x, group_pubkey_y,

@@ -1,6 +1,6 @@
 services:
   armada-custodian-e2e:
-    image: cerc/armada-nitro-env:local
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     # Mirrors docker-compose-armada-nitro-e2e.yml (host networking so 127.0.0.1:8545 resolves
     # to geth's host-published port; $$ escapes for a literal $ in the container environment).
     #

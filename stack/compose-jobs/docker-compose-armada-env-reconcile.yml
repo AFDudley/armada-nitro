@@ -1,6 +1,6 @@
 services:
   armada-env-reconcile:
-    image: cerc/armada-nitro-env:local
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     working_dir: /src/armada-nitro/env
     entrypoint: ["sh", "-c"]
     command:
