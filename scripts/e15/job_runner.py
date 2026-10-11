@@ -14,82 +14,31 @@ owns the chain and resets it between chunks).
 from __future__ import annotations
 
 import json
-import os
 import pathlib
-import subprocess
 import sys
 
-# The operator-managed fixturenet deployment (E12).
-DEFAULT_DEP_DIR = pathlib.Path(
-    os.environ.get("ARMADA_STATE_DIR", pathlib.Path.home() / "deployments" / "armada-fixturenet-e12")
-)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import armada_job_helper  # noqa: E402
 
-# Alias used by _sync_deployment / _run_job.
-DEP_DIR = DEFAULT_DEP_DIR
 # REAL_RPC is resolved inside the job container to the compose service DNS name; no override
 # needed from the host runner.
 JOB = "armada-watchtower-discrimination-e2e"
-REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
-
-
-def _python312() -> str:
-    env = os.environ.get("ARMADA_PYTHON", "python3.12")
-    return env
-
-
-def _laconic_so() -> str:
-    return "/home/rix/bin/laconic-so"
-
-
-def _sync_deployment() -> None:
-    """Sync the deployment's generated files (compose, compose-jobs) with this checkout's
-    stack, so the new job definition takes effect (idempotent)."""
-    spec_file = DEP_DIR / "spec.yml"
-    if not spec_file.is_file():
-        sys.stderr.write(f"no spec file at {spec_file}\n")
-        raise SystemExit(2)
-    # The sync is idempotent; it rewrites each job's volumes for the deployment and leaves
-    # data/ and config.env alone.
-    cmd = [
-        _python312(),
-        _laconic_so(),
-        "--stack",
-        "stack/stacks/armada-nitro-fixturenet",
-        "deploy",
-        "create",
-        "--spec-file",
-        str(spec_file),
-        "--deployment-dir",
-        str(DEP_DIR),
-        "--update",
-    ]
-    p = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
-    if p.returncode != 0:
-        sys.stderr.write(f"laconic-so sync failed (exit {p.returncode})\n{p.stderr}\n")
-        raise SystemExit(p.returncode)
 
 
 def _run_job(scenario: str) -> str:
-    """Run the discrimination job on the deployment and return its single JSON line."""
-    _sync_deployment()
-    cmd = [
-        _python312(),
-        _laconic_so(),
-        "deployment",
-        "--dir",
-        str(DEP_DIR),
-        "run-job",
-        JOB,
-    ]
-    env = dict(os.environ)
-    env["SCENARIO"] = scenario
-    p = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    if p.returncode != 0:
-        sys.stderr.write(p.stderr)
-        raise SystemExit(p.returncode)
+    """Run the discrimination job on the deployment and return its single JSON line.
+
+    Goes through the shared helper (scripts/armada_job_helper.py, arn-895): it builds
+    the HEAD-sha image if missing, syncs the deployment, and runs the job with
+    ARMADA_IMAGE_TAG set to HEAD's sha."""
+    stdout, rc = armada_job_helper.run_job(JOB, {"SCENARIO": scenario})
+    if rc != 0:
+        sys.stderr.write(f"run-job {JOB} exited {rc}\n")
+        raise SystemExit(rc if rc > 0 else 1)
+    p_stdout = stdout
     # The job prints its JSON line to stdout. The line starts with '{' and contains the
     # scenario field.
-    for line in p.stdout.splitlines():
+    for line in p_stdout.splitlines():
         line = line.strip()
         if line.startswith("{"):
             try:
@@ -99,7 +48,7 @@ def _run_job(scenario: str) -> str:
                 continue
     # The JSON object can land on the same physical line as preceding chatter, so find the
     # rightmost '{' that parses as JSON.
-    data = p.stdout
+    data = p_stdout
     dec = json.JSONDecoder()
     idx = data.rfind("{")
     while idx != -1:

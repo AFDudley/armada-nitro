@@ -36,7 +36,7 @@
 # elevated privileges and no file-ownership changes (RC5).
 services:
   armada-watchtower-discrimination-e2e:
-    image: cerc/armada-nitro-env:local
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     working_dir: /src/armada-nitro
     entrypoint: ["sh", "-c"]
     command:
