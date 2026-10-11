@@ -6,6 +6,7 @@ Runs the discrimination job twice: once with SCENARIO=single_signer and once wit
 SCENARIO=late_response. Each run prints its failure line. The script verifies both failure
 lines were printed.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,10 +25,14 @@ def main() -> int:
     # A failure line is "printed" if the JSON's failure_line field is a non-empty string.
     single_signer_failure_line_printed = bool(sd.get("single_signer_failure_line"))
     late_response_failure_line_printed = bool(ld.get("late_response_failure_line"))
-    print(json.dumps({
-        "single_signer_failure_line_printed": single_signer_failure_line_printed,
-        "late_response_failure_line_printed": late_response_failure_line_printed,
-    }))
+    print(
+        json.dumps(
+            {
+                "single_signer_failure_line_printed": single_signer_failure_line_printed,
+                "late_response_failure_line_printed": late_response_failure_line_printed,
+            }
+        )
+    )
     return 0
 
 

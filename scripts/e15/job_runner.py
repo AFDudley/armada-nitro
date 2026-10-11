@@ -10,6 +10,7 @@ laconic-so's 'deploy create --update', as scripts/run-armada-watchtower-scenario
 and reads its JSON output. It never stops/deletes/recreates the deployment (the operator
 owns the chain and resets it between chunks).
 """
+
 from __future__ import annotations
 
 import json
@@ -19,10 +20,9 @@ import subprocess
 import sys
 
 # The operator-managed fixturenet deployment (E12).
-DEFAULT_DEP_DIR = pathlib.Path(os.environ.get(
-    "ARMADA_STATE_DIR",
-    pathlib.Path.home() / "deployments" / "armada-fixturenet-e12"
-))
+DEFAULT_DEP_DIR = pathlib.Path(
+    os.environ.get("ARMADA_STATE_DIR", pathlib.Path.home() / "deployments" / "armada-fixturenet-e12")
+)
 
 # Alias used by _sync_deployment / _run_job.
 DEP_DIR = DEFAULT_DEP_DIR
@@ -31,12 +31,15 @@ DEP_DIR = DEFAULT_DEP_DIR
 JOB = "armada-watchtower-discrimination-e2e"
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
+
 def _python312() -> str:
     env = os.environ.get("ARMADA_PYTHON", "python3.12")
     return env
 
+
 def _laconic_so() -> str:
     return "/home/rix/bin/laconic-so"
+
 
 def _sync_deployment() -> None:
     """Sync the deployment's generated files (compose, compose-jobs) with this checkout's
@@ -48,11 +51,16 @@ def _sync_deployment() -> None:
     # The sync is idempotent; it rewrites each job's volumes for the deployment and leaves
     # data/ and config.env alone.
     cmd = [
-        _python312(), _laconic_so(),
-        "--stack", "stack/stacks/armada-nitro-fixturenet",
-        "deploy", "create",
-        "--spec-file", str(spec_file),
-        "--deployment-dir", str(DEP_DIR),
+        _python312(),
+        _laconic_so(),
+        "--stack",
+        "stack/stacks/armada-nitro-fixturenet",
+        "deploy",
+        "create",
+        "--spec-file",
+        str(spec_file),
+        "--deployment-dir",
+        str(DEP_DIR),
         "--update",
     ]
     p = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
@@ -60,13 +68,18 @@ def _sync_deployment() -> None:
         sys.stderr.write(f"laconic-so sync failed (exit {p.returncode})\n{p.stderr}\n")
         raise SystemExit(p.returncode)
 
+
 def _run_job(scenario: str) -> str:
     """Run the discrimination job on the deployment and return its single JSON line."""
     _sync_deployment()
     cmd = [
-        _python312(), _laconic_so(),
-        "deployment", "--dir", str(DEP_DIR),
-        "run-job", JOB,
+        _python312(),
+        _laconic_so(),
+        "deployment",
+        "--dir",
+        str(DEP_DIR),
+        "run-job",
+        JOB,
     ]
     env = dict(os.environ)
     env["SCENARIO"] = scenario

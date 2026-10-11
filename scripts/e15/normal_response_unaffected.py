@@ -6,6 +6,7 @@ accepted and the payout updates as expected.
 Runs the `armada-watchtower-discrimination-e2e` job with SCENARIO=normal. The job's JSON
 line reports `normal_response_accepted` and `payout_updated_correctly`.
 """
+
 from __future__ import annotations
 
 import json
@@ -17,10 +18,14 @@ import job_runner
 def main() -> int:
     json_line = job_runner._run_job("normal")
     data = json.loads(json_line)
-    print(json.dumps({
-        "normal_response_accepted": data.get("normal_response_accepted"),
-        "payout_updated_correctly": data.get(json_line and "payout_updated_correctly"),
-    }))
+    print(
+        json.dumps(
+            {
+                "normal_response_accepted": data.get("normal_response_accepted"),
+                "payout_updated_correctly": data.get(json_line and "payout_updated_correctly"),
+            }
+        )
+    )
     return 0
 
 

@@ -48,8 +48,10 @@ DEPOSIT_AMOUNT_UNITS: int = STATE_N1_USER + HUB_RESERVE
 # note value is the allocation less that fee.
 SHIELD_FEE_BPS: int = 50
 
+
 def net_of_shield_fee(gross: int) -> int:
     return gross * (10000 - SHIELD_FEE_BPS) // 10000
+
 
 MANIFEST_PATH: str = os.environ.get("MANIFEST_PATH", "/env/manifest.json")
 DEPOSITS_PATH: str = os.environ.get("DEPOSITS_PATH", "/env/watchtower-discrimination-e2e/deposits.json")
@@ -87,7 +89,13 @@ def build_deposits() -> None:
     """Build the two real-proof channel deposits (prepare.ts), bound to the scratch copy's RPC
     (the anvil fork), mirroring the E15b job's stage 1."""
     run(["mkdir", "-p", "/src/armada-poc/scripts/gates"])
-    run(["cp", "/src/armada-nitro/env/gates/watchtower/prepare.ts", "/src/armada-poc/scripts/gates/prepare.ts"])
+    run(
+        [
+            "cp",
+            "/src/armada-nitro/env/gates/watchtower/prepare.ts",
+            "/src/armada-poc/scripts/gates/prepare.ts",
+        ]
+    )
     penv = dict(os.environ)
     penv.update(
         {

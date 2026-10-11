@@ -10,6 +10,7 @@ the job ever touched the real chain, the user account's nonce there would move. 
 direct RPC read of the live deployment (permitted per the operator's constraints), not a
 file read of the deployment's data directory.
 """
+
 from __future__ import annotations
 
 import json
@@ -33,9 +34,7 @@ def real_chain_nonce() -> int:
             "id": 1,
         }
     ).encode()
-    req = urllib.request.Request(
-        REAL_RPC, data=payload, headers={"Content-Type": "application/json"}
-    )
+    req = urllib.request.Request(REAL_RPC, data=payload, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=10) as resp:
         body = json.loads(resp.read())
     return int(body["result"], 16)
@@ -48,9 +47,13 @@ def main() -> int:
     job_runner._run_job("single_signer")
     job_runner._run_job("late_response")
     nonce_after = real_chain_nonce()
-    print(json.dumps({
-        "canonical_state_unchanged": nonce_after == nonce_before,
-    }))
+    print(
+        json.dumps(
+            {
+                "canonical_state_unchanged": nonce_after == nonce_before,
+            }
+        )
+    )
     return 0
 
 
