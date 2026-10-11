@@ -29,6 +29,20 @@ STACK="stack/stacks/armada-nitro-fixturenet"
 CONFIG="stack/config/deployment-config.example.env"
 RPC="http://127.0.0.1:8545"
 
+# Jobs name their image as cerc/armada-nitro-{env,foundry}:${ARMADA_IMAGE_TAG}
+# (arn-895): the image built from this checkout's committed content (git archive
+# HEAD), tagged with HEAD's sha. Build it if missing and export the tag so every
+# run-job below resolves to it.
+export ARMADA_IMAGE_TAG
+ARMADA_IMAGE_TAG=$(git -C "$REPO_ROOT" rev-parse HEAD)
+export CERC_CONTAINER_BASE_DIR="${CERC_CONTAINER_BASE_DIR:-${HOME}/src/stack-orchestrator/stack_orchestrator/data/container-build}"
+for kind in env foundry; do
+  if ! docker image inspect "cerc/armada-nitro-${kind}:${ARMADA_IMAGE_TAG}" >/dev/null 2>&1; then
+    echo "fixturenet-new: building cerc/armada-nitro-${kind}:${ARMADA_IMAGE_TAG} ..."
+    bash "${REPO_ROOT}/stack/container-build/cerc-armada-nitro-${kind}/build.sh" >/dev/null
+  fi
+done
+
 usage() { echo "usage: $0 <name>" >&2; exit 2; }
 [ $# -eq 1 ] || usage
 NAME="$1"
