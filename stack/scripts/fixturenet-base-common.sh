@@ -90,7 +90,8 @@ key_path()  { printf '%s/armada-fixturenet-base-%s.key' "$SNAP_DIR" "$1"; }
 require_base_only_manifest() {
   local dep="$1"
   local manifest="${dep}/data/armada_env/manifest.json"
-  if [ ! -f "$manifest" ]; then
+  # data/ is root-only (mode 0700); test as root like every other read here.
+  if ! sudo test -f "$manifest"; then
     echo "fixturenet-base-snapshot: no manifest at ${manifest} -- run the base reconcile first" >&2
     return 1
   fi
