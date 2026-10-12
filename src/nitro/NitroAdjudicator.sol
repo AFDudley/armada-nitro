@@ -24,7 +24,11 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
     ) public virtual {
         bytes32 channelId = _conclude(fixedPart, candidate);
 
-        transferAllAssets(channelId, candidate.variablePart.outcome, bytes32(0));
+        // guard: no nested call may run on this channel while this conclude is in progress.
+        require(holdingsLock[channelId] == 0, 'Re-entered while in progress');
+        holdingsLock[channelId] += 1;
+        _transferAllAssetsBody(channelId, candidate.variablePart.outcome, bytes32(0));
+        holdingsLock[channelId] -= 1;
     }
 
     /**
@@ -39,6 +43,18 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
         Outcome.SingleAssetExit[] memory outcome,
         bytes32 stateHash
     ) public virtual {
+        // guard: no nested call may run on this channel while this transfer is in progress.
+        require(holdingsLock[channelId] == 0, 'Re-entered while in progress');
+        holdingsLock[channelId] += 1;
+        _transferAllAssetsBody(channelId, outcome, stateHash);
+        holdingsLock[channelId] -= 1;
+    }
+
+    function _transferAllAssetsBody(
+        bytes32 channelId,
+        Outcome.SingleAssetExit[] memory outcome,
+        bytes32 stateHash
+    ) internal {
         // checks
         _requireChannelFinalized(channelId);
         _requireMatchingFingerprint(stateHash, NitroUtils.hashOutcome(outcome), channelId);

@@ -23,6 +23,10 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
      */
     mapping(address => mapping(bytes32 => uint256)) public holdings;
 
+    /// @dev > 0 means an adjudicator call on this channel is in progress; a nested call to any
+    /// holdings-mutating entry point on the same channel reverts.
+    mapping(bytes32 => uint256) public holdingsLock;
+
     // **************
     // External methods
     // **************
@@ -45,22 +49,31 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         // this allows participants to reduce the wait between deposits, while protecting them from losing funds by depositing too early. Specifically it protects against the scenario:
         // 1. Participant A deposits
         // 2. Participant B sees A's deposit, which means it is now safe for them to deposit
+        //  (The nested call reverts, so the final holdings are identical to a plain deposit)
         // 3. Participant B submits their deposit
         // 4. The chain re-orgs, leaving B's deposit in the chain but not A's
         uint256 held = holdings[asset][channelId];
         require(held == expectedHeld, 'held != expectedHeld');
 
+        // guard: no nested call may run on this channel while this deposit is in progress.
+        require(holdingsLock[channelId] == 0, 'Re-entered while in progress');
+        holdingsLock[channelId] += 1;
+
         // require successful deposit before updating holdings (protect against reentrancy)
         if (asset == address(0)) {
             require(msg.value == amount, 'Incorrect msg.value for deposit');
+            held += amount;
+            holdingsLock[channelId] -= 1;
+            holdings[asset][channelId] = held;
+            emit Deposited(channelId, asset, held);
+            return;
         } else {
             IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
+            held += amount;
+            holdingsLock[channelId] -= 1;
+            holdings[asset][channelId] = held;
+            emit Deposited(channelId, asset, held);
         }
-
-        held += amount;
-
-        holdings[asset][channelId] = held;
-        emit Deposited(channelId, asset, held);
     }
 
     /**
@@ -85,6 +98,10 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
             uint256 initialAssetHoldings
         ) = _apply_transfer_checks(assetIndex, indices, fromChannelId, stateHash, outcomeBytes); // view
 
+        // guard: no nested call may run on this channel while this transfer is in progress.
+        require(holdingsLock[fromChannelId] == 0, 'Re-entered while in progress');
+        holdingsLock[fromChannelId] += 1;
+
         (
             Outcome.Allocation[] memory newAllocations,
             ,
@@ -107,6 +124,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
             totalPayouts
         );
         _apply_transfer_interactions(outcome[assetIndex], exitAllocations);
+        holdingsLock[fromChannelId] -= 1;
     }
 
     function _apply_transfer_checks(
@@ -237,6 +255,11 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
             Outcome.SingleAssetExit[] memory targetOutcome
         ) = _apply_reclaim_checks(reclaimArgs); // view
 
+        // guard: no nested call may run on the source channel while this reclaim is in progress.
+        bytes32 sourceChannelId = reclaimArgs.sourceChannelId;
+        require(holdingsLock[sourceChannelId] == 0, 'Re-entered while in progress');
+        holdingsLock[sourceChannelId] += 1;
+
         Outcome.Allocation[] memory newSourceAllocations;
         {
             Outcome.Allocation[] memory sourceAllocations = sourceOutcome[
@@ -253,6 +276,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         }
 
         _apply_reclaim_effects(reclaimArgs, sourceOutcome, newSourceAllocations);
+        holdingsLock[sourceChannelId] -= 1;
     }
 
     /**
