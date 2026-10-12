@@ -1,0 +1,95 @@
+{
+  "id": "derived-arn-0cf",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. MultiAssetHolder.deposit (src/nitro/MultiAssetHolder.sol:38-62) calls safeTransferFrom(msg.sender, address(this), amount) and then adds amount to holdings[asset][channelId] without reading the adjudicator's balance. depositFromNote (src/ArmadaNitroAdjudicator.sol:66-96) reads the balance before and after.\nWhat did you expect to happen? After a deposit, the increase in holdings[asset][channelId] equals the increase in the adjudicator's token balance, or the deposit reverts. Checks: behavior: 'python3 scripts/check-adjudicator-deposit-amount.py' prints one JSON line {short_transfer_deposit_reverted: true, normal_deposit_holdings_delta_equals_balance_delta: true}, using a test token that transfers 1 unit less than requested and a normal test token.\nWhat actually happened? Include the exact error text or output. deposit adds the requested amount to holdings; the adjudicator's balance is not read in deposit.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) src/ArmadaNitroAdjudicator.sol deposit (inherited from src/nitro/MultiAssetHolder.sol)\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main 3a29d0f; solc 0.8.17; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 I1 and E16 S2 require the recorded holdings of an asset to equal the tokens the adjudicator received. For a token that delivers less than the requested amount, holdings exceed the balance, and the last channel to exit that asset is paid short.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11 multi-asset hub channels\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading the deposit paths",
+  "restatement": "MultiAssetHolder.deposit credits holdings[asset][channelId] by the requested amount parameter without checking how many tokens the adjudicator actually received. depositFromNote already reads the adjudicator's token balance before and after the transfer and credits only the measured increase. The fix makes deposit do the same check for ERC20 deposits. After the fix, deposit measures the adjudicator's own token balance before and after the transfer. Deposit credits holdings by exactly that measured increase, or deposit reverts. A token that delivers 1 unit less than the requested amount must cause deposit to revert, instead of letting holdings grow past the tokens received. A normal token that delivers the full requested amount must leave the holdings increase equal to the measured balance increase.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "When a token delivers 1 unit less than the requested deposit amount, the deposit call must revert."
+    },
+    {
+      "id": "c2",
+      "text": "When a normal token delivers the full requested deposit amount, the increase in holdings[asset][channelId] must equal the increase in the adjudicator's measured token balance."
+    }
+  ],
+  "goal": "Fix MultiAssetHolder.deposit so the recorded holdings increase for an asset and channel never exceeds the tokens the adjudicator actually received, reverting the deposit when a token sends less than requested.",
+  "acceptance_criteria": [
+    "After someone tries to deposit using a token that pays 1 unit less than the amount asked for, the deposit attempt fails and nothing is recorded.",
+    "After a normal deposit completes, the recorded holdings for that asset and channel go up by exactly the same amount as the adjudicator's real token balance."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After someone tries to deposit using a token that pays 1 unit less than the amount asked for, the deposit attempt fails and nothing is recorded."
+    },
+    {
+      "id": "c2",
+      "text": "After a normal deposit completes, the recorded holdings for that asset and channel go up by exactly the same amount as the adjudicator's real token balance."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "After someone tries to deposit using a token that pays 1 unit less than the amount asked for, the deposit attempt fails and nothing is recorded.",
+      "proves": "Shows that a token paying less than the requested amount cannot leave the recorded holdings higher than the tokens the adjudicator actually received.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-adjudicator-deposit-amount.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "short_transfer_deposit_reverted",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "After a normal deposit completes, the recorded holdings for that asset and channel go up by exactly the same amount as the adjudicator's real token balance.",
+      "proves": "Shows that for a token that pays the full requested amount, the recorded holdings increase matches the real balance increase.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-adjudicator-deposit-amount.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "normal_deposit_holdings_delta_equals_balance_delta",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-adjudicator-deposit-amount.py"
+  ]
+}
