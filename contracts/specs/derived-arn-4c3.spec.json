@@ -1,0 +1,145 @@
+{
+  "id": "derived-arn-4c3",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. No script on main inspects src/ArmadaNitroAdjudicator.sol or src/nitro/ for ERC-4626 imports or calls to convertToAssets, convertToShares, previewDeposit, previewMint, previewRedeem or previewWithdraw. Branch worker/arn-31a (parked green_on_base) has scripts/check-settlement-rate-free.py, which prints {files_scanned, erc4626_import_count, rate_call_count, ...} and supports --self-test.\nWhat did you expect to happen? 'python3 scripts/check-settlement-rate-free.py' prints one JSON line with files_scanned >= 2, erc4626_import_count = 0 and rate_call_count = 0, and exits 0. 'python3 scripts/check-settlement-rate-free.py --scan-file <path>' scans only the given file; run on a temporary file containing 'convertToAssets(' it prints JSON with rate_call_count >= 1 and exits non-zero. Start from branch worker/arn-31a and add --scan-file with the non-zero exit.\nWhat actually happened? Include the exact error text or output. main has no such script; the script on worker/arn-31a always exits 0 and cannot be pointed at a single file.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) src/ArmadaNitroAdjudicator.sol and src/nitro/\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro integrated 360070e; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 requires settlement to use no exchange rate; a later change could import ERC-4626 or call a rate function without any check failing.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading the settlement code against design 15",
+  "restatement": "The worker extends scripts/check-settlement-rate-free.py. The worker starts from branch worker/arn-31a. The script must scan src/ArmadaNitroAdjudicator.sol and src/nitro/ for ERC-4626 imports. The script must also scan these for calls to convertToAssets, convertToShares, previewDeposit, previewMint, previewRedeem, and previewWithdraw. Design 15 requires settlement to use no exchange rate. The script enforces this rule as an automated check. Run with no arguments, the script prints one JSON line and exits 0. The JSON line reports files_scanned >= 2, erc4626_import_count = 0, and rate_call_count = 0. The script must also accept a --scan-file <path> option. This option limits the scan to the one named file. Run with --scan-file on a file that contains the text 'convertToAssets(', the script prints JSON with rate_call_count >= 1. The script then exits with a non-zero code. On worker/arn-31a today, the script always exits 0. On worker/arn-31a today, the script has no --scan-file option. Main has no such script at all.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Run with no arguments, `python3 scripts/check-settlement-rate-free.py` prints one JSON line. The JSON line reports files_scanned >= 2, erc4626_import_count = 0, and rate_call_count = 0. The command exits with code 0."
+    },
+    {
+      "id": "c2",
+      "text": "The script accepts a --scan-file <path> option. This option limits the scan to the one named file, not the whole repository."
+    },
+    {
+      "id": "c3",
+      "text": "Run as `python3 scripts/check-settlement-rate-free.py --scan-file <path>` on a file that contains the text 'convertToAssets(', the command prints JSON with rate_call_count >= 1. The command exits with a non-zero code."
+    }
+  ],
+  "goal": "Fix the settlement-rate-free checker so a clean repository-wide scan exits 0, and add a --scan-file option that fails on a file containing a rate-conversion call.",
+  "acceptance_criteria": [
+    "A person runs the checker with no arguments. The checker prints one JSON line. The line reports at least 2 files scanned, zero ERC-4626 imports, and zero rate-conversion calls. The checker exits with code 0.",
+    "A person runs the checker with --scan-file pointing at one existing file. The checker's JSON output shows it scanned exactly 1 file, not the whole repository.",
+    "A person runs the checker with --scan-file pointing at a file that contains the text 'convertToAssets('. The checker's JSON output shows at least 1 rate-conversion call. The checker exits with a non-zero code."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A person runs the checker with no arguments. The checker prints one JSON line. The line reports at least 2 files scanned, zero ERC-4626 imports, and zero rate-conversion calls. The checker exits with code 0."
+    },
+    {
+      "id": "c2",
+      "text": "A person runs the checker with --scan-file pointing at one existing file. The checker's JSON output shows it scanned exactly 1 file, not the whole repository."
+    },
+    {
+      "id": "c3",
+      "text": "A person runs the checker with --scan-file pointing at a file that contains the text 'convertToAssets('. The checker's JSON output shows at least 1 rate-conversion call. The checker exits with a non-zero code."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "A person runs the checker with no arguments. The checker prints one JSON line. The line reports at least 2 files scanned, zero ERC-4626 imports, and zero rate-conversion calls. The checker exits with code 0.",
+      "proves": "Proves the checker reports a clean result for the current settlement code, which has no ERC-4626 import and no rate-conversion call.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "files_scanned",
+          "op": "ge",
+          "value": 2
+        },
+        {
+          "observe": "stdout_json",
+          "field": "erc4626_import_count",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "rate_call_count",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c1"
+    },
+    {
+      "description": "A person runs the checker with --scan-file pointing at one existing file. The checker's JSON output shows it scanned exactly 1 file, not the whole repository.",
+      "proves": "Proves --scan-file limits the scan to the one named file.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free.py",
+        "args": [
+          "--scan-file",
+          "src/ArmadaNitroAdjudicator.sol"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "files_scanned",
+          "op": "eq",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c2"
+    },
+    {
+      "description": "A person runs the checker with --scan-file pointing at a file that contains the text 'convertToAssets('. The checker's JSON output shows at least 1 rate-conversion call. The checker exits with a non-zero code.",
+      "proves": "Proves the checker flags a file that calls a rate-conversion function and fails the check.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free.py",
+        "args": [
+          "--scan-file",
+          "scripts/fixtures/rate-call-violation.txt"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "rate_call_count",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-settlement-rate-free.py"
+  ]
+}
