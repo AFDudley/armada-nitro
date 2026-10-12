@@ -28,6 +28,28 @@ contract ShortToken {
     }
 }
 
+/// @dev Minimal ERC20 that delivers exactly the requested amount.
+contract NormalToken {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[address(this)][spender] = amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        if (balanceOf[from] < amount) return false;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}
+
 contract DepositAmountTest is ArmadaFixture {
     ArmadaNitroAdjudicator adjudicator;
 
@@ -51,16 +73,17 @@ contract DepositAmountTest is ArmadaFixture {
     /// @dev c2: a normal token that pays the full amount leaves the holdings increase equal to the
     /// adjudicator's measured token balance increase.
     function test_normalDeposit_holdingsDeltaEqualsBalanceDelta() public {
+        NormalToken token = new NormalToken();
         uint256 amount = 50;
-        usdc.mint(address(this), amount);
-        usdc.approve(address(adjudicator), amount);
+        token.mint(address(this), amount);
+        token.approve(address(adjudicator), amount);
         bytes32 channelId = keccak256("channel-arn-0cf");
 
-        uint256 heldBefore = adjudicator.holdings(address(usdc), channelId);
-        uint256 balBefore = usdc.balanceOf(address(adjudicator));
-        adjudicator.deposit(address(usdc), channelId, heldBefore, amount);
-        uint256 heldDelta = adjudicator.holdings(address(usdc), channelId) - heldBefore;
-        uint256 balDelta = usdc.balanceOf(address(adjudicator)) - balBefore;
+        uint256 heldBefore = adjudicator.holdings(address(token), channelId);
+        uint256 balBefore = token.balanceOf(address(adjudicator));
+        adjudicator.deposit(address(token), channelId, heldBefore, amount);
+        uint256 heldDelta = adjudicator.holdings(address(token), channelId) - heldBefore;
+        uint256 balDelta = token.balanceOf(address(adjudicator)) - balBefore;
 
         assertEq(heldDelta, balDelta, 'holdings delta != balance delta');
     }
