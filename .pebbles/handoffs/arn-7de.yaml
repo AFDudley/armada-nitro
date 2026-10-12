@@ -1,0 +1,47 @@
+status: completed
+pebble_id: arn-7de
+summary: >
+  Fixed FixturenetScenario.s.sol's settle() to fall back to MultiAssetHolder's existing
+  per-asset transfer(assetIndex, ...) when the single all-assets transferAllAssets call
+  reverts, so a channel holding two different assets whose second asset's token reverts on
+  transfer still pays out the first asset and leaves the second asset's recorded holdings
+  untouched. The probe-before-broadcast attempts (for transferAllAssets and for each
+  per-asset transfer) are made unbroadcast first, using vm.snapshotState/revertTo to undo
+  their own state effect, and only replayed via a real vm.broadcast call once confirmed to
+  succeed -- mirroring earlySettle's own documented pattern for a call that might revert
+  under forge script --broadcast, so a reverting per-asset attempt is never sent as a real
+  transaction. The force-close outcome builder (_forcedState) adds a second asset only when
+  the manifest configures one (c.usdc2, read via the now-optional '.armada.usdc2' key);
+  cooperativeClose's single-asset _state and the real armada-nitro-e2e gate's manifest
+  (no usdc2) are unaffected. Verified by: (1) scripts/check-e2e-settle-per-asset.py, the
+  spec's acceptance oracle, which deploys a fresh local anvil environment (via the new
+  script/CheckSettlePerAssetSetup.s.sol, including a RevertingTransferToken second asset)
+  and drives the real FixturenetScenario.s.sol scenario end to end, printing
+  {"first_asset_paid": true, "second_asset_holdings_unchanged": true}; (2) a separate manual
+  run of the full real single-asset shape (setUpHub/cooperativeClose/openAndChallenge/
+  earlySettle/settle/verify against a manifest without usdc2) confirming the unmodified
+  armada-nitro-e2e gate still takes the original transferAllAssets-succeeds happy path and
+  verify() passes; (3) the full existing forge test suite (27 tests, 4 suites) still passes.
+cost: "~140k tokens"
+commits:
+  - "ea16676"
+verify_transcript:
+  hooks:
+    - name: forge test (full suite)
+      outcome: passed
+      duration_s: 1
+    - name: scripts/check-e2e-settle-per-asset.py
+      outcome: passed
+      duration_s: 17
+    - name: real single-asset gate shape (manual end-to-end, no usdc2 in manifest)
+      outcome: passed
+      duration_s: 21
+    - name: pre-commit (full hook set on changed files)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-7de.spec.json
+  command: python3 scripts/check-e2e-settle-per-asset.py
+  result: passed
+  ran_at_sha: "ea16676"
+  mocks_in_path: false
