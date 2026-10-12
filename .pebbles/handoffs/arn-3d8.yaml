@@ -1,0 +1,52 @@
+status: completed
+pebble_id: arn-3d8
+summary: >
+  Added a hub-configured asset allow-list to ArmadaNitroAdjudicator
+  (mapping(address => bool) configuredAssets, set from a constructor
+  address[] argument, exposed via isAsset(address)) and enforced it on both
+  deposit entry points. deposit is overridden on the adjudicator
+  (override (IMultiAssetHolder, MultiAssetHolder)) to require isAsset(asset)
+  before crediting; the base MultiAssetHolder.deposit logic was extracted
+  into an internal _doDeposit helper so the override reuses it instead of
+  duplicating it. depositFromNote now requires isAsset(note.token.tokenAddress)
+  before the unshield is submitted to the pool. Every other argument is
+  unchanged between a listed-asset and unlisted-asset deposit; only the
+  token's configured status flips credit to revert. script/Deploy.s.sol reads
+  the hub's list from ARMADA_ASSETS (comma-separated addresses) via
+  vm.envAddress(name, ','). Added test/AdjudicatorAssetList.t.sol with one
+  metamorphic test per entry point (test_deposit_metamorphic_...,
+  test_depositFromNote_metamorphic_...), each depositing a listed token
+  (asserting it credits adjudicator.holdings) and then an unlisted token with
+  otherwise-identical call arguments (asserting it reverts with 'Asset not
+  configured'). Added scripts/check-adjudicator-asset-list.py, the spec's
+  acceptance oracle, which runs the matching test via
+  `forge test --match-contract AdjudicatorAssetListTest --match-test <name>`
+  for --entrypoint deposit|depositFromNote and exits 0 only if it passes.
+  Verified by running the full forge suite (29/29 tests pass, including the
+  2 new metamorphic tests and all 10 pre-existing ArmadaNitroAdjudicator
+  tests, confirming listed-asset deposits still credit exactly as before);
+  by running both gate commands directly (both exit 0); and by running
+  pre-commit on every touched file (clean).
+cost: "~140k tokens"
+commits:
+  - "086e7bb9ae5388adaf2450902db129dbe8bd8843"
+verify_transcript:
+  hooks:
+    - name: forge test (full suite)
+      outcome: passed
+      duration_s: 6
+    - name: check-adjudicator-asset-list.py --entrypoint deposit
+      outcome: passed
+      duration_s: 1
+    - name: check-adjudicator-asset-list.py --entrypoint depositFromNote
+      outcome: passed
+      duration_s: 1
+    - name: pre-commit (touched files)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-3d8.spec.json
+  command: "python3 scripts/check-adjudicator-asset-list.py --entrypoint deposit && python3 scripts/check-adjudicator-asset-list.py --entrypoint depositFromNote"
+  result: passed
+  ran_at_sha: "086e7bb9ae5388adaf2450902db129dbe8bd8843"
+  mocks_in_path: false
