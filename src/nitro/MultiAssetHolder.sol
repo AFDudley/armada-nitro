@@ -53,13 +53,16 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         // require successful deposit before updating holdings (protect against reentrancy)
         if (asset == address(0)) {
             require(msg.value == amount, 'Incorrect msg.value for deposit');
+            held += amount;
+            holdings[asset][channelId] = held;
         } else {
+            uint256 balanceBefore = IERC20(asset).balanceOf(address(this));
             IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
+            uint256 received = IERC20(asset).balanceOf(address(this)) - balanceBefore;
+            require(received == amount, 'Deposit amount mismatch');
+            held += received;
+            holdings[asset][channelId] = held;
         }
-
-        held += amount;
-
-        holdings[asset][channelId] = held;
         emit Deposited(channelId, asset, held);
     }
 
