@@ -1,0 +1,57 @@
+status: completed
+pebble_id: arn-4c3
+summary: >
+  Ported scripts/check-settlement-rate-free.py from the parked
+  worker/arn-31a branch and extended it: a clean repository-wide scan
+  (adjudicator + src/nitro) exits 0, reporting files_scanned=16,
+  erc4626_import_count=0 and rate_call_count=0. Added a --scan-file
+  option that limits the scan to one named file. A clean file exits 0
+  (files_scanned=1); a file containing the text 'convertToAssets('
+  exits non-zero (exit 1), with rate_call_count=1. Added the committed
+  fixture scripts/fixtures/rate-call-violation.txt holding the
+  violating case the linked spec's --scan-file points at. Verified by
+  running all three spec acceptance commands (clean scan exits 0,
+  single-file scan exits 0, violating fixture exits 1) and by the
+  passing commit-boundary gate (exophial gate run arn-4c3).
+cost: "~20k tokens"
+commits:
+  - "bc0cdcdafc6a15c4056ffa7e42f51d085c8febd6"
+verify_transcript:
+  hooks:
+    - name: "pre-commit (full suite)"
+      outcome: passed
+      duration_s: 1.1
+    - name: "exophial gate run arn-4c3"
+      outcome: passed
+      duration_s: 16.1
+e2e_gate:
+  spec: contracts/specs/derived-arn-4c3.spec.json
+  command: "python3 scripts/check-settlement-rate-free.py; python3 scripts/check-settlement-rate-free.py --scan-file src/ArmadaNitroAdjudicator.sol; python3 scripts/check-settlement-rate-free.py --scan-file scripts/fixtures/rate-call-violation.txt"
+  result: passed
+  ran_at_sha: "bc0cdcdafc6a15c4056ffa7e42f51d085c8febd6"
+  mocks_in_path: false
+discrimination:
+  - mechanism: red_first
+    oracle: "scripts/check-settlement-rate-free.py (settlement-rate-free checker)"
+    target: "scripts/fixtures/rate-call-violation.txt"
+    perturbation: "the committed fixture holds a 'convertToAssets(' rate-conversion call (the violating case the checker must refuse)"
+    took:
+      applied:
+        observable: "fixture file contains the text 'convertToAssets('"
+        moved:
+          - ""
+          - "uint32 convertToAssets(uint32 channelId, uint256 shareAmount, uint32 asset)"
+      observed:
+        observable: "checker reports rate_call_count >= 1 and exits non-zero"
+        moved:
+          - "rate_call_count=0, exit_code=0"
+          - "rate_call_count=1, exit_code=1"
+    assertions_fired:
+      - assertion: "checker refuses a violating file: --scan-file on a file containing 'convertToAssets(' exits non-zero"
+        moved:
+          - "clean repository-wide scan exits 0"
+          - "violating-file scan exits 1"
+    pinned_at: "scripts/check-settlement-rate-free.py"
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: false
