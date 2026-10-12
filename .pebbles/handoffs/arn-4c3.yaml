@@ -39,7 +39,7 @@ discrimination:
       applied:
         observable: "fixture file contains the text 'convertToAssets('"
         moved:
-          - ""
+          - "(fixture absent on the base commit)"
           - "uint32 convertToAssets(uint32 channelId, uint256 shareAmount, uint32 asset)"
       observed:
         observable: "checker reports rate_call_count >= 1 and exits non-zero"
@@ -51,7 +51,9 @@ discrimination:
         moved:
           - "clean repository-wide scan exits 0"
           - "violating-file scan exits 1"
-    pinned_at: "scripts/check-settlement-rate-free.py"
+    pinned_at:
+      - "scripts/check-settlement-rate-free.py"
+      - "scripts/fixtures/rate-call-violation.txt"
     exit_code_before: 0
     exit_code_after: 1
-    reverted: false
+    reverted: not_written_invocation_scoped
