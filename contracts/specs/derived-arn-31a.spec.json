@@ -1,0 +1,97 @@
+{
+  "id": "derived-arn-31a",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. No script on main inspects src/ArmadaNitroAdjudicator.sol or src/nitro/ for ERC-4626 imports or calls to convertToAssets, convertToShares, previewDeposit, previewMint, previewRedeem or previewWithdraw. Branch worker/arn-bf6 (parked) has scripts/check-settlement-rate-free.py, which prints {\"files_scanned\": 16, \"erc4626_imports\": [], \"rate_calls\": []}.\nWhat did you expect to happen? 'python3 scripts/check-settlement-rate-free.py' prints one JSON line with files_scanned >= 2, erc4626_import_count = 0 and rate_call_count = 0; 'python3 scripts/check-settlement-rate-free.py --self-test' scans a temporary file containing 'convertToAssets(' and prints JSON with self_test_detected = true. Start from branch worker/arn-bf6 and add the two count fields.\nWhat actually happened? Include the exact error text or output. main has no such script; the script on worker/arn-bf6 prints lists but no count fields.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) src/ArmadaNitroAdjudicator.sol and src/nitro/\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro integrated 360070e; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 requires settlement to use no exchange rate; a later change could import ERC-4626 or call a rate function without any check failing.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading the settlement code against design 15",
+  "restatement": "The script scripts/check-settlement-rate-free.py checks that the settlement code stays free of any exchange-rate dependency, per design 15. Design 15 requires settlement math to use no exchange rate. A prior version of this script exists on the parked branch worker/arn-bf6. That version scans src/ArmadaNitroAdjudicator.sol and src/nitro/ for ERC-4626 imports and for calls to convertToAssets, convertToShares, previewDeposit, previewMint, previewRedeem, and previewWithdraw. That version prints the files it found, but it does not print a count. This request adds two count fields to the script's JSON output: erc4626_import_count and rate_call_count. With these two fields, a reviewer or a gate can check a single number instead of reading a list. The script also gets a --self-test mode. The self-test mode scans a temporary file that contains the text 'convertToAssets(' and confirms the script's own detection logic actually fires. Without this count-based check, a future change could add an ERC-4626 import or a rate call to the settlement code, and no check would catch it.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the script with no arguments, as `python3 scripts/check-settlement-rate-free.py`, prints one JSON line with files_scanned >= 2, erc4626_import_count = 0, and rate_call_count = 0."
+    },
+    {
+      "id": "c2",
+      "text": "Running the script with the --self-test flag, as `python3 scripts/check-settlement-rate-free.py --self-test`, scans a temporary file containing the text 'convertToAssets(' and prints JSON with self_test_detected = true."
+    }
+  ],
+  "goal": "Add erc4626_import_count and rate_call_count fields to scripts/check-settlement-rate-free.py, and add a --self-test mode that proves the detector fires.",
+  "acceptance_criteria": [
+    "Running the check script with no arguments shows one line of JSON. In that line, the number of files scanned reads 2 or more, and both the ERC-4626-import count and the rate-call-count read 0.",
+    "Running the check script with the --self-test flag shows JSON output where the self-test field reads true, proving the script's own pattern detector actually fires on a known bad line."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the check script with no arguments shows one line of JSON. In that line, the number of files scanned reads 2 or more, and both the ERC-4626-import count and the rate-call-count read 0."
+    },
+    {
+      "id": "c2",
+      "text": "Running the check script with the --self-test flag shows JSON output where the self-test field reads true, proving the script's own pattern detector actually fires on a known bad line."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Running the check script with no arguments shows one line of JSON. In that line, the number of files scanned reads 2 or more, and both the ERC-4626-import count and the rate-call-count read 0.",
+      "proves": "Shows that the script's normal run matches the exact output contract stated in clause c1: files_scanned >= 2, erc4626_import_count = 0, rate_call_count = 0.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "files_scanned",
+          "op": "ge",
+          "value": 2
+        },
+        {
+          "observe": "stdout_json",
+          "field": "erc4626_import_count",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "rate_call_count",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the check script with the --self-test flag shows JSON output where the self-test field reads true, proving the script's own pattern detector actually fires on a known bad line.",
+      "proves": "Shows that the self-test mode stated in clause c2 proves the detector works: self_test_detected = true.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free.py",
+        "args": [
+          "--self-test"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "self_test_detected",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-settlement-rate-free.py"
+  ]
+}
