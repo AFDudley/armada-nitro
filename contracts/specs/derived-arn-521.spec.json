@@ -1,0 +1,61 @@
+{
+  "id": "derived-arn-521",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. depositFromNote (src/ArmadaNitroAdjudicator.sol:85-94) reads holdings[asset][channelId] into held, calls pool.transact(transactions), then stores held + received. MultiAssetHolder.deposit calls safeTransferFrom before it writes holdings. slither reports reentrancy on depositFromNote.\nWhat did you expect to happen? A deposit made with a token whose transfer hook calls back into the adjudicator ends with the same channel holdings as the same deposit made with an identical token that has no hook, and the call made from the hook reverts. Check: metamorphic (relation: adding a re-entering hook leaves final holdings unchanged): 'python3 scripts/check-adjudicator-reentry.py' runs both deposits from the same starting state and exits 0 only when the holdings are equal and the hook's call reverted.\nWhat actually happened? Include the exact error text or output. No adjudicator function rejects a call made while another adjudicator call is in progress.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) src/ArmadaNitroAdjudicator.sol deposit, depositFromNote, transfer, transferAllAssets, concludeAndTransferAllAssets, reclaim\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main 3a29d0f; solc 0.8.17; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 I6 and E16 S3 require that no call can change holdings while a deposit is in progress. depositFromNote stores held + received after an external call, so a holdings change made during that call is overwritten.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11 multi-asset hub channels\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) slither reentrancy finding on depositFromNote",
+  "restatement": "The ArmadaNitroAdjudicator contract must not let a nested call change a channel's recorded holdings while an earlier adjudicator call on that channel is still running. Today depositFromNote reads the current holdings, calls out to MultiAssetHolder.deposit (which itself calls safeTransferFrom on the asset before it writes the new holdings), and only after that external call returns does depositFromNote write held + received back to storage. A token whose transfer function calls back into the adjudicator can use that window to make a second adjudicator call before the first one finishes, and nothing today refuses that nested call, so the later write can silently overwrite whatever the nested call did. The fix must guarantee two things. First, a deposit made through depositFromNote with a token that calls back into the adjudicator during transfer must end with exactly the same channel holdings as the identical deposit made with a token that has no such callback, and the callback's own attempted adjudicator call must itself fail. Second, every holdings-mutating entry point the report names \u2014 deposit, depositFromNote, transfer, transferAllAssets, concludeAndTransferAllAssets, and reclaim \u2014 must refuse any nested call attempted while an earlier adjudicator call on the same channel has not yet finished. This closes the reentrancy weakness slither flagged on depositFromNote and satisfies the design rules in document 15 item I6 and in E16 section S3, which forbid any call changing a channel's holdings while a deposit on that channel is in progress.",
+  "restatement_clauses": [
+    {
+      "id": "hooked-deposit-matches-plain-deposit",
+      "text": "A deposit made with a token whose transfer hook calls back into the adjudicator ends with the same channel holdings as the same deposit made with an identical token that has no hook, and the call made from the hook reverts."
+    },
+    {
+      "id": "no-nested-call-while-in-progress",
+      "text": "No adjudicator function among deposit, depositFromNote, transfer, transferAllAssets, concludeAndTransferAllAssets, and reclaim accepts a nested call made while an earlier adjudicator call on the same channel is still in progress; the nested call reverts."
+    }
+  ],
+  "goal": "Stop a token transfer callback, or any other nested call, from changing a channel's recorded holdings while an earlier adjudicator call on that same channel is still in progress.",
+  "acceptance_criteria": [
+    "Deposit the same amount of the same kind of token into the same channel twice from identical starting conditions: once with a plain token, and once with a token whose transfer function tries to call back into the adjudicator mid-deposit. The channel ends up with identical recorded holdings in both cases, and the callback's own attempted call does not succeed.",
+    "While a call to any one of deposit, depositFromNote, transfer, transferAllAssets, concludeAndTransferAllAssets, or reclaim is still running on a channel, trigger an attempt to call into any of those same six functions on that channel from inside that still-running call. Every one of those attempts fails, and the channel's final holdings match what they would be if no such attempt had ever been made."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Deposit the same amount of the same kind of token into the same channel twice from identical starting conditions: once with a plain token, and once with a token whose transfer function tries to call back into the adjudicator mid-deposit. The channel ends up with identical recorded holdings in both cases, and the callback's own attempted call does not succeed."
+    },
+    {
+      "id": "c2",
+      "text": "While a call to any one of deposit, depositFromNote, transfer, transferAllAssets, concludeAndTransferAllAssets, or reclaim is still running on a channel, trigger an attempt to call into any of those same six functions on that channel from inside that still-running call. Every one of those attempts fails, and the channel's final holdings match what they would be if no such attempt had ever been made."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Deposit the same amount of the same kind of token into the same channel twice from identical starting conditions: once with a plain token, and once with a token whose transfer function tries to call back into the adjudicator mid-deposit. The channel ends up with identical recorded holdings in both cases, and the callback's own attempted call does not succeed.",
+      "proves": "A reentering transfer hook cannot change the final recorded holdings of a deposit, and the hook's own call is rejected.",
+      "restatement_clause_id": "hooked-deposit-matches-plain-deposit",
+      "type": "metamorphic",
+      "relation_class": "no_arbitrage",
+      "run": [
+        "python3",
+        "scripts/check-adjudicator-reentry.py"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "description": "While a call to any one of deposit, depositFromNote, transfer, transferAllAssets, concludeAndTransferAllAssets, or reclaim is still running on a channel, trigger an attempt to call into any of those same six functions on that channel from inside that still-running call. Every one of those attempts fails, and the channel's final holdings match what they would be if no such attempt had ever been made.",
+      "proves": "None of the six named adjudicator entry points can be re-entered while an earlier call on the same channel is still executing, so holdings cannot be changed by a nested call.",
+      "restatement_clause_id": "no-nested-call-while-in-progress",
+      "type": "metamorphic",
+      "relation_class": "no_arbitrage",
+      "run": [
+        "python3",
+        "scripts/check-adjudicator-reentry-guard.py"
+      ],
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "scripts/check-adjudicator-reentry-guard.py",
+    "scripts/check-adjudicator-reentry.py"
+  ]
+}
