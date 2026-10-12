@@ -1,0 +1,54 @@
+{
+  "id": "derived-arn-fca",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. src/HubCustodian.sol line 2 reads 'pragma solidity ^0.8.37;'. src/ArmadaNitroAdjudicator.sol reads 'pragma solidity 0.8.17;'.\nWhat did you expect to happen? src/HubCustodian.sol pins one exact solc version. Checks: (a) behavior: 'python3 scripts/check-pragmas.py' prints JSON {hubcustodian_pragma: \"<version>\", hubcustodian_pragma_exact: true}; (b) grep_absent: pattern '\\^0.8' in src/HubCustodian.sol.\nWhat actually happened? Include the exact error text or output. HubCustodian's pragma is ^0.8.37.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) src/HubCustodian.sol\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro integrated; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? HubCustodian's bytecode depends on whichever solc at or above 0.8.37 the build resolves; the adjudicator pins 0.8.17.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading pragmas",
+  "restatement": "src/HubCustodian.sol currently declares a floating compiler pragma, `pragma solidity ^0.8.37;`, which lets a build resolve any solc release from 0.8.37 up to (but not including) 0.9.0. This is inconsistent with src/ArmadaNitroAdjudicator.sol, which pins one exact compiler version, `pragma solidity 0.8.17;`. The request is that src/HubCustodian.sol be changed to pin one exact solc version in its own pragma line, removing the caret range, so the contract always compiles with the same named compiler rather than whichever version a build happens to resolve.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "src/HubCustodian.sol's pragma statement must pin one exact solc version, not a version range."
+    },
+    {
+      "id": "c2",
+      "text": "src/HubCustodian.sol must no longer contain the pattern '^0.8' anywhere in the file."
+    }
+  ],
+  "goal": "Change the pragma line in src/HubCustodian.sol so it names one exact compiler version instead of a floating ^0.8.37 range.",
+  "acceptance_criteria": [
+    "Opening src/HubCustodian.sol shows a pragma line that names one exact compiler version, written as plain numbers with no range symbol in front of it.",
+    "Searching src/HubCustodian.sol for the text '^0.8' finds no match anywhere in the file."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Opening src/HubCustodian.sol shows a pragma line that names one exact compiler version, written as plain numbers with no range symbol in front of it."
+    },
+    {
+      "id": "c2",
+      "text": "Searching src/HubCustodian.sol for the text '^0.8' finds no match anywhere in the file."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep",
+      "description": "Opening src/HubCustodian.sol shows a pragma line that names one exact compiler version, written as plain numbers with no range symbol in front of it.",
+      "proves": "Proves the pragma statement in src/HubCustodian.sol pins a single exact solc version, which is what the request asks for.",
+      "restatement_clause_id": "c1",
+      "pattern": "pragma solidity [0-9]+\\.[0-9]+\\.[0-9]+;",
+      "files": [
+        "src/HubCustodian.sol"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep_absent",
+      "description": "Searching src/HubCustodian.sol for the text '^0.8' finds no match anywhere in the file.",
+      "proves": "Proves the floating caret pragma that previously let a build pick any solc from 0.8.37 upward has been removed.",
+      "restatement_clause_id": "c2",
+      "pattern": "\\^0.8",
+      "files": [
+        "src/HubCustodian.sol"
+      ],
+      "clause_id": "c2"
+    }
+  ]
+}
