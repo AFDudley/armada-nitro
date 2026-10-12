@@ -12,12 +12,13 @@ summary: >
   Verified end to end: the acceptance script ran the two forge tests and
   printed the required JSON line (short_transfer_deposit_reverted=true,
   normal_deposit_holdings_delta_equals_balance_delta=true, exit 0); the full
-  forge suite (29 tests across 5 suites) passed after the deposit change,
-  so no regression.
+  forge suite (29 tests across 5 suites) passed after the deposit change, so
+  no regression.
 cost: "~59k tokens (deposit fix, the two-scenario test, the acceptance
   script, pre-commit lint fixes, and the live forge gate run)."
 commits:
   - "592a7f3"
+  - "bf42545"
 verify_transcript:
   hooks:
     - name: pre-commit ruff
@@ -35,12 +36,12 @@ verify_transcript:
     - name: pre-commit session-trailer
       outcome: passed
       duration_s: 0.3
-    - name: pre-commit (full suite, commit 592a7f3)
+    - name: pre-commit (full suite)
       outcome: passed
       duration_s: 2.0
 e2e_gate:
   spec: contracts/specs/derived-arn-0cf.spec.json
   command: "python3 scripts/check-adjudicator-deposit-amount.py"
   result: passed
-  ran_at_sha: "592a7f3df01a9ed2bc2f99f4078699af7b66bc3b"
+  ran_at_sha: "bf42545504250c1fae5b2400ab652e89ee635b21"
   mocks_in_path: false
