@@ -5,13 +5,14 @@ import {Script, console2} from 'forge-std/Script.sol';
 import {Vm} from 'forge-std/Vm.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {PrivacyPool} from 'armada/privacy-pool/PrivacyPool.sol';
-import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
+import {ArmadaNitroAdjudicator, SHIELD_ALLOCATION_TYPE} from 'src/ArmadaNitroAdjudicator.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {CommitmentPreimage} from 'src/armada/IArmadaPool.sol';
 import {ArmadaNotes} from '../test/helpers/ArmadaNotes.sol';
 import {ChannelStates} from '../test/helpers/ChannelStates.sol';
 import {IHubCustodian, IFrostTestSigner} from '../test/helpers/IHubCustodian.sol';
+import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 
 /// @dev Circle's FiatToken mint, guarded by the minter role the funding module configures for
 /// the deployer (env/reconciler/modules/funding.py). Selector-only -- the real return type
@@ -62,6 +63,7 @@ contract FixturenetScenario is Script {
     struct Ctx {
         PrivacyPool privacyPool;
         IERC20 usdc;
+        IERC20 usdc2;
         ArmadaNitroAdjudicator adjudicator;
         address consensusApp;
         IHubCustodian custodian;
@@ -117,7 +119,7 @@ contract FixturenetScenario is Script {
         _fund(c, d);
 
         INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
-        INitroTypes.VariablePart memory latest = _state(c, 12, false, FORCED_USER, FORCED_HUB);
+        INitroTypes.VariablePart memory latest = _forcedState(c, 12, false, FORCED_USER, FORCED_HUB);
         INitroTypes.SignedVariablePart memory signedLatest = ChannelStates.signedByBoth(
             c.userKey,
             c.delegateKey,
@@ -157,7 +159,7 @@ contract FixturenetScenario is Script {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(1);
         INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
-        INitroTypes.VariablePart memory latest = _state(c, 12, false, FORCED_USER, FORCED_HUB);
+        INitroTypes.VariablePart memory latest = _forcedState(c, 12, false, FORCED_USER, FORCED_HUB);
         bytes memory data = abi.encodeCall(
             c.adjudicator.transferAllAssets,
             (NitroUtils.getChannelId(fp), latest.outcome, NitroUtils.hashState(fp, latest))
@@ -171,13 +173,76 @@ contract FixturenetScenario is Script {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(1);
         INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
-        INitroTypes.VariablePart memory latest = _state(c, 12, false, FORCED_USER, FORCED_HUB);
-        vm.broadcast(c.deployerKey);
-        c.adjudicator.transferAllAssets(
-            NitroUtils.getChannelId(fp),
-            latest.outcome,
-            NitroUtils.hashState(fp, latest)
+        INitroTypes.VariablePart memory latest = _forcedState(c, 12, false, FORCED_USER, FORCED_HUB);
+        bytes32 channelId = NitroUtils.getChannelId(fp);
+        bytes32 stateHash = NitroUtils.hashState(fp, latest);
+
+        // E16 S4: probe `transferAllAssets` without ever marking it for broadcast (the same
+        // reason `earlySettle` above stays unwrapped): a reverting low-level `.call()` made
+        // under an active `vm.broadcast()` prank still gets queued by forge script and fails
+        // the later broadcast replay with "Simulated execution failed.", aborting this whole
+        // script before the fallback below could ever run. `vm.snapshotState`/`revertTo` undo
+        // the probe's own state change, so the real (broadcast) attempt below -- made only once
+        // we already know it won't revert -- runs against the exact state the probe did.
+        uint256 snap = vm.snapshotState();
+        bytes memory allData = abi.encodeCall(
+            c.adjudicator.transferAllAssets,
+            (channelId, latest.outcome, stateHash)
         );
+        (bool ok, bytes memory ret) = address(c.adjudicator).call(allData);
+        vm.revertTo(snap);
+
+        if (ok) {
+            vm.broadcast(c.deployerKey);
+            c.adjudicator.transferAllAssets(channelId, latest.outcome, stateHash);
+            console2.log('transferAllAssets succeeded');
+        } else {
+            console2.log('transferAllAssets reverted:', _decodeRevertReason(ret));
+            // Fall back to the per-asset transfer path (MultiAssetHolder.transfer): pay each
+            // asset one at a time so a good asset is still paid and a reverting asset's
+            // recorded holdings stay untouched.
+            _settlePerAsset(c, channelId, latest.outcome, stateHash);
+        }
+    }
+
+    /// @dev E16 S4: the per-asset fallback. For each asset of the outcome, probe (then, only if
+    /// the probe succeeds, really broadcast) the adjudicator's `transfer(assetIndex, ...)`
+    /// (MultiAssetHolder.transfer): paying a good asset for real, and, for the asset whose
+    /// token reverts on transfer, never broadcasting anything for it at all -- its recorded
+    /// holdings stay exactly as they were.
+    function _settlePerAsset(
+        Ctx memory c,
+        bytes32 channelId,
+        Outcome.SingleAssetExit[] memory outcome,
+        bytes32 stateHash
+    ) internal {
+        uint256[] memory all = new uint256[](0);
+        for (uint256 i = 0; i < outcome.length; i++) {
+            bytes memory outcomeBytes = abi.encode(outcome);
+            uint256 snap2 = vm.snapshotState();
+            bytes memory payload = abi.encodeCall(
+                c.adjudicator.transfer,
+                (i, channelId, outcomeBytes, stateHash, all)
+            );
+            (bool ok2, bytes memory ret2) = address(c.adjudicator).call(payload);
+            vm.revertTo(snap2);
+
+            if (ok2) {
+                vm.broadcast(c.deployerKey);
+                c.adjudicator.transfer(i, channelId, outcomeBytes, stateHash, all);
+                // This channel's allocations are always fully affordable out of its holdings
+                // (the deposits involved exactly match the outcome's total per asset), so a
+                // successful per-asset transfer pays every allocation in full -- the on-chain
+                // fingerprint now reflects this asset's allocations as zeroed. Mirror that
+                // locally so a later asset's per-asset call still hashes its (unpaid)
+                // outcomeBytes to the current on-chain fingerprint.
+                for (uint256 j = 0; j < outcome[i].allocations.length; j++) {
+                    outcome[i].allocations[j].amount = 0;
+                }
+            } else {
+                console2.log('asset', i, 'per-asset transfer reverted:', _decodeRevertReason(ret2));
+            }
+        }
     }
 
     function verify() external view {
@@ -291,6 +356,54 @@ contract FixturenetScenario is Script {
             ChannelStates.state(address(c.usdc), USER_PAYOUT_NPK, address(c.custodian), turnNum, isFinal, userAmount, hubAmount);
     }
 
+    /// @dev E16 S4: the state for channel 1's force-close path (`openAndChallenge`,
+    /// `earlySettle`, `settle`). When the manifest configures a second asset (`c.usdc2` is
+    /// non-zero), the outcome holds two assets with identical per-asset allocations so a
+    /// token that reverts on transfer (the second asset, in the check this task's spec
+    /// requires) makes `transferAllAssets` revert as a whole while leaving each asset
+    /// individually payable through `MultiAssetHolder.transfer`. When no second asset is
+    /// configured (the real `armada-nitro-e2e` gate's manifest), this is identical to
+    /// `_state` -- a single-asset outcome -- so that gate's behavior is unchanged.
+    function _forcedState(
+        Ctx memory c,
+        uint48 turnNum,
+        bool isFinal,
+        uint256 userAmount,
+        uint256 hubAmount
+    ) internal pure returns (INitroTypes.VariablePart memory) {
+        if (address(c.usdc2) == address(0)) {
+            return _state(c, turnNum, isFinal, userAmount, hubAmount);
+        }
+
+        bytes32 custodianDest = bytes32(uint256(uint160(address(c.custodian))));
+        Outcome.Allocation[] memory alloc0 = new Outcome.Allocation[](2);
+        alloc0[0] = Outcome.Allocation(USER_PAYOUT_NPK, userAmount, SHIELD_ALLOCATION_TYPE, abi.encode(ArmadaNotes.ciphertext(USER_PAYOUT_NPK)));
+        alloc0[1] = Outcome.Allocation(custodianDest, hubAmount, uint8(Outcome.AllocationType.simple), '');
+        Outcome.Allocation[] memory alloc1 = new Outcome.Allocation[](2);
+        alloc1[0] = Outcome.Allocation(USER_PAYOUT_NPK, userAmount, SHIELD_ALLOCATION_TYPE, abi.encode(ArmadaNotes.ciphertext(USER_PAYOUT_NPK)));
+        alloc1[1] = Outcome.Allocation(custodianDest, hubAmount, uint8(Outcome.AllocationType.simple), '');
+
+        Outcome.SingleAssetExit[] memory outcome = new Outcome.SingleAssetExit[](2);
+        outcome[0] = Outcome.SingleAssetExit({
+            asset: address(c.usdc),
+            assetMetadata: Outcome.AssetMetadata({assetType: Outcome.AssetType.Default, metadata: ''}),
+            allocations: alloc0
+        });
+        outcome[1] = Outcome.SingleAssetExit({
+            asset: address(c.usdc2),
+            assetMetadata: Outcome.AssetMetadata({assetType: Outcome.AssetType.Default, metadata: ''}),
+            allocations: alloc1
+        });
+
+        return
+            INitroTypes.VariablePart({
+                outcome: outcome,
+                appData: '',
+                turnNum: turnNum,
+                isFinal: isFinal
+            });
+    }
+
     /// @dev Reads deposits.json entry `index` (written by prepare.ts). channelNonce is not part
     /// of the brief's literal {channelId, amount, calldata} triple but is required here:
     /// NitroUtils.getChannelId hashes (participants, channelNonce, appDefinition,
@@ -317,6 +430,12 @@ contract FixturenetScenario is Script {
         string memory manifest = vm.readFile(_manifestPath());
         c.privacyPool = PrivacyPool(payable(vm.parseJsonAddress(manifest, '.armada.pool')));
         c.usdc = IERC20(vm.parseJsonAddress(manifest, '.armada.usdc'));
+        // E16 S4: optional second asset -- absent from the real `armada-nitro-e2e` gate's
+        // manifest (`c.usdc2` stays the zero address, and `_forcedState` stays single-asset);
+        // set only by the per-asset-fallback check's own manifest.
+        if (vm.keyExistsJson(manifest, '.armada.usdc2')) {
+            c.usdc2 = IERC20(vm.parseJsonAddress(manifest, '.armada.usdc2'));
+        }
         c.adjudicator = ArmadaNitroAdjudicator(vm.parseJsonAddress(manifest, '.armadaNitro.adjudicator'));
         c.consensusApp = vm.parseJsonAddress(manifest, '.armadaNitro.consensusApp');
         c.custodian = IHubCustodian(vm.parseJsonAddress(manifest, '.armadaNitro.hubCustodian'));
