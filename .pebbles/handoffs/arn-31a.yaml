@@ -1,0 +1,52 @@
+status: completed
+pebble_id: arn-31a
+branch: worker/arn-31a
+summary: >
+  Ported scripts/check-settlement-rate-free.py from the parked branch worker/arn-bf6
+  and extended it with erc4626_import_count and rate_call_count fields so a gate can
+  assert two numbers instead of reading the detail lists, plus a --self-test mode that
+  writes a temp .sol containing 'convertToAssets(' and prints {"self_test_detected":
+  true}, proving the detector fires. Verified by running both spec behaviors: (c1)
+  `python3 scripts/check-settlement-rate-free.py` yields files_scanned=16 (>=2),
+  erc4626_import_count=0, rate_call_count=0; (c2) `--self-test` yields
+  self_test_detected=true. ruff/ruff-format/mypy and the repo's two local pre-commit
+  gate hooks all passed on the commit, and the derived-arn-31a outer-loop spec
+  (which runs the script, no mocks) passes end-to-end.
+cost: "~40k tokens"
+commits:
+  - "2c094832de2c684045ff0feb33252f0f356346db"
+files_changed:
+  - scripts/check-settlement-rate-free.py
+  - contracts/specs/derived-arn-31a.spec.json
+verify_transcript:
+  hooks:
+    - name: gate-no-host-deployment-access
+      outcome: passed
+      duration_s: 1
+    - name: job-no-host-deployment-path
+      outcome: passed
+      duration_s: 1
+    - name: claude-md-coverage
+      outcome: passed
+      duration_s: 1
+    - name: reroute-main-commit
+      outcome: passed
+      duration_s: 1
+    - name: check-subtree-edits
+      outcome: passed
+      duration_s: 1
+    - name: ruff
+      outcome: passed
+      duration_s: 1
+    - name: ruff-format
+      outcome: passed
+      duration_s: 1
+    - name: mypy
+      outcome: passed
+      duration_s: 2
+e2e_gate:
+  spec: contracts/specs/derived-arn-31a.spec.json
+  command: "python3 scripts/check-settlement-rate-free.py && python3 scripts/check-settlement-rate-free.py --self-test"
+  result: passed
+  ran_at_sha: "2c094832de2c684045ff0feb33252f0f356346db"
+  mocks_in_path: false
