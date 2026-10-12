@@ -1,0 +1,51 @@
+status: completed
+pebble_id: arn-521
+summary: >
+  Closed the slither reentrancy finding on depositFromNote by adding a
+  per-channel holdingsLock counter to MultiAssetHolder and checking it in
+  every holdings-mutating entry point: deposit, depositFromNote, transfer,
+  transferAllAssets, concludeAndTransferAllAssets and reclaim. Each checks
+  the lock is clear, sets it before any external call (or, for
+  concludeAndTransferAllAssets, before delegating internally into
+  transferAllAssets's shared locked body _transferAllAssetsBody), and
+  clears it on exit, so a reentering token/pool callback or any other
+  nested call on the same channel reverts with 'Re-entered while in
+  progress' instead of silently overwriting the outer call's write.
+  Verified with two new forge test files and the two Python scripts the
+  spec names as acceptance oracles: test/ReentryDeposit.t.sol
+  (ReentryDepositTest) deposits the same amount of the same ERC20 twice
+  from identical starting conditions, once plain and once with a token
+  whose transferFrom calls back into deposit on the same channel, and
+  asserts both channels end with identical holdings and the hook's own
+  nested call reverted; test/ReentryGuard.t.sol (ReentryGuardTest) drives
+  all six entry points with holdingsLock already set for the channel
+  (the exact condition the guard checks, using a forceFinalize/
+  setHoldingsLock test harness in the style of the repo's existing
+  FinalizedChannelHarness) and asserts every one reverts with
+  'Re-entered while in progress' and leaves holdings unchanged. Ran
+  'python3 scripts/check-adjudicator-reentry.py' and 'python3
+  scripts/check-adjudicator-reentry-guard.py' (the spec's own run
+  commands) directly: both exit 0. Ran the full existing suite
+  ('forge test'): 34/34 tests pass (the 27 pre-existing tests plus the 7
+  new ones), confirming no regression to deposit/transfer/conclude/
+  challenge/reclaim behavior.
+cost: "~140k tokens"
+commits:
+  - "538562f"
+verify_transcript:
+  hooks:
+    - name: "python3 scripts/check-adjudicator-reentry.py"
+      outcome: passed
+      duration_s: 5.0
+    - name: "python3 scripts/check-adjudicator-reentry-guard.py"
+      outcome: passed
+      duration_s: 5.0
+    - name: "forge test"
+      outcome: passed
+      duration_s: 6.0
+e2e_gate:
+  spec: contracts/specs/derived-arn-521.spec.json
+  command: "python3 scripts/check-adjudicator-reentry.py && python3 scripts/check-adjudicator-reentry-guard.py"
+  result: passed
+  ran_at_sha: "538562f"
+  mocks_in_path: false
