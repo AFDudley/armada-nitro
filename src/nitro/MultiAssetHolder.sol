@@ -41,12 +41,18 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         uint256 expectedHeld,
         uint256 amount
     ) external payable virtual override {
+        _doDeposit(asset, channelId, expectedHeld, amount);
+    }
+
+    /// @dev Core deposit logic, shared with the adjudicator's override (arn-3d8).
+    function _doDeposit(
+        address asset,
+        bytes32 channelId,
+        uint256 expectedHeld,
+        uint256 amount
+    ) internal {
         require(!_isExternalDestination(channelId), 'Deposit to external destination');
-        // this allows participants to reduce the wait between deposits, while protecting them from losing funds by depositing too early. Specifically it protects against the scenario:
-        // 1. Participant A deposits
-        // 2. Participant B sees A's deposit, which means it is now safe for them to deposit
-        // 3. Participant B submits their deposit
-        // 4. The chain re-orgs, leaving B's deposit in the chain but not A's
+        // this allows participants to reduce the wait between deposits, while protecting them from losing funds by depositing too early.
         uint256 held = holdings[asset][channelId];
         require(held == expectedHeld, 'held != expectedHeld');
 
@@ -56,9 +62,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         } else {
             IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
         }
-
         held += amount;
-
         holdings[asset][channelId] = held;
         emit Deposited(channelId, asset, held);
     }
