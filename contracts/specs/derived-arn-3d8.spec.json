@@ -1,0 +1,64 @@
+{
+  "id": "derived-arn-3d8",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. MultiAssetHolder.deposit (src/nitro/MultiAssetHolder.sol:38-62), inherited unchanged by ArmadaNitroAdjudicator, and depositFromNote (src/ArmadaNitroAdjudicator.sol:66-96) accept the asset argument without comparing it with any list. src/ contains no asset list.\nWhat did you expect to happen? Two deposits that differ only in whether the token is one of the adjudicator's configured assets have different outcomes: the configured token is credited, the other token reverts, through deposit and through depositFromNote. Check: metamorphic (relation: the token's configured status alone flips credit to revert): 'python3 scripts/check-adjudicator-asset-list.py' runs both deposits for each entry point with otherwise identical inputs and exits 0 only when the relation holds for both.\nWhat actually happened? Include the exact error text or output. A deposit of an arbitrary test ERC20 token is credited to the channel; no code path rejects it.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) src/ArmadaNitroAdjudicator.sol deposit and depositFromNote\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main 3a29d0f; solc 0.8.17; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 I1 and E16 S1 require channels to hold only the hub's listed assets (fixturenet: USDC, WETH, wstETH, waUSDC). Any ERC20, including a rebasing or fee-on-transfer token, can be deposited into a channel today.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11 multi-asset hub channels\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading the deposit paths",
+  "restatement": "MultiAssetHolder.deposit and ArmadaNitroAdjudicator.depositFromNote accept any ERC20 token today. Neither function checks the token against a list. The hub design requires channels to hold only the hub's listed assets. The fixturenet list is USDC, WETH, wstETH, and waUSDC. The adjudicator must hold a configured list of allowed assets. The deposit function must check its asset argument against this list. The depositFromNote function must check the note's token against the same list. A deposit of a listed asset must credit the channel, as it does today. A deposit of an unlisted asset must revert, through both functions. All other call inputs must stay the same between a listed-asset deposit and an unlisted-asset deposit. This closes the gap where any ERC20 token, including a rebasing or fee-on-transfer token, can enter a channel today.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A deposit through MultiAssetHolder.deposit of a token on the adjudicator's configured asset list credits the channel's holdings. A deposit of a token not on that list reverts. All other call arguments stay identical between the two deposits."
+    },
+    {
+      "id": "c2",
+      "text": "A deposit through ArmadaNitroAdjudicator.depositFromNote of a note whose token is on the adjudicator's configured asset list credits the channel's holdings. A deposit of a note whose token is not on that list reverts. All other call arguments stay identical between the two deposits."
+    }
+  ],
+  "goal": "Add a configured asset list to the adjudicator, and make both deposit entry points enforce it, so only the hub's listed assets can fund a channel.",
+  "acceptance_criteria": [
+    "A person deposits two tokens into the same channel, through the same deposit step, with the same amounts. One token is on the hub's approved list. The other token is not. The approved token's deposit succeeds and increases the channel's balance. The other token's deposit is turned away.",
+    "A person deposits two tokens into the same channel, through the note-based deposit step, with the same amounts. One token is on the hub's approved list. The other token is not. The approved token's deposit succeeds and increases the channel's balance. The other token's deposit is turned away."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A person deposits two tokens into the same channel, through the same deposit step, with the same amounts. One token is on the hub's approved list. The other token is not. The approved token's deposit succeeds and increases the channel's balance. The other token's deposit is turned away."
+    },
+    {
+      "id": "c2",
+      "text": "A person deposits two tokens into the same channel, through the note-based deposit step, with the same amounts. One token is on the hub's approved list. The other token is not. The approved token's deposit succeeds and increases the channel's balance. The other token's deposit is turned away."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "A person deposits two tokens into the same channel, through the same deposit step, with the same amounts. One token is on the hub's approved list. The other token is not. The approved token's deposit succeeds and increases the channel's balance. The other token's deposit is turned away.",
+      "proves": "Shows that whether a token is on the hub's approved list is what decides if a deposit through the deposit step succeeds or is turned away.",
+      "restatement_clause_id": "c1",
+      "type": "metamorphic",
+      "relation_class": "monotonicity",
+      "run": [
+        "python3",
+        "scripts/check-adjudicator-asset-list.py",
+        "--entrypoint",
+        "deposit"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "description": "A person deposits two tokens into the same channel, through the note-based deposit step, with the same amounts. One token is on the hub's approved list. The other token is not. The approved token's deposit succeeds and increases the channel's balance. The other token's deposit is turned away.",
+      "proves": "Shows that whether a token is on the hub's approved list is what decides if a deposit through the note-based deposit step succeeds or is turned away.",
+      "restatement_clause_id": "c2",
+      "type": "metamorphic",
+      "relation_class": "monotonicity",
+      "run": [
+        "python3",
+        "scripts/check-adjudicator-asset-list.py",
+        "--entrypoint",
+        "depositFromNote"
+      ],
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "critical",
+  "declared_new_entrypoints": [
+    "scripts/check-adjudicator-asset-list.py"
+  ]
+}
