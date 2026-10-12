@@ -1,0 +1,109 @@
+{
+  "id": "derived-arn-bf6",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. No script or test under scripts/ or test/ inspects src/ArmadaNitroAdjudicator.sol or src/nitro/ for ERC-4626 imports or calls to convertToAssets, convertToShares, previewDeposit, previewMint, previewRedeem or previewWithdraw.\nWhat did you expect to happen? A check script scans src/ArmadaNitroAdjudicator.sol and src/nitro/*.sol. Checks: (a) behavior: 'python3 scripts/check-settlement-rate-free.py' prints JSON {files_scanned: <n>, erc4626_imports: [], rate_calls: []} with files_scanned >= 2; (b) behavior: 'python3 scripts/check-settlement-rate-free.py --self-test' scans a temporary file containing 'convertToAssets(' and prints JSON {self_test_detected: true}.\nWhat actually happened? Include the exact error text or output. Nothing checks the settlement code for rate reads.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) src/ArmadaNitroAdjudicator.sol and src/nitro/\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro integrated; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 requires settlement to use no exchange rate; a later change could import ERC-4626 or call a rate function without any check failing.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading the settlement code against design 15",
+  "restatement": "Design 15 for armada-nitro requires that settlement logic never compute an amount through an exchange-rate conversion. Today no script or test under scripts/ or test/ inspects src/ArmadaNitroAdjudicator.sol or src/nitro/ for an ERC-4626 import or for a call to convertToAssets, convertToShares, previewDeposit, previewMint, previewRedeem, or previewWithdraw. Without such a check, a later change could introduce one of these rate-dependent calls into the settlement path and no automated check would catch it. The request is to add a standing guard script, scripts/check-settlement-rate-free.py, that scans src/ArmadaNitroAdjudicator.sol and every file under src/nitro/*.sol for ERC-4626 imports and for calls to the six listed rate-conversion functions. Run with no arguments, the script reports in JSON how many files it scanned and lists any ERC-4626 imports or rate-conversion calls it found. Against the current codebase it must report files_scanned of 2 or more and empty lists for both findings, confirming the design-15 invariant holds today. Run with a --self-test flag, the script must scan a temporary file engineered to contain a convertToAssets( call and report that it detected the call, proving the scanner can actually recognize a violation rather than always reporting a clean result.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A script at scripts/check-settlement-rate-free.py scans src/ArmadaNitroAdjudicator.sol and src/nitro/*.sol, and running 'python3 scripts/check-settlement-rate-free.py' prints JSON {files_scanned: <n>, erc4626_imports: [], rate_calls: []} with files_scanned >= 2."
+    },
+    {
+      "id": "c2",
+      "text": "Running 'python3 scripts/check-settlement-rate-free.py --self-test' scans a temporary file containing 'convertToAssets(' and prints JSON {self_test_detected: true}."
+    }
+  ],
+  "goal": "Add an automated guard script that confirms the armada-nitro settlement contracts contain no ERC-4626 exchange-rate imports or calls, and that the guard can actually detect such a call when one is present.",
+  "acceptance_criteria": [
+    "Running the settlement rate-check tool against the adjudicator and nitro contracts shows it looked at two or more files and found zero exchange-rate imports and zero exchange-rate function calls.",
+    "Running the tool in its self-check mode against a sample file that contains an exchange-rate function call shows it found that call."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the settlement rate-check tool against the adjudicator and nitro contracts shows it looked at two or more files and found zero exchange-rate imports and zero exchange-rate function calls."
+    },
+    {
+      "id": "c2",
+      "text": "Running the tool in its self-check mode against a sample file that contains an exchange-rate function call shows it found that call."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Running the settlement rate-check tool against the adjudicator and nitro contracts shows it looked at two or more files and found zero exchange-rate imports and zero exchange-rate function calls.",
+      "proves": "The settlement contracts contain no ERC-4626 exchange-rate imports or calls today, confirmed by an automated scan of every relevant file.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "exit_code",
+          "observe": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "files_scanned",
+          "observe": "stdout_json",
+          "op": "ge",
+          "value": 2
+        },
+        {
+          "field": "erc4626_imports.length",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "rate_calls.length",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the tool in its self-check mode against a sample file that contains an exchange-rate function call shows it found that call.",
+      "proves": "The tool can actually recognize an exchange-rate call when one is present, not just always report a clean result.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free.py",
+        "args": [
+          "--self-test"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "exit_code",
+          "observe": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "self_test_detected",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-settlement-rate-free.py"
+  ]
+}
