@@ -1,0 +1,48 @@
+status: completed
+pebble_id: arn-765
+summary: >
+  script/WatchtowerScenario.s.sol's respond(uint256) answered a stale challenge
+  by calling only concludeAndTransferAllAssets, an all-or-nothing payout: if
+  the channel's outcome holds a second asset whose token reverts on transfer,
+  the whole transaction reverts -- including the finalization it would
+  otherwise have performed -- and the first asset, whose own transfer never
+  failed, went unpaid too. Per design 15's invariant I5 and task E16's
+  deliverable S4, respond() now simulates the all-assets payout on a
+  disposable vm.snapshotState() first (reverted immediately after, so a
+  transaction already known to fail is never broadcast); if it would fail, it
+  finalizes the channel via the payout-free conclude(), then pays out only
+  the outcome's first asset via transfer(assetIndex: 0, ...), so that payout
+  never depends on any other asset's token. A channel's second asset (if any)
+  is now threaded through via SECOND_ASSET/SECOND_ASSET_AMOUNT env vars
+  (_withSecondAsset), a no-op when unset, so the real fixturenet gate
+  (armada-watchtower-e2e) stays single-asset and unchanged. Added
+  script/WatchtowerPerAssetSetup.s.sol (a standalone local-anvil fixture, no
+  Railgun SDK, no hardhat, that funds a two-asset channel for
+  WatchtowerScenario.s.sol's existing openAndChallenge/respond/payoutSince to
+  run against unmodified) and script/helpers/ToggleableERC20.sol (a minimal
+  ERC20 whose owner can force transfer/transferFrom to revert), plus the
+  linked spec's acceptance oracle scripts/check-watchtower-respond-per-asset.py.
+  Verified by running the check against the fix on two fresh local anvils
+  (exit 0, both runs pay the first asset 2000000 lamports) and, as a
+  discrimination proof, against a targeted mutant that restores the old
+  single-call respond() while keeping the two-asset wiring intact (exit 1,
+  failing with "ToggleableERC20: transfers rejected", confirming the check
+  depends on the fallback rather than passing vacuously). Also ran the full
+  forge test suite (27/27 passed, unaffected) and forge build (clean).
+cost: "~140k tokens"
+commits:
+  - "23d7ffe"
+verify_transcript:
+  hooks:
+    - name: "pre-commit (full suite)"
+      outcome: passed
+      duration_s: 1.5
+    - name: "forge test"
+      outcome: passed
+      duration_s: 0.2
+e2e_gate:
+  spec: contracts/specs/derived-arn-765.spec.json
+  command: "python3 scripts/check-watchtower-respond-per-asset.py"
+  result: passed
+  ran_at_sha: "23d7ffe"
+  mocks_in_path: false
