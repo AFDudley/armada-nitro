@@ -1,0 +1,39 @@
+{
+  "id": "derived-arn-765",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. WatchtowerScenario.s.sol respond(uint256) (line 139) calls concludeAndTransferAllAssets(fp, signedN1) and has no other payout call. For a two-asset outcome whose second token reverts on transfer, concludeAndTransferAllAssets reverts.\nWhat did you expect to happen? The first asset's payout from the watcher's answer does not depend on whether the second asset's token reverts on transfer. Check: metamorphic (relation: invariance of the first asset's paid amount): 'python3 scripts/check-watchtower-respond-per-asset.py' runs respond(uint256) from script/WatchtowerScenario.s.sol twice from the same challenged two-asset channel on a local anvil, once with a normal second token and once with a reverting one, and exits 0 only when the first asset's paid amount is equal in both runs and non-zero.\nWhat actually happened? Include the exact error text or output. respond(uint256) calls only concludeAndTransferAllAssets; with one reverting asset the call reverts and the first asset is paid nothing.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) script/WatchtowerScenario.s.sol respond(uint256), run by stack/scripts/armada-watchtower-e2e-job.py\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main 3a29d0f; solc 0.8.17; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 I5 and E16 S4 require the watchtower to fall back to per-asset transfer when an all-assets payout reverts. With one reverting asset the watcher's answer to a stale challenge fails, and the stale state can finalize.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11 multi-asset hub channels\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading the settlement calls against E16 S4",
+  "restatement": "The watchtower's response to a stale challenge on a two-asset channel must not depend, for its first asset's payout, on whether the second asset's token accepts or reverts on transfer. Today script/WatchtowerScenario.s.sol's respond(uint256) function (line 139) answers a stale challenge by calling only concludeAndTransferAllAssets(fp, signedN1), which pays every asset in one all-or-nothing call. If the channel's second asset has a token that reverts on transfer, that single call reverts in full and the first asset is paid nothing, even though nothing about the first asset's own transfer failed. This contradicts the multi-asset hub channel design (armada-laconic design 15, invariant I5, and task E16's deliverable S4), which requires the watchtower to fall back to a per-asset transfer whenever the all-assets payout reverts, precisely so one asset's broken token cannot block payout of a working asset. Left unfixed, a watcher that tries to defeat a stale force-close on a two-asset channel can still lose: its answer fails outright, and the stale challenged state is free to finalize in its place. This was found during design review of E11 multi-asset hub channels, while reading the settlement calls against E16 S4.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "respond(uint256) must pay the first asset of a two-asset outcome, and that paid amount must be equal and non-zero whether the second asset's token transfers normally or reverts on transfer."
+    }
+  ],
+  "goal": "Make respond(uint256) pay the first asset in a two-asset outcome regardless of whether the second asset's token reverts on transfer, by falling back to a per-asset transfer when the all-assets payout reverts.",
+  "acceptance_criteria": [
+    "Running the watcher's answer to a stale two-asset channel challenge twice, once where the second asset's token transfers normally and once where it reverts, pays the first asset the same non-zero amount in both runs."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the watcher's answer to a stale two-asset channel challenge twice, once where the second asset's token transfers normally and once where it reverts, pays the first asset the same non-zero amount in both runs."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "metamorphic",
+      "description": "Running the watcher's answer to a stale two-asset channel challenge twice, once where the second asset's token transfers normally and once where it reverts, pays the first asset the same non-zero amount in both runs.",
+      "proves": "Proves the first asset's payout from the watcher's answer does not depend on whether the second asset's token reverts on transfer, satisfying the per-asset fallback required by design 15's invariant I5 and task E16's deliverable S4.",
+      "restatement_clause_id": "c1",
+      "relation_class": "conservation",
+      "run": [
+        "python3",
+        "scripts/check-watchtower-respond-per-asset.py"
+      ],
+      "clause_id": "c1"
+    }
+  ],
+  "criticality": "critical",
+  "declared_new_entrypoints": [
+    "scripts/check-watchtower-respond-per-asset.py"
+  ]
+}
