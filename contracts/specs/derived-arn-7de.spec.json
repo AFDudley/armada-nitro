@@ -1,0 +1,83 @@
+{
+  "id": "derived-arn-7de",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. FixturenetScenario.s.sol settle() (line 176) calls transferAllAssets once for the whole outcome and has no other payout call. MultiAssetHolder.transfer(assetIndex, ...) (src/nitro/MultiAssetHolder.sol:75) pays one asset. For a two-asset outcome whose second token reverts on transfer, transferAllAssets reverts.\nWhat did you expect to happen? Running FixturenetScenario.s.sol settle() on a finalized two-asset channel whose second token reverts on transfer pays the first asset and leaves the second asset's holdings unchanged. Checks: behavior: 'python3 scripts/check-e2e-settle-per-asset.py' runs settle() from script/FixturenetScenario.s.sol against a local anvil with that channel and prints one JSON line {first_asset_paid: true, second_asset_holdings_unchanged: true}.\nWhat actually happened? Include the exact error text or output. settle() calls only transferAllAssets; with one reverting asset the call reverts and no asset is paid.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) script/FixturenetScenario.s.sol settle(), run by stack/compose-jobs/docker-compose-armada-nitro-e2e.yml\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main 3a29d0f; solc 0.8.17; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 I5 and E16 S4 require each asset of a finalized channel to be payable on its own, and the e2e gate to fall back to per-asset transfer when transferAllAssets reverts. E11 puts several assets in one channel.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11 multi-asset hub channels\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading the settlement calls against E16 S4",
+  "restatement": "The settlement step run by settle() in script/FixturenetScenario.s.sol currently pays out a finalized channel's assets through one call, transferAllAssets, that either pays every asset or pays none. If a finalized channel holds two different assets and the second asset's token refuses the transfer (for example because the token itself blocks the transfer), the whole call fails and the first asset, whose transfer would have succeeded on its own, is also left unpaid. The request asks that settle() instead fall back to paying out each asset one at a time through the existing per-asset transfer path when the all-at-once call fails, so that an asset whose transfer can succeed is paid, and an asset whose transfer fails is left exactly as it was, with its recorded holdings untouched. This matters because a hub channel can hold several different assets at once, so one bad asset must not be able to block payment of the others.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "When transferAllAssets reverts because a finalized two-asset channel's second asset reverts on transfer, settle() falls back to the per-asset transfer path and still pays out the first asset."
+    },
+    {
+      "id": "c2",
+      "text": "In that same scenario, the second asset's on-chain holdings for the channel are left unchanged."
+    }
+  ],
+  "goal": "Make settle() pay out each asset of a finalized channel on its own when the single all-assets payout call fails, so a transfer failure on one asset does not block payment of the others or corrupt their recorded holdings.",
+  "acceptance_criteria": [
+    "Settling a finalized channel that holds two different assets, where the second asset's token refuses the transfer, still pays out the first asset to its recipient.",
+    "After that same settlement attempt, the amount still recorded as held for the channel's second asset is exactly what it was before the attempt."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Settling a finalized channel that holds two different assets, where the second asset's token refuses the transfer, still pays out the first asset to its recipient."
+    },
+    {
+      "id": "c2",
+      "text": "After that same settlement attempt, the amount still recorded as held for the channel's second asset is exactly what it was before the attempt."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c1",
+      "description": "Settling a finalized channel that holds two different assets, where the second asset's token refuses the transfer, still pays out the first asset to its recipient.",
+      "proves": "Proves the settlement step no longer leaves every asset unpaid when only one asset's transfer fails.",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-e2e-settle-per-asset.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "first_asset_paid",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c2",
+      "description": "After that same settlement attempt, the amount still recorded as held for the channel's second asset is exactly what it was before the attempt.",
+      "proves": "Proves a failed transfer for one asset does not corrupt or change the recorded holdings for that asset.",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-e2e-settle-per-asset.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "second_asset_holdings_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-e2e-settle-per-asset.py"
+  ]
+}
