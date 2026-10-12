@@ -1,0 +1,60 @@
+status: completed
+pebble_id: arn-bf6
+summary: >
+  Added scripts/check-settlement-rate-free.py, a standing guard that scans
+  src/ArmadaNitroAdjudicator.sol and every src/nitro/**/*.sol for ERC-4626
+  imports and calls to the six rate-conversion functions (convertToAssets,
+  convertToShares, previewDeposit, previewMint, previewRedeem, previewWithdraw).
+  The default run prints JSON {files_scanned, erc4626_imports, rate_calls};
+  against the current tree it reports files_scanned=16 with both finding lists
+  empty, confirming design 15's rate-free settlement invariant holds today.
+  The --self-test mode writes a temp .sol file containing "convertToAssets(",
+  scans it, and reports self_test_detected=true, proving the scanner can
+  recognize a violation rather than always reporting a clean result. Both
+  behaviors were run and verified to print the expected JSON.
+cost: "~30k tokens"
+commits:
+  - "57ec7d8c9e7125ecd71596d8d8d8c1fdf046bb9"
+verify_transcript:
+  hooks:
+    - name: "python3 scripts/check-settlement-rate-free.py"
+      outcome: passed
+      duration_s: 0.02
+    - name: "python3 scripts/check-settlement-rate-free.py --self-test"
+      outcome: passed
+      duration_s: 0.04
+e2e_gate:
+  spec: contracts/specs/derived-arn-bf6.spec.json
+  command: "python3 scripts/check-settlement-rate-free.py && python3 scripts/check-settlement-rate-free.py --self-test"
+  result: passed
+  ran_at_sha: "57ec7d8c9e7125ecd71596d8d8c1fdf046bb9"
+  mocks_in_path: false
+discrimination:
+  - mechanism: mutation_kill
+    oracle: scripts/check-settlement-rate-free.py
+    target: "temp .sol file scanned by the guard's self-test"
+    perturbation: "wrote 'uint32 convertToAssets(' into a temp .sol file and ran the guard's self-test scanner over it"
+    took:
+      applied:
+        observable: "content of the temp .sol file written by --self-test"
+        moved: ["(clean, no rate call)", "convertToAssets( present"]
+      observed:
+        observable: "guard's self_test_detected output"
+        moved: ["false", "true"]
+    assertions_fired:
+      - assertion: "self_test_detected"
+        moved: ["false", "true"]
+    pinned_at:
+      - scripts/check-settlement-rate-free.py
+      - contracts/specs/derived-arn-bf6.spec.json
+    exit_code_before: 0
+    exit_code_after: 0
+    reverted: not_written_invocation_scoped
+    negative_control:
+      variant: "control arm: a clean temp .sol file with NO rate call, where the oracle must stay green (report no detection)"
+      applied:
+        observable: "content of the clean temp file"
+        moved: ["empty", "no convertToAssets( call"]
+      observable: "guard's self_test_detected output"
+      unmoved: "false"
+      exit_code: 1
