@@ -1,0 +1,50 @@
+status: completed
+pebble_id: arn-3d8
+summary: >
+  Added a hub-configured asset list to ArmadaNitroAdjudicator (mapping
+  configuredAssets, populated from a new constructor address[] argument,
+  exposed via isAsset(address)) and gated both deposit entry points on it:
+  the adjudicator's own deposit override requires isAsset(asset) before
+  delegating to a newly-extracted MultiAssetHolder._doDeposit (which keeps
+  arn-0cf's measured-balance-delta/'Deposit amount mismatch' behavior
+  unchanged), and depositFromNote requires isAsset(note.token.tokenAddress)
+  before crediting holdings. A listed-token deposit still credits the
+  channel; an unlisted-token deposit now reverts with 'Asset not configured'
+  through both entry points, with every other call input unchanged (the
+  metamorphic relation the spec checks). Updated every
+  ArmadaNitroAdjudicator constructor call site (script/Deploy.s.sol,
+  script/CheckSettlePerAssetSetup.s.sol, test/ArmadaNitroAdjudicator.t.sol,
+  test/DepositAmount.t.sol) to pass a configured list, moving
+  DepositAmount's ShortToken/NormalToken into setUp so arn-0cf's own tests
+  still exercise the amount-mismatch path. Wired the real fixturenet deploy
+  path: env/reconciler/modules/armada_nitro.py now derives ARMADA_ASSETS
+  (USDC, WETH, wstETH, waUSDC) from the manifest entries the weth/aave/lido/
+  armada modules already record, and script/Deploy.s.sol reads it via
+  vm.envAddress. Added test/AdjudicatorAssetList.t.sol (a metamorphic pair:
+  listed credits, unlisted reverts, for both deposit and depositFromNote)
+  and scripts/check-adjudicator-asset-list.py, the spec gate's own checker,
+  which runs the relevant forge test and emits the metamorphic
+  {"series": [...]} output contract to stdout with forge's own output routed
+  to stderr. Verified: the full forge suite (31 tests, 6 suites, including
+  the pre-existing arn-0cf DepositAmount tests) passes; both
+  `python3 scripts/check-adjudicator-asset-list.py --entrypoint deposit` and
+  `--entrypoint depositFromNote` exit 0 with stdout exactly
+  {"series": [[0, 0], [1, 1]]} (monotonic, satisfying the spec's relation);
+  pre-commit passed on every changed file.
+cost: "~95k tokens"
+commits:
+  - "04b8431a765f069b534d64eaba47524483ef2d53"
+verify_transcript:
+  hooks:
+    - name: forge test (full suite)
+      outcome: passed
+      duration_s: 5
+    - name: pre-commit (full hook set on changed files)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-3d8.spec.json
+  command: "python3 scripts/check-adjudicator-asset-list.py --entrypoint deposit && python3 scripts/check-adjudicator-asset-list.py --entrypoint depositFromNote"
+  result: passed
+  ran_at_sha: "04b8431a765f069b534d64eaba47524483ef2d53"
+  mocks_in_path: false
