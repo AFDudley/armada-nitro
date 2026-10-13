@@ -21,8 +21,11 @@ runs below
      unmodified -- a `PAYOUT_LAMPORTS <value>` line parsed the same way the armada-watchtower-e2e
      job parses it).
 
-Exits 0 only when both runs' first-asset payout is equal and non-zero; prints one JSON line
-{"normal_run_payout", "reverting_run_payout"} either way.
+Exits 0 only when both runs' first-asset payout is equal and non-zero; prints the
+metamorphic flows JSON either way: {"flows": [normal, -reverting, 0]}, whose conservation
+relation (|sum(flows)| <= 1e-9) holds exactly when the first asset's paid amount is invariant
+across the two runs (sum = normal - reverting). The non-zero requirement is enforced by the
+exit code, not the JSON.
 
 Environment: ANVIL_PORT_BASE (default 8646; the second run uses ANVIL_PORT_BASE+1, so a stray
 process holding one port doesn't wedge the whole check).
@@ -181,10 +184,12 @@ def main() -> int:
     normal_payout = run_once(False, ANVIL_PORT_BASE)
     reverting_payout = run_once(True, ANVIL_PORT_BASE + 1)
 
-    result = {
-        "normal_run_payout": normal_payout,
-        "reverting_run_payout": reverting_payout,
-    }
+    # Metamorphic output contract (exophial spec_oracle): the runner json.loads the whole
+    # stdout; a non-zero exit fails the check. The conservation relation passes when
+    # |sum(flows)| is at most the 1e-9 tolerance: flows conserves exactly when the first
+    # asset's paid amount is invariant across the two runs (sum = normal - reverting); the
+    # non-zero requirement stays enforced by the exit code below.
+    result = {"flows": [normal_payout, -reverting_payout, 0]}
     json.dump(result, sys.stdout)
     print()
 
