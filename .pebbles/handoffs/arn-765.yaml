@@ -22,6 +22,7 @@ cost: "~200k tokens"
 commits:
   - "6146629"
   - "a02c503"
+  - "1d47700"
 files_changed:
   - script/WatchtowerScenario.s.sol
   - script/WatchtowerPerAssetSetup.s.sol
