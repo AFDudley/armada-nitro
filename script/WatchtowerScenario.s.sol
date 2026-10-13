@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {Script, console2} from 'forge-std/Script.sol';
 import {Vm} from 'forge-std/Vm.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {PrivacyPool} from 'armada/privacy-pool/PrivacyPool.sol';
 import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
@@ -37,6 +38,18 @@ import {ChannelStates} from '../test/helpers/ChannelStates.sol';
  * response, and it is what actually defeats a stale force-close the fastest: a single
  * transaction, immediately, finalizes the channel on the newer state and pays it out.
  *
+ * `respond`'s all-assets payout is all-or-nothing: `transferAllAssets` either pays every asset of
+ * the outcome or (if any single asset's token reverts on transfer) reverts the whole transaction,
+ * including the finalization `_conclude` performed in the same call. Per design 15's invariant I5
+ * and task E16's deliverable S4, `respond` falls back to a per-asset transfer in that case: it
+ * finalizes the channel via the payout-free `conclude`, then pays out only the outcome's first
+ * asset via `transfer(assetIndex: 0, ...)`, so one broken asset can never block payout of a
+ * working one. It decides which path to take by attempting the all-assets payout on a disposable
+ * `vm.snapshotState()` first (reverted immediately after) rather than broadcasting a transaction
+ * known to fail. A channel's second asset (if any) is carried via SECOND_ASSET/
+ * SECOND_ASSET_AMOUNT below, not through the deposits/manifest files that fund the first asset --
+ * see `_withSecondAsset`.
+ *
  * Scenario B skips `respond` entirely; after the window elapses, `settleStale` pays out the
  * stale challenged state N, mirroring script/FixturenetScenario.s.sol's `settle()`.
  *
@@ -48,7 +61,9 @@ import {ChannelStates} from '../test/helpers/ChannelStates.sol';
  * into both channels' adaptParams), MANIFEST_PATH (default /env/manifest.json), DEPOSITS_PATH
  * (default /env/watchtower-e2e/deposits.json), KEYS_DIR (default /env -- deployer.key and both
  * test accounts' privateKeyFile live under here), STATE_N_USER, STATE_N1_USER, HUB_RESERVE
- * (uint256 base units).
+ * (uint256 base units), SECOND_ASSET (optional: a second asset's token address, added to both
+ * channels' outcomes, paid entirely to the hub -- unset/zero means a single-asset outcome, the
+ * real fixturenet gate's shape), SECOND_ASSET_AMOUNT (required iff SECOND_ASSET is set).
  */
 contract WatchtowerScenario is Script {
     bytes32 internal constant USER_PAYOUT_NPK = bytes32(uint256(0x3333));
@@ -69,6 +84,8 @@ contract WatchtowerScenario is Script {
         uint256 stateNUser;
         uint256 stateN1User;
         uint256 total;
+        address secondAsset;
+        uint256 secondAssetAmount;
     }
 
     struct Deposit {
@@ -122,8 +139,17 @@ contract WatchtowerScenario is Script {
     }
 
     /// @dev Scenario A's watcher: answer the stale challenge with the newer, fully-signed, final
-    /// state N+1 via `concludeAndTransferAllAssets` -- finalizes and pays out immediately,
-    /// regardless of the outstanding challenge or how much of the window remains.
+    /// state N+1 -- finalizes and pays out immediately, regardless of the outstanding challenge or
+    /// how much of the window remains.
+    /// @dev Per-asset fallback (arn-765 / E16 S4 / design 15 I5): `concludeAndTransferAllAssets`
+    /// pays every asset of the outcome in one all-or-nothing call, so if any one asset's token
+    /// reverts on transfer the whole transaction reverts -- including the finalization it would
+    /// otherwise have performed -- and even assets whose own transfer would have succeeded are
+    /// left unpaid. This is checked first on a disposable `vm.snapshotState()` (reverted right
+    /// after) so a transaction already known to fail is never broadcast; if it would fail, the
+    /// channel is instead finalized via the payout-free `conclude`, then only the outcome's first
+    /// asset is paid out via `transfer(assetIndex: 0, ...)`, so its payout never depends on
+    /// whether any other asset's token is broken.
     function respond(uint256 index) external {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(index);
@@ -135,8 +161,30 @@ contract WatchtowerScenario is Script {
             fp,
             stateN1
         );
+
+        uint256 snapshotId = vm.snapshotState();
+        (bool allAssetsOk, ) = address(c.adjudicator).call(
+            abi.encodeCall(c.adjudicator.concludeAndTransferAllAssets, (fp, signedN1))
+        );
+        vm.revertToState(snapshotId);
+
+        if (allAssetsOk) {
+            vm.broadcast(c.deployerKey);
+            c.adjudicator.concludeAndTransferAllAssets(fp, signedN1);
+            return;
+        }
+
         vm.broadcast(c.deployerKey);
-        c.adjudicator.concludeAndTransferAllAssets(fp, signedN1);
+        c.adjudicator.conclude(fp, signedN1);
+
+        vm.broadcast(c.deployerKey);
+        c.adjudicator.transfer(
+            0,
+            NitroUtils.getChannelId(fp),
+            abi.encode(stateN1.outcome),
+            bytes32(0),
+            new uint256[](0)
+        );
     }
 
     /// @dev Scenario B: no response arrived; after the challenge window has elapsed, pay out the
@@ -225,27 +273,62 @@ contract WatchtowerScenario is Script {
     }
 
     function _stateN(Ctx memory c) internal view returns (INitroTypes.VariablePart memory) {
-        return ChannelStates.state(
-            address(c.usdc),
-            USER_PAYOUT_NPK,
-            c.hub,
-            TURN_N,
-            false,
-            c.stateNUser,
-            c.total - c.stateNUser
-        );
+        return
+            _withSecondAsset(
+                c,
+                ChannelStates.state(
+                    address(c.usdc),
+                    USER_PAYOUT_NPK,
+                    c.hub,
+                    TURN_N,
+                    false,
+                    c.stateNUser,
+                    c.total - c.stateNUser
+                )
+            );
     }
 
     function _stateN1(Ctx memory c) internal view returns (INitroTypes.VariablePart memory) {
-        return ChannelStates.state(
-            address(c.usdc),
-            USER_PAYOUT_NPK,
-            c.hub,
-            TURN_N1,
-            true,
-            c.stateN1User,
-            c.total - c.stateN1User
-        );
+        return
+            _withSecondAsset(
+                c,
+                ChannelStates.state(
+                    address(c.usdc),
+                    USER_PAYOUT_NPK,
+                    c.hub,
+                    TURN_N1,
+                    true,
+                    c.stateN1User,
+                    c.total - c.stateN1User
+                )
+            );
+    }
+
+    /// @dev Appends a second asset (SECOND_ASSET/SECOND_ASSET_AMOUNT), paid entirely to the hub as
+    /// a plain external-destination allocation, to `vp`'s outcome -- a no-op when SECOND_ASSET is
+    /// unset, which is the real fixturenet gate's single-asset shape.
+    function _withSecondAsset(
+        Ctx memory c,
+        INitroTypes.VariablePart memory vp
+    ) internal pure returns (INitroTypes.VariablePart memory) {
+        if (c.secondAsset == address(0)) return vp;
+
+        Outcome.Allocation[] memory allocations = new Outcome.Allocation[](1);
+        allocations[0] = Outcome.Allocation({
+            destination: bytes32(uint256(uint160(c.hub))),
+            amount: c.secondAssetAmount,
+            allocationType: uint8(Outcome.AllocationType.simple),
+            metadata: ''
+        });
+        Outcome.SingleAssetExit[] memory outcome = new Outcome.SingleAssetExit[](2);
+        outcome[0] = vp.outcome[0];
+        outcome[1] = Outcome.SingleAssetExit({
+            asset: c.secondAsset,
+            assetMetadata: Outcome.AssetMetadata({assetType: Outcome.AssetType.Default, metadata: ''}),
+            allocations: allocations
+        });
+        vp.outcome = outcome;
+        return vp;
     }
 
     function _startBlockPath(uint256 index) internal pure returns (string memory) {
@@ -290,5 +373,8 @@ contract WatchtowerScenario is Script {
         c.stateN1User = vm.envUint('STATE_N1_USER');
         uint256 reserve = vm.envOr('HUB_RESERVE', uint256(500_000));
         c.total = c.stateN1User + reserve;
+
+        c.secondAsset = vm.envOr('SECOND_ASSET', address(0));
+        c.secondAssetAmount = vm.envOr('SECOND_ASSET_AMOUNT', uint256(0));
     }
 }
