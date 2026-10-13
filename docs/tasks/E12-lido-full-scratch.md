@@ -112,10 +112,12 @@ found in sequence as each was ruled out:
      (`AllowedCPUs=0-9,16-25`) via `systemctl set-property --runtime`, so other host load cannot bleed
      onto the fixturenet's reserved cores;
    - the kernel workqueue cpumask narrowed to `03ff03ff` for the same reason.
-   All of this is runtime-only (the `--runtime` flag and the slice unit living under `/run/systemd/system`
-   rather than `/etc/systemd/system`) -- it does not survive a reboot and is not part of this repo's
-   tracked config; a fresh host needs the equivalent set up by hand before running the fixturenet under
-   load.
+   As first built, all of this was runtime-only (the `--runtime` flag and the slice unit under
+   `/run/systemd/system`). The laconic-tech-ops `infra/kelce` host_cpu_policy role now installs it
+   persistently: `/etc/systemd/system/fixturenet.slice`, `10-host-cpu-policy.conf` drop-ins for
+   `system.slice`, `user.slice` and `init.scope`, and `/etc/tmpfiles.d/host-cpu-policy-workqueue.conf`.
+   On 2026-10-13, after the reboot of 2026-10-12 04:13 UTC, all of them were in place and the workqueue
+   cpumask was `03ff03ff`. The chain data does not survive a reboot: see `stack/README.md`.
 2. **Sync-write latency on the shared ZFS pool.** With cores reserved, reorgs and late broadcasts still
    came in bursts. Side by side over the same 10 minutes on the same reserved cores: 20 reorgs / 79 late
    broadcasts with the data directory on `kelce-qvos`, 0 reorgs / 4 late with it on the NVMe root. The

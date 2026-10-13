@@ -82,7 +82,16 @@ Notes:
   kelce every disk-backed path shares devices with other heavy writers, and the chain's fsyncs waiting
   behind them caused reorgs and late blocks (measurements in `docs/tasks/E12-lido-full-scratch.md`'s
   "As built"); and the cap makes a forgotten fixturenet fill its RAM disk and die instead of growing on
-  a shared filesystem. A reboot empties it; a fresh reconcile rebuilds the chain.
+  a shared filesystem. The operator accepted the cost of this choice on 2026-09-27: a reboot or an
+  unmount loses the chain.
+  After a reboot the mount unit mounts the tmpfs again, empty. Docker restarts the chain containers
+  (`unless-stopped`) against the empty directory, and they exit with code 1 (geth: "Failed to read
+  genesis file"). A reconcile alone does not recover this, because no chain runs. Recovery today is
+  manual: create the fixturenet again with `stack/scripts/fixturenet-new <name>`. When a base snapshot
+  for the current inputs exists in `~/deployments/.snapshots`, it restores the base layer (warm path)
+  and deploys `armada_nitro` and `funding` again. Without one it builds the base layer (about 25 min).
+  Chain state after the base snapshot is lost either way. On 2026-10-13 the operator required the
+  fixturenet to be robust against reboots. Nothing restores it at boot yet: see pebble `arn-faa`.
   geth runs with `--datadir.minfreedisk=64` (MB): its default floor (~2 GB free) would shut it down
   with a third of a 3 GB disk used. With the flag it uses the disk until 64 MB remain, then shuts down
   cleanly.
