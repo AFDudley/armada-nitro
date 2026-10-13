@@ -1,0 +1,44 @@
+status: completed
+pebble_id: arn-521
+summary: >
+  Added a per-channel holdingsLock mapping (MultiAssetHolder) that each of the six
+  holdings-mutating entry points named in the report -- deposit, depositFromNote, transfer,
+  transferAllAssets, concludeAndTransferAllAssets, reclaim -- sets before making any external
+  call and releases on every return path, so a nested call into any of the six on the same
+  channel reverts with 'Re-entered while in progress' while an earlier call on that channel is
+  still executing. MultiAssetHolder._doDeposit holds the lock across arn-0cf's balanceOf
+  measurement and safeTransferFrom; ArmadaNitroAdjudicator.depositFromNote holds it across
+  pool.transact; MultiAssetHolder.transfer and reclaim hold it across their external payout
+  interactions; NitroAdjudicator.transferAllAssets and concludeAndTransferAllAssets check the
+  lock up front and share a _transferAllAssetsBody. Ported the per-channel-lock design from the
+  prior wip/arn-521-attempt2 branch onto current main, which added arn-3d8's configured-asset
+  list and arn-0cf's measured-balance deposit crediting after that attempt was written -- the
+  lock now also covers both of those. Verified with two new forge suites:
+  test/ReentryDeposit.t.sol (a HookedToken whose transferFrom calls back into deposit() on the
+  same channel ends with holdings identical to a plain deposit, and the nested call itself
+  reverts) and test/ReentryGuard.t.sol (an AdjudicatorHarness that sets holdingsLock directly and
+  exercises each of the six entry points, confirming every one reverts with the guard message
+  and leaves holdings unchanged). Ran the full forge suite (38 tests, 8 suites) with no
+  regressions, and ran both of the spec's check scripts directly: both print exactly one JSON
+  {"flows": [...]} line to stdout (forge output routed to stderr) with all flows summing to zero
+  and exit 0.
+cost: "~95k tokens"
+commits:
+  - "32ad5e5"
+verify_transcript:
+  hooks:
+    - name: forge test (full suite)
+      outcome: passed
+      duration_s: 1
+    - name: python3 scripts/check-adjudicator-reentry.py
+      outcome: passed
+      duration_s: 1
+    - name: python3 scripts/check-adjudicator-reentry-guard.py
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-521.spec.json
+  command: "python3 scripts/check-adjudicator-reentry.py && python3 scripts/check-adjudicator-reentry-guard.py"
+  result: passed
+  ran_at_sha: "32ad5e5"
+  mocks_in_path: false
