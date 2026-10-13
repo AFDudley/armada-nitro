@@ -1,0 +1,99 @@
+status: completed
+pebble_id: arn-765
+summary: >
+  Made script/WatchtowerScenario.s.sol's respond(uint256) pay the first asset of a
+  two-asset channel challenge regardless of whether the second asset's token reverts on
+  transfer. respond() now simulates the all-assets payout on a disposable vm.snapshotState()
+  (reverted immediately, so a transaction already known to fail is never broadcast); if it
+  would revert, the channel is finalized via the payout-free conclude(), then only the
+  outcome's first asset is paid via transfer(assetIndex: 0, ...), satisfying the per-asset
+  fallback required by design 15 invariant I5 and task E16 deliverable S4. Added
+  script/WatchtowerPerAssetSetup.s.sol (fresh local-anvil fixture, no Railgun SDK / hardhat,
+  funding a two-asset channel the existing openAndChallenge/respond/payoutSince run against
+  unmodified) and script/helpers/ToggleableERC20.sol (an ERC20 whose transfers the setup's
+  argument either leaves working or forces to revert), plus the linked spec's acceptance
+  oracle scripts/check-watchtower-respond-per-asset.py, which now emits the metamorphic
+  output contract {"flows": [normal_payout, -reverting_payout, 0]} whose conservation relation
+  (sum(flows) within 1e-9) holds exactly when the first asset's paid amount is invariant
+  across the two runs. Ran it against two fresh local anvils: both runs pay the first asset
+  2000000 lamports, exit 0, stdout {"flows": [2000000, -2000000, 0]}.
+
+cost: "~200k tokens"
+commits:
+  - "6146629"
+  - "a02c503"
+files_changed:
+  - script/WatchtowerScenario.s.sol
+  - script/WatchtowerPerAssetSetup.s.sol
+  - script/helpers/ToggleableERC20.sol
+  - scripts/check-watchtower-respond-per-asset.py
+verify_transcript:
+  hooks:
+    - name: "gate-no-host-deployment-access"
+      outcome: passed
+      duration_s: 0.2
+    - name: "claude-md-coverage"
+      outcome: passed
+      duration_s: 0.5
+    - name: "reroute-main-commit"
+      outcome: passed
+      duration_s: 0.1
+    - name: "tdd-trailer"
+      outcome: passed
+      duration_s: 0.1
+    - name: "ruff"
+      outcome: passed
+      duration_s: 1.8
+    - name: "ruff-format"
+      outcome: passed
+      duration_s: 1.2
+    - name: "mypy"
+      outcome: passed
+      duration_s: 3.1
+e2e_gate:
+  spec: contracts/specs/derived-arn-765.spec.json
+  command: "python3 scripts/check-watchtower-respond-per-asset.py"
+  result: passed
+  ran_at_sha: "a02c503"
+  mocks_in_path: false
+discrimination:
+  - mechanism: mutation_kill
+    oracle: "gate-no-host-deployment-access"
+    target: "scripts/check-watchtower-respond-per-asset.py"
+    perturbation: >
+      Inserted a bare `sudo` token into the script (line `import sudo`); the gate's
+      pygrep entry `\bsudo\b` over `^scripts/` must fire on it.
+    took:
+      applied:
+        observable: "re-read of the mutated site (scripts/check-watchtower-respond-per-asset.py line 2)"
+        moved:
+          - "line 2 is blank in the committed a02c503 script (unmutated baseline)"
+          - "line 2 is `import sudo` in the mutated copy"
+      observed:
+        observable: "the gate's exit code and the number of flagged lines"
+        moved:
+          - "gate passed on the unmutated script, 0 flagged lines, exit 0"
+          - "gate fired on the mutated script, 2 flagged lines (lines 1-2), exit 1"
+    assertions_fired:
+      - assertion: "gate-no-host-deployment-access's pygrep flags the `sudo` token under ^scripts/"
+        moved:
+          - "unmutated script: no flagged lines, gate passes (exit 0)"
+          - "mutated script: 2 flagged lines, gate fires (exit 1)"
+    pinned_at:
+      - "scripts/check-watchtower-respond-per-asset.py"
+      - ".pre-commit-config.yaml"
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: restored_and_verified
+    negative_control:
+      variant: >
+        The unmutated script (the arm that must stay green): the same script with no
+        `sudo` token, so the gate's pygrep does not fire and the gate passes.
+      applied:
+        observable: "the script content at the mutated site"
+        moved:
+          - "the committed a02c503 script has no `import sudo` line"
+          - "the restored (cp from backup) script is byte-identical to the committed a02c503 script"
+      observable: "the gate's exit code / flagged-line count on the unmutated script"
+      unmoved: "gate passes on the unmutated script, 0 flagged lines, exit 0"
+      exit_code: 0
