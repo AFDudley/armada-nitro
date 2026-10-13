@@ -1,0 +1,74 @@
+branch: worker/arn-765
+status: completed
+pebble_id: arn-765
+summary: >
+  Ported the arn-765 per-asset fallback from wip/arn-765-attempt2 onto the
+  current main (which contains arn-7de's settle() change b9a701f). respond(uint256)
+  in script/WatchtowerScenario.s.sol now attempts the all-or-nothing
+  concludeAndTransferAllAssets on a disposable vm.snapshotState(); when the second
+  asset's token reverts on transfer it finalizes via the payout-free conclude() and
+  pays the outcome's first asset via transfer(assetIndex 0). Ported the supporting
+  fixture (script/WatchtowerPerAssetSetup.s.sol), the toggleable second token
+  (script/helpers/ToggleableERC20.sol), and the metamorphic conservation check
+  (scripts/check-watchtower-respond-per-asset.py); excluded the run artifact
+  deployments/watchtower-e2e-start-block-0. Verified: the check runs the two-asset
+  scenario twice on a fresh anvil; both runs pay the first asset the same non-zero
+  2000000 (flows [2000000, -2000000, 0], conservation sum = 0, exit 0). A
+  throwaway-tree ablation of the fallback made the check FAIL (exit 1,
+  "ToggleableERC20: transfers rejected"), proving the oracle can say NO.
+cost: ~42k tokens
+files_changed:
+  - script/WatchtowerPerAssetSetup.s.sol
+  - script/WatchtowerScenario.s.sol
+  - script/helpers/ToggleableERC20.sol
+  - scripts/check-watchtower-respond-per-asset.py
+commits:
+  - "2ab71c0"
+verify_transcript:
+  hooks:
+    - name: "metamorphic conservation check (spec run command)"
+      outcome: passed
+      duration_s: 58
+    - name: "pre-commit (all-files gate)"
+      outcome: passed
+      duration_s: 8
+e2e_gate:
+  spec: contracts/specs/derived-arn-765.spec.json
+  command: python3 scripts/check-watchtower-respond-per-asset.py
+  result: passed
+  ran_at_sha: "2ab71c0"
+  mocks_in_path: false
+  passes: 1
+discrimination:
+  - mechanism: ablation
+    oracle: python3 scripts/check-watchtower-respond-per-asset.py
+    target: script/WatchtowerScenario.s.sol
+    perturbation: >
+      Withheld the per-asset fallback in respond(): reverted respond() to the
+      all-or-nothing concludeAndTransferAllAssets path (keeping the second asset in
+      the two-asset outcome), so in the reverting run the all-or-nothing call reverts
+      with "ToggleableERC20: transfers rejected" and the first asset is paid 0.
+    took:
+      applied:
+        observable: respond() source in script/WatchtowerScenario.s.sol
+        moved:
+          - "respond() contains the vm.snapshotState/conclude/transfer fallback"
+          - "respond() calls only concludeAndTransferAllAssets (fallback removed)"
+      observed:
+        observable: "the check's exit code (0=PASS, 1=FAIL)"
+        moved:
+          - "0"
+          - "1"
+    assertions_fired:
+      - assertion: "conservation relation |sum(flows)| <= 1e-9 (the check's PASS/FAIL gate)"
+        moved:
+          - "0"
+          - "1"
+    pinned_at:
+      - scripts/check-watchtower-respond-per-asset.py
+      - script/WatchtowerPerAssetSetup.s.sol
+      - script/WatchtowerScenario.s.sol
+      - script/helpers/ToggleableERC20.sol
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: throwaway_tree_discarded
