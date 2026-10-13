@@ -33,7 +33,7 @@ repos:
         language: pygrep
         entry: '\bsudo\b|\bchmod\b|\bchown\b|deployments/[^\s"'']*/data\b|armada_env'
         files: ^(scripts|env/gates|stack/scripts)/
-        exclude: ^stack/scripts/(fixturenet-new|fixturenet-base-snapshot|fixturenet-base-common\.sh|base-key\.py)$|\.md$
+        exclude: ^stack/scripts/(fixturenet-new|fixturenet-recover|fixturenet-base-snapshot|fixturenet-base-common\.sh|base-key\.py)$|\.md$
       - id: job-no-host-deployment-path
         name: Compose jobs name no host deployment data path
         language: pygrep

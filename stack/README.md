@@ -82,16 +82,17 @@ Notes:
   kelce every disk-backed path shares devices with other heavy writers, and the chain's fsyncs waiting
   behind them caused reorgs and late blocks (measurements in `docs/tasks/E12-lido-full-scratch.md`'s
   "As built"); and the cap makes a forgotten fixturenet fill its RAM disk and die instead of growing on
-  a shared filesystem. The operator accepted the cost of this choice on 2026-09-27: a reboot or an
-  unmount loses the chain.
-  After a reboot the mount unit mounts the tmpfs again, empty. Docker restarts the chain containers
-  (`unless-stopped`) against the empty directory, and they exit with code 1 (geth: "Failed to read
-  genesis file"). A reconcile alone does not recover this, because no chain runs. Recovery today is
-  manual: create the fixturenet again with `stack/scripts/fixturenet-new <name>`. When a base snapshot
-  for the current inputs exists in `~/deployments/.snapshots`, it restores the base layer (warm path)
-  and deploys `armada_nitro` and `funding` again. Without one it builds the base layer (about 25 min).
-  Chain state after the base snapshot is lost either way. On 2026-10-13 the operator required the
-  fixturenet to be robust against reboots. Nothing restores it at boot yet: see pebble `arn-faa`.
+  a shared filesystem. A reboot or an unmount loses the chain's state (accepted 2026-09-27). The
+  fixturenet itself comes back by the warm-snapshot design: after a reboot the mount unit mounts the
+  tmpfs again, empty, and a boot-time oneshot unit runs `stack/scripts/fixturenet-recover <name>`.
+  That script stops the dead deployment (docker restarted its containers against the empty directory,
+  and they exited) and runs `fixturenet-new`, which restores the base snapshot for the current inputs
+  from `~/deployments/.snapshots` (warm path) and deploys `armada_nitro` and `funding` again. When no
+  snapshot matches the current inputs, it builds and snapshots the base layer instead (cold path,
+  about 25 min). Chain state after the base snapshot is lost either way. The script and the unit both
+  run only while `data/armada_fixturenet_genesis/metadata/genesis.json` is absent, so neither touches
+  a live chain. The laconic-tech-ops `infra/roles/host_cpu_policy` role installs the unit from the
+  tmpfs item's `restore` field. To recover by hand, run the same script.
   geth runs with `--datadir.minfreedisk=64` (MB): its default floor (~2 GB free) would shut it down
   with a third of a 3 GB disk used. With the flag it uses the disk until 64 MB remain, then shuts down
   cleanly.
@@ -281,6 +282,12 @@ stack/scripts/fixturenet-new <name>
 # file, prunes other snapshots, and restarts the chain. fixturenet-new's cold path
 # calls this for you.
 stack/scripts/fixturenet-base-snapshot <deployment-dir>
+
+# Bring ~/deployments/<name> back after a reboot emptied its tmpfs data/. Refuses
+# while data/armada_fixturenet_genesis/metadata/genesis.json exists (a live chain).
+# Stops the dead deployment, then runs fixturenet-new (warm path when the cached
+# base matches). The boot-time unit from the host_cpu_policy role runs this.
+stack/scripts/fixturenet-recover <name>
 ```
 
 ### Gates

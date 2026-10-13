@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# fixturenet-recover <name>
+#
+# Bring the fixturenet at ~/deployments/<name> back after a host reboot.
+#
+# Its data/ is a capped tmpfs (stack/README.md, "Chain data lives in RAM"), so a
+# reboot empties it. Docker then restarts the old containers (unless-stopped)
+# against the empty directory; they exit, and their compose network is gone. The
+# empty volume directories that docker creates for its bind mounts stay behind.
+#
+# This script:
+#   1. refuses to run while the chain's EL genesis file exists, so it never runs
+#      over a live chain (the boot unit carries the same condition);
+#   2. stops the deployment, which removes the dead containers and their network
+#      and keeps data/;
+#   3. runs fixturenet-new on the existing deployment dir. That resumes it, and
+#      takes the warm path (restore the base snapshot, deploy armada_nitro +
+#      funding) when a snapshot for the current inputs exists, or the cold path
+#      (build and snapshot the base layer, about 25 min) when none does.
+#
+# The boot-time trigger is a oneshot unit installed by laconic-tech-ops
+# infra/roles/host_cpu_policy (the `restore` field of a tmpfs mount item).
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+LACONIC="${LACONIC_SO:-${HOME}/bin/laconic-so}"
+
+usage() { echo "usage: $0 <name>" >&2; exit 2; }
+[ $# -eq 1 ] || usage
+NAME="$1"
+DEP="${HOME}/deployments/${NAME}"
+GENESIS="${DEP}/data/armada_fixturenet_genesis/metadata/genesis.json"
+
+[ -d "$DEP" ] || { echo "fixturenet-recover: no deployment at ${DEP}" >&2; exit 1; }
+findmnt --mountpoint "${DEP}/data" >/dev/null 2>&1 \
+  || { echo "fixturenet-recover: ${DEP}/data is not mounted" >&2; exit 1; }
+# data/ is root-only (mode 0700), so test through sudo.
+if sudo test -e "$GENESIS"; then
+  echo "fixturenet-recover: ${GENESIS} exists -- a chain is present; refusing to recover over it" >&2
+  exit 1
+fi
+
+echo "fixturenet-recover: ${NAME}: no chain in ${DEP}/data; stopping the dead deployment"
+"$LACONIC" deployment --dir "$DEP" stop
+exec "${SCRIPT_DIR}/fixturenet-new" "$NAME"
