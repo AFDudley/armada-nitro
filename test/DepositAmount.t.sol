@@ -52,38 +52,48 @@ contract NormalToken {
 
 contract DepositAmountTest is ArmadaFixture {
     ArmadaNitroAdjudicator adjudicator;
+    ShortToken internal shortToken;
+    NormalToken internal normalToken;
 
     function setUp() public {
         _deployArmada();
-        adjudicator = new ArmadaNitroAdjudicator(pool);
+        // arn-3d8: the test tokens must be on the adjudicator's configured asset list.
+        shortToken = new ShortToken();
+        normalToken = new NormalToken();
+        address[] memory assets = new address[](6);
+        assets[0] = address(usdc);
+        assets[1] = address(0x0000000000000000000000000000000000000001); // WETH
+        assets[2] = address(0x0000000000000000000000000000000000000002); // wstETH
+        assets[3] = address(0x0000000000000000000000000000000000000003); // waUSDC
+        assets[4] = address(shortToken);
+        assets[5] = address(normalToken);
+        adjudicator = new ArmadaNitroAdjudicator(pool, assets);
     }
 
     /// @dev c1: a token that pays one unit less than requested must revert the deposit.
     function test_shortTransfer_depositReverts() public {
-        ShortToken token = new ShortToken();
         uint256 amount = 10;
-        token.mint(address(this), 100);
-        token.approve(address(adjudicator), amount);
+        shortToken.mint(address(this), 100);
+        shortToken.approve(address(adjudicator), amount);
         bytes32 channelId = keccak256("channel-arn-0cf");
 
         vm.expectRevert('Deposit amount mismatch');
-        adjudicator.deposit(address(token), channelId, 0, amount);
+        adjudicator.deposit(address(shortToken), channelId, 0, amount);
     }
 
     /// @dev c2: a normal token that pays the full amount leaves the holdings increase equal to the
     /// adjudicator's measured token balance increase.
     function test_normalDeposit_holdingsDeltaEqualsBalanceDelta() public {
-        NormalToken token = new NormalToken();
         uint256 amount = 50;
-        token.mint(address(this), amount);
-        token.approve(address(adjudicator), amount);
+        normalToken.mint(address(this), amount);
+        normalToken.approve(address(adjudicator), amount);
         bytes32 channelId = keccak256("channel-arn-0cf");
 
-        uint256 heldBefore = adjudicator.holdings(address(token), channelId);
-        uint256 balBefore = token.balanceOf(address(adjudicator));
-        adjudicator.deposit(address(token), channelId, heldBefore, amount);
-        uint256 heldDelta = adjudicator.holdings(address(token), channelId) - heldBefore;
-        uint256 balDelta = token.balanceOf(address(adjudicator)) - balBefore;
+        uint256 heldBefore = adjudicator.holdings(address(normalToken), channelId);
+        uint256 balBefore = normalToken.balanceOf(address(adjudicator));
+        adjudicator.deposit(address(normalToken), channelId, heldBefore, amount);
+        uint256 heldDelta = adjudicator.holdings(address(normalToken), channelId) - heldBefore;
+        uint256 balDelta = normalToken.balanceOf(address(adjudicator)) - balBefore;
 
         assertEq(heldDelta, balDelta, 'holdings delta != balance delta');
     }

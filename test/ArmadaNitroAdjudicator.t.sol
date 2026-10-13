@@ -55,7 +55,13 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
 
     function setUp() public {
         _deployArmada();
-        adjudicator = new ArmadaNitroAdjudicator(pool);
+        address[] memory assets = new address[](4);
+        assets[0] = address(usdc);
+        assets[1] = address(0x0000000000000000000000000000000000000001); // WETH
+        assets[2] = address(0x0000000000000000000000000000000000000002); // wstETH
+        assets[3] = address(0x0000000000000000000000000000000000000003); // waUSDC
+        adjudicator = new ArmadaNitroAdjudicator(pool, assets);
+
         consensusApp = new ConsensusApp();
         user = vm.addr(USER_KEY);
         delegate = vm.addr(DELEGATE_KEY);

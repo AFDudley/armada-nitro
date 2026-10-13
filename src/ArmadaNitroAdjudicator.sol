@@ -6,6 +6,8 @@ import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {NitroAdjudicator} from './nitro/NitroAdjudicator.sol';
+import {IMultiAssetHolder} from './nitro/interfaces/IMultiAssetHolder.sol';
+import {MultiAssetHolder} from './nitro/MultiAssetHolder.sol';
 import {
     IArmadaPool,
     CommitmentPreimage,
@@ -37,8 +39,19 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
     /// @notice The Armada pool this adjudicator funds from and settles into.
     IArmadaPool public immutable pool;
 
-    constructor(IArmadaPool pool_) {
+    /// @notice The set of tokens the hub has configured for this adjudicator's channels.
+    mapping(address => bool) public configuredAssets;
+
+    /// @notice Whether the token is on the adjudicator's configured asset list.
+    function isAsset(address asset) public view returns (bool) {
+        return configuredAssets[asset];
+    }
+
+    constructor(IArmadaPool pool_, address[] memory assets_) {
         pool = pool_;
+        for (uint256 i = 0; i < assets_.length; i++) {
+            configuredAssets[assets_[i]] = true;
+        }
     }
 
     /**
@@ -49,6 +62,20 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
      */
     function depositBinding(bytes32 channelId, uint256 expectedHeld) public pure returns (bytes32) {
         return keccak256(abi.encode(channelId, expectedHeld));
+    }
+
+    /**
+     * @notice Fund a channel with a configured token.
+     * @dev The token must be on the hub's list; all other arguments pass through unchanged.
+     */
+    function deposit(
+        address asset,
+        bytes32 channelId,
+        uint256 expectedHeld,
+        uint256 amount
+    ) external payable override (IMultiAssetHolder, MultiAssetHolder) {
+        require(isAsset(asset), 'Asset not configured');
+        _doDeposit(asset, channelId, expectedHeld, amount);
     }
 
     /**
@@ -82,6 +109,7 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         require(note.token.tokenType == TokenType.ERC20, 'Not an ERC20 note');
 
         address asset = note.token.tokenAddress;
+        require(isAsset(asset), 'Asset not configured');
         uint256 held = holdings[asset][channelId];
         require(held == expectedHeld, 'held != expectedHeld');
 

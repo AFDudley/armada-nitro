@@ -93,9 +93,14 @@ contract CheckSettlePerAssetSetup is Script {
         ArmadaNotes.placePoseidon(true);
         vm.startBroadcast(e.deployerKey);
         (d.privacyPool, d.usdc) = ArmadaNotes.deploy(deployer);
-        d.adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(address(d.privacyPool)));
-        d.consensusApp = new ConsensusApp();
         d.usdc2 = new RevertingTransferToken(USDC2_SUPPLY);
+        // arn-3d8: the adjudicator only funds configured assets; this scenario's own usdc and
+        // usdc2 must both be on the list, the deposit below (and later per-asset settle) rely on it.
+        address[] memory assets = new address[](2);
+        assets[0] = address(d.usdc);
+        assets[1] = address(d.usdc2);
+        d.adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(address(d.privacyPool)), assets);
+        d.consensusApp = new ConsensusApp();
         vm.stopBroadcast();
 
         IFrostTestSigner frost = IFrostTestSigner(deployCode('FrostTestSigner.sol:FrostTestSigner'));

@@ -14,6 +14,7 @@ import {IArmadaPool} from 'src/armada/IArmadaPool.sol';
  *   ARMADA_POOL            Armada PrivacyPool (Sepolia demo3: 0x5f3324b47b3CFf937BB67C30B362898E193e5216)
  *   HUB_GROUP_KEY_X/Y      the hub's FROST group public key
  *   HUB_REVOCATION_DELAY   seconds; must exceed the challenge duration of the hub's channels
+ *   ARMADA_ASSETS          comma-separated token addresses the hub has configured (arn-3d8)
  *
  *   forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --private-key $KEY
  */
@@ -31,7 +32,7 @@ contract Deploy is Script {
         );
 
         vm.startBroadcast();
-        adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(pool));
+        adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(pool), vm.envAddress("ARMADA_ASSETS", ","));
         consensusApp = new ConsensusApp();
         custodian = deployCode('HubCustodian.sol:HubCustodian', custodianArgs);
         vm.stopBroadcast();

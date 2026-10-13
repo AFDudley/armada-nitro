@@ -69,6 +69,19 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     if not armada or not armada.get("pool"):
         raise ctx.fail("armada module has not been reconciled; run it before armada_nitro (MODULE_ORDER)")
 
+    # arn-3d8: the adjudicator only funds assets on its configured list. The fixturenet's hub
+    # list is USDC, WETH, wstETH, waUSDC, each already recorded by an earlier module
+    # (MODULE_ORDER: weth, usdc, cctp, aave, lido, armada all run before armada_nitro).
+    assets = ctx.manifest.get("assets", {})
+    configured_assets = [armada["usdc"]]
+    for key in ("weth", "wstETH", "waUSDC"):
+        address = assets.get(key)
+        if not address:
+            raise ctx.fail(
+                f"assets.{key} has not been reconciled; run its module before armada_nitro (MODULE_ORDER)"
+            )
+        configured_assets.append(address)
+
     group_key_x, group_key_y = _read_group_key(ctx)
     chain_id = ctx.target["network"]["chainId"]
 
@@ -89,6 +102,7 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
             "HUB_GROUP_KEY_X": group_key_x,
             "HUB_GROUP_KEY_Y": group_key_y,
             "HUB_REVOCATION_DELAY": str(params["revocationDelay"]),
+            "ARMADA_ASSETS": ",".join(configured_assets),
         },
         extra_args=("--private-keys", ctx.deployer_key),
     )
