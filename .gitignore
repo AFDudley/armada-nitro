@@ -14,6 +14,8 @@ out/
 
 # Local-chain deployment artifacts
 /deployments/31337*
+# Start blocks that script/WatchtowerScenario.s.sol writes during a run
+/deployments/watchtower-e2e-start-block-*
 
 # forge-generated linking helpers
 /foundry-pp/
