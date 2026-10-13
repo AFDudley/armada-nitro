@@ -89,9 +89,14 @@ contract WatchtowerPerAssetSetup is Script {
         ArmadaNotes.placePoseidon(true);
         vm.startBroadcast(cfg.deployerKey);
         (d.privacyPool, d.usdc) = ArmadaNotes.deploy(vm.addr(cfg.deployerKey));
-        d.adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(address(d.privacyPool)));
-        d.consensusApp = new ConsensusApp();
         d.secondAsset = new ToggleableERC20();
+        // arn-3d8: the adjudicator only funds configured assets; both of this scenario's
+        // assets must be on the list, because _fundUsdc and _fundSecondAsset deposit them.
+        address[] memory assets = new address[](2);
+        assets[0] = address(d.usdc);
+        assets[1] = address(d.secondAsset);
+        d.adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(address(d.privacyPool)), assets);
+        d.consensusApp = new ConsensusApp();
         vm.stopBroadcast();
     }
 
