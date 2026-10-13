@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {Test, Vm} from 'forge-std/Test.sol';
+import {console} from 'forge-std/console.sol';
 import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {MockUSDCV2} from 'armada/cctp/MockUSDCV2.sol';
@@ -88,6 +89,10 @@ contract ReentryDepositTest is ArmadaFixture {
         adjudicator.deposit(address(hooked), hookedChannelId, 0, AMOUNT);
         uint256 hookedHoldings = adjudicator.holdings(address(hooked), hookedChannelId);
         vm.stopPrank();
+
+        // Emit the observed final holdings so the acceptance script can compute the no-arbitrage
+        // flows: a re-entering hook leaving final holdings unchanged means plain == hooked.
+        console.log("ARN521_C1", plainHoldings, hookedHoldings);
 
         // Both deposits end with the same recorded holdings...
         assertEq(plainHoldings, AMOUNT);

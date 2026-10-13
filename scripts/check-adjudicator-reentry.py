@@ -1,32 +1,51 @@
 #!/usr/bin/env python3
-"""Guard: a reentering deposit hook must not change a deposit's final holdings (design 15 I6,
-E16 S3).
+"""c1 (hooked-deposit-matches-plain-deposit): deposit the same amount of the same kind of
+token into the same channel from identical starting conditions — once with a plain ERC20, once
+with a token whose transfer hook calls back into the adjudicator mid-deposit. The channel must
+end with identical recorded holdings, and the hook's own nested call must revert.
 
-Metamorphic check (relation: adding a re-entering transfer hook to the deposited token leaves the
-channel's final recorded holdings unchanged, and the hook's own nested call into the adjudicator
-fails): runs the forge test `ReentryDepositTest`, which deposits the same amount of the same kind
-of token into two channels from identical starting conditions — once with a plain ERC20, once with
-a token whose `transferFrom` tries to call back into `ArmadaNitroAdjudicator.deposit` on the same
-channel mid-deposit — and asserts both channels end with identical recorded holdings and that the
-hook's own nested call reverted.
+Metamorphic no-arbitrage check: adding the re-entering hook must leave the channel's final
+recorded holdings unchanged, so the net flow across the two deposits is zero.
 
-Exits 0 when the forge test passes (the relation holds and the nested call failed); non-zero
-otherwise (`forge test`'s own exit code).
+The runner parses the whole stdout of this command with json.loads, so only the final JSON
+object goes to stdout; forge's own output is forwarded to stderr.
 """
 
+import json
 import os
+import re
 import subprocess
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def run_forge(argv: list[str]) -> tuple[int, str]:
+    cmd = ["forge", "test", "--match-contract", "ReentryDepositTest", "-vvv"]
+    result = subprocess.run(cmd, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    forge_out = result.stdout.decode(errors="replace")
+    forge_err = result.stderr.decode(errors="replace")
+    if forge_out.strip():
+        print("=== forge stdout ===", file=sys.stderr)
+        print(forge_out, file=sys.stderr)
+    if forge_err.strip():
+        print("=== forge stderr ===", file=sys.stderr)
+        print(forge_err, file=sys.stderr)
+    return result.returncode, forge_out
+
+
 def main(argv: list[str]) -> int:
-    cmd = ["forge", "test", "--match-contract", "ReentryDepositTest"]
-    if "-v" in argv or "--verbose" in argv:
-        cmd.append("-vvv")
-    result = subprocess.run(cmd, cwd=REPO_ROOT)
-    return result.returncode
+    rc, out = run_forge(argv)
+
+    m = re.search(r"ARN521_C1 (\d+) (\d+)", out)
+    if m:
+        plain, hooked = int(m.group(1)), int(m.group(2))
+        # outflow (plain final holdings, positive) and inflow (hooked final holdings, negative)
+        flows = [plain, -hooked]
+    else:
+        flows = [0]
+    print(json.dumps({"flows": flows}))
+    return 0 if rc == 0 else 1
 
 
 if __name__ == "__main__":

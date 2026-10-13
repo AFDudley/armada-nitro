@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {Test} from 'forge-std/Test.sol';
+import {console} from 'forge-std/console.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
 import {
@@ -68,9 +69,12 @@ contract ReentryGuardTest is Test, INitroTypes {
     function test_guard_deposit_revertsWhileInProgress() public {
         bytes32 channelId = keccak256('guard deposit channel');
         adjudicator.setHoldingsLock(channelId, 1);
+        uint256 hBefore = adjudicator.holdings(ASSET, channelId);
 
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.deposit(ASSET, channelId, 0, 1);
+        uint256 hAfter = adjudicator.holdings(ASSET, channelId);
+        console.log("ARN521_C2 deposit", hBefore, hAfter);
 
         assertEq(adjudicator.holdings(ASSET, channelId), 0);
     }
@@ -106,8 +110,11 @@ contract ReentryGuardTest is Test, INitroTypes {
         });
 
         adjudicator.setHoldingsLock(channelId, 1);
+        uint256 hBefore = adjudicator.holdings(address(token), channelId);
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.depositFromNote(channelId, 0, txs);
+        uint256 hAfter = adjudicator.holdings(address(token), channelId);
+        console.log("ARN521_C2 depositFromNote", hBefore, hAfter);
 
         assertEq(adjudicator.holdings(address(token), channelId), 0);
     }
@@ -131,9 +138,12 @@ contract ReentryGuardTest is Test, INitroTypes {
         bytes32 stateHash = keccak256('guard transfer state');
         adjudicator.finalize(channelId, stateHash, outcomeBytes);
         adjudicator.setHoldingsLock(channelId, 1);
+        uint256 hBefore = adjudicator.holdings(ASSET, channelId);
 
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.transfer(0, channelId, outcomeBytes, stateHash, new uint256[](0));
+        uint256 hAfter = adjudicator.holdings(ASSET, channelId);
+        console.log("ARN521_C2 transfer", hBefore, hAfter);
 
         assertEq(adjudicator.holdings(ASSET, channelId), 0);
     }
@@ -141,9 +151,12 @@ contract ReentryGuardTest is Test, INitroTypes {
     function test_guard_transferAllAssets_revertsWhileInProgress() public {
         bytes32 channelId = bytes32(uint256(4));
         adjudicator.setHoldingsLock(channelId, 1);
+        uint256 hBefore = adjudicator.holdings(ASSET, channelId);
 
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.transferAllAssets(channelId, new Outcome.SingleAssetExit[](0), bytes32(0));
+        uint256 hAfter = adjudicator.holdings(ASSET, channelId);
+        console.log("ARN521_C2 transferAllAssets", hBefore, hAfter);
 
         assertEq(adjudicator.holdings(ASSET, channelId), 0);
     }
@@ -173,9 +186,12 @@ contract ReentryGuardTest is Test, INitroTypes {
 
         bytes32 channelId = NitroUtils.getChannelId(fixedPart);
         adjudicator.setHoldingsLock(channelId, 1);
+        uint256 hBefore = adjudicator.holdings(ASSET, channelId);
 
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.concludeAndTransferAllAssets(fixedPart, candidate);
+        uint256 hAfter = adjudicator.holdings(ASSET, channelId);
+        console.log("ARN521_C2 concludeAndTransferAllAssets", hBefore, hAfter);
 
         // The whole call reverted atomically: `_conclude`'s effects are rolled back too.
         (, uint48 finalizesAt, ) = adjudicator.unpackStatus(channelId);
@@ -210,8 +226,11 @@ contract ReentryGuardTest is Test, INitroTypes {
         });
 
         adjudicator.setHoldingsLock(sourceChannelId, 1);
+        uint256 hBefore = adjudicator.holdings(ASSET, sourceChannelId);
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.reclaim(args);
+        uint256 hAfter = adjudicator.holdings(ASSET, sourceChannelId);
+        console.log("ARN521_C2 reclaim", hBefore, hAfter);
 
         assertEq(adjudicator.holdings(ASSET, sourceChannelId), 0);
     }
