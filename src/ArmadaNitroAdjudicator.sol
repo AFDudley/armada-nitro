@@ -113,11 +113,15 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         uint256 held = holdings[asset][channelId];
         require(held == expectedHeld, 'held != expectedHeld');
 
+        // guard: no nested call may run on this channel while this deposit is in progress.
+        require(holdingsLock[channelId] == 0, 'Re-entered while in progress');
+        holdingsLock[channelId] += 1;
         uint256 balanceBefore = IERC20(asset).balanceOf(address(this));
         pool.transact(transactions);
         uint256 received = IERC20(asset).balanceOf(address(this)) - balanceBefore;
         require(received == note.value, 'Unshield amount mismatch');
 
+        holdingsLock[channelId] -= 1;
         held += received;
         holdings[asset][channelId] = held;
         emit Deposited(channelId, asset, held);
