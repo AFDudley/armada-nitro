@@ -31,11 +31,11 @@ interface IMintableUSDC {
  * for each rejection (a single signer, a stale nonce, the revoked delegate, the wrong hash).
  *
  * A fresh custodian is deployed here (rather than reusing the fixturenet's shared one) because
- * that shared instance's group key is `FixturenetScenario.s.sol`'s well-known `HUB_GROUP_SCALAR`
- * (a single party, simulated by `FrostTestSigner` for `armada-nitro-e2e`) -- there are no real
- * FROST shares for it. This script's custodian reuses the shared adjudicator, ConsensusApp,
- * PrivacyPool and USDC from the manifest; only the custodian is this gate's own, and it is never
- * written back into the manifest, so `armada-nitro-e2e` is unaffected.
+ * E14d revokes its delegate and rotates its group key, which would break the shared custodian
+ * that `armada-nitro-e2e` signs for with the fixturenet's own FROST shares (/env). This script's
+ * custodian reuses the shared adjudicator, ConsensusApp, PrivacyPool and USDC from the manifest;
+ * only the custodian is this gate's own, and it is never written back into the manifest, so
+ * `armada-nitro-e2e` is unaffected.
  *
  * Every group-authorized call (`_hubExecute`/`_hubExecuteShares`) signs `operationHash` with real
  * FROST shares via `frost-signer sign --format json` through `vm.ffi` (forge script must run with

@@ -11,7 +11,7 @@ import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {CommitmentPreimage} from 'src/armada/IArmadaPool.sol';
 import {ArmadaNotes} from '../test/helpers/ArmadaNotes.sol';
 import {ChannelStates} from '../test/helpers/ChannelStates.sol';
-import {IHubCustodian, IFrostTestSigner} from '../test/helpers/IHubCustodian.sol';
+import {IHubCustodian} from '../test/helpers/IHubCustodian.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 
 /// @dev Circle's FiatToken mint, guarded by the minter role the funding module configures for
@@ -41,11 +41,17 @@ interface IMintableUSDC {
  *   settle            after the window: pay out the challenged outcome
  *   verify            read chain state and Shield logs; revert on any mismatch
  *
- * Environment: DELEGATE_KEY, HUB_GROUP_SCALAR, CHALLENGE_DURATION (must equal the value
+ * The hub custodian's group-authorized `execute` calls are signed with two real shares of the
+ * custodian's 2-of-3 FROST group (`frost-signer sign --format json` through `vm.ffi`, so every
+ * `forge script` call needs `--ffi`). The fixturenet's `armada-frost-keygen` job writes these
+ * shares and the group key the reconciler deploys the custodian with.
+ *
+ * Environment: DELEGATE_KEY, CHALLENGE_DURATION (must equal the value
  * prepare.ts bound into channel 0/1's adaptParams -- it is part of the channelId hash).
  * MANIFEST_PATH (default /env/manifest.json), DEPOSITS_PATH (default
  * /env/nitro-e2e/deposits.json), KEYS_DIR (default /env -- deployer.key and
- * testAccounts[0].privateKeyFile both live under here).
+ * testAccounts[0].privateKeyFile both live under here), FROST_SHARES_DIR (default /env --
+ * share-1, share-2, share-3), FROST_SIGNER (default `frost-signer` on PATH).
  */
 contract FixturenetScenario is Script {
     bytes32 internal constant USER_PAYOUT_NPK = bytes32(uint256(0x2222));
@@ -71,7 +77,8 @@ contract FixturenetScenario is Script {
         uint256 deployerKey;
         uint256 userKey;
         uint256 delegateKey;
-        uint256 groupScalar;
+        string frostSharesDir;
+        string frostSigner;
         uint48 challengeDuration;
     }
 
@@ -309,13 +316,28 @@ contract FixturenetScenario is Script {
         );
     }
 
-    /// @dev Sign with the group key off the broadcast (the signer exists only in simulation).
+    /// @dev Sign the operation with FROST shares 1 and 2 (`frost-signer sign --format json` via
+    /// `vm.ffi`), then broadcast the group-authorized `execute`.
     function _hubExecute(Ctx memory c, address target, bytes memory data) internal {
-        IFrostTestSigner frost = IFrostTestSigner(deployCode('FrostTestSigner.sol:FrostTestSigner'));
         bytes32 message = c.custodian.operationHash(c.custodian.nonce(), target, 0, data);
-        (uint256 rx, uint256 ry, uint256 z) = frost.sign(c.groupScalar, message);
+        string[] memory cmd = new string[](9);
+        cmd[0] = c.frostSigner;
+        cmd[1] = 'sign';
+        cmd[2] = '--shares';
+        cmd[3] = string.concat(c.frostSharesDir, '/share-1');
+        cmd[4] = string.concat(c.frostSharesDir, '/share-2');
+        cmd[5] = '--message';
+        cmd[6] = vm.toString(message);
+        cmd[7] = '--format';
+        cmd[8] = 'json';
+        string memory json = string(vm.ffi(cmd));
+        IHubCustodian.GroupSignature memory sig = IHubCustodian.GroupSignature({
+            commitmentX: vm.parseJsonUint(json, '.commitmentX'),
+            commitmentY: vm.parseJsonUint(json, '.commitmentY'),
+            z: vm.parseJsonUint(json, '.z')
+        });
         vm.broadcast(c.deployerKey);
-        c.custodian.execute(target, 0, data, IHubCustodian.GroupSignature(rx, ry, z));
+        c.custodian.execute(target, 0, data, sig);
     }
 
     /// @dev The adjudicator is not a registered (privileged) shield caller -- no adapterRegistry
@@ -447,7 +469,8 @@ contract FixturenetScenario is Script {
         c.userKey = vm.parseUint(vm.readFile(string.concat(keysDir, '/', userKeyFile)));
 
         c.delegateKey = vm.envUint('DELEGATE_KEY');
-        c.groupScalar = vm.envUint('HUB_GROUP_SCALAR');
+        c.frostSharesDir = vm.envOr('FROST_SHARES_DIR', string('/env'));
+        c.frostSigner = vm.envOr('FROST_SIGNER', string('frost-signer'));
         c.challengeDuration = uint48(vm.envUint('CHALLENGE_DURATION'));
     }
 }
