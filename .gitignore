@@ -36,3 +36,6 @@ node_modules/
 
 # Rust workspace build output
 /target
+
+# Throwaway scratch (worktrees, logs)
+.scratch/
