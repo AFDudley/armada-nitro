@@ -12,6 +12,7 @@ import {CommitmentPreimage} from 'src/armada/IArmadaPool.sol';
 import {ArmadaNotes} from '../test/helpers/ArmadaNotes.sol';
 import {ChannelStates} from '../test/helpers/ChannelStates.sol';
 import {IHubCustodian} from '../test/helpers/IHubCustodian.sol';
+import {PerAssetPayout} from './helpers/PerAssetPayout.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 
 /// @dev Circle's FiatToken mint, guarded by the minter role the funding module configures for
@@ -173,7 +174,7 @@ contract FixturenetScenario is Script {
         );
         (bool ok, bytes memory ret) = address(c.adjudicator).call(data);
         require(!ok, 'early settle unexpectedly succeeded before the challenge window elapsed');
-        console2.log('early settle correctly reverted:', _decodeRevertReason(ret));
+        console2.log('early settle correctly reverted:', PerAssetPayout.revertReason(ret));
     }
 
     function settle() external {
@@ -181,75 +182,14 @@ contract FixturenetScenario is Script {
         Deposit memory d = _deposit(1);
         INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
         INitroTypes.VariablePart memory latest = _forcedState(c, 12, false, FORCED_USER, FORCED_HUB);
-        bytes32 channelId = NitroUtils.getChannelId(fp);
-        bytes32 stateHash = NitroUtils.hashState(fp, latest);
-
-        // E16 S4: probe `transferAllAssets` without ever marking it for broadcast (the same
-        // reason `earlySettle` above stays unwrapped): a reverting low-level `.call()` made
-        // under an active `vm.broadcast()` prank still gets queued by forge script and fails
-        // the later broadcast replay with "Simulated execution failed.", aborting this whole
-        // script before the fallback below could ever run. `vm.snapshotState`/`revertTo` undo
-        // the probe's own state change, so the real (broadcast) attempt below -- made only once
-        // we already know it won't revert -- runs against the exact state the probe did.
-        uint256 snap = vm.snapshotState();
-        bytes memory allData = abi.encodeCall(
-            c.adjudicator.transferAllAssets,
-            (channelId, latest.outcome, stateHash)
+        // E16 S4: one transferAllAssets, or each asset on its own when that reverts.
+        PerAssetPayout.settle(
+            c.adjudicator,
+            c.deployerKey,
+            NitroUtils.getChannelId(fp),
+            latest.outcome,
+            NitroUtils.hashState(fp, latest)
         );
-        (bool ok, bytes memory ret) = address(c.adjudicator).call(allData);
-        vm.revertTo(snap);
-
-        if (ok) {
-            vm.broadcast(c.deployerKey);
-            c.adjudicator.transferAllAssets(channelId, latest.outcome, stateHash);
-            console2.log('transferAllAssets succeeded');
-        } else {
-            console2.log('transferAllAssets reverted:', _decodeRevertReason(ret));
-            // Fall back to the per-asset transfer path (MultiAssetHolder.transfer): pay each
-            // asset one at a time so a good asset is still paid and a reverting asset's
-            // recorded holdings stay untouched.
-            _settlePerAsset(c, channelId, latest.outcome, stateHash);
-        }
-    }
-
-    /// @dev E16 S4: the per-asset fallback. For each asset of the outcome, probe (then, only if
-    /// the probe succeeds, really broadcast) the adjudicator's `transfer(assetIndex, ...)`
-    /// (MultiAssetHolder.transfer): paying a good asset for real, and, for the asset whose
-    /// token reverts on transfer, never broadcasting anything for it at all -- its recorded
-    /// holdings stay exactly as they were.
-    function _settlePerAsset(
-        Ctx memory c,
-        bytes32 channelId,
-        Outcome.SingleAssetExit[] memory outcome,
-        bytes32 stateHash
-    ) internal {
-        uint256[] memory all = new uint256[](0);
-        for (uint256 i = 0; i < outcome.length; i++) {
-            bytes memory outcomeBytes = abi.encode(outcome);
-            uint256 snap2 = vm.snapshotState();
-            bytes memory payload = abi.encodeCall(
-                c.adjudicator.transfer,
-                (i, channelId, outcomeBytes, stateHash, all)
-            );
-            (bool ok2, bytes memory ret2) = address(c.adjudicator).call(payload);
-            vm.revertTo(snap2);
-
-            if (ok2) {
-                vm.broadcast(c.deployerKey);
-                c.adjudicator.transfer(i, channelId, outcomeBytes, stateHash, all);
-                // This channel's allocations are always fully affordable out of its holdings
-                // (the deposits involved exactly match the outcome's total per asset), so a
-                // successful per-asset transfer pays every allocation in full -- the on-chain
-                // fingerprint now reflects this asset's allocations as zeroed. Mirror that
-                // locally so a later asset's per-asset call still hashes its (unpaid)
-                // outcomeBytes to the current on-chain fingerprint.
-                for (uint256 j = 0; j < outcome[i].allocations.length; j++) {
-                    outcome[i].allocations[j].amount = 0;
-                }
-            } else {
-                console2.log('asset', i, 'per-asset transfer reverted:', _decodeRevertReason(ret2));
-            }
-        }
     }
 
     function verify() external view {
@@ -347,19 +287,6 @@ contract FixturenetScenario is Script {
     function _netOfShieldFee(Ctx memory c, uint256 amount) internal view returns (uint256) {
         uint256 feeBps = c.privacyPool.shieldFee();
         return amount - (amount * feeBps) / 10_000;
-    }
-
-    /// @dev Decode a standard `require(cond, "reason")` revert payload (selector
-    /// `Error(string)` = 0x08c379a0 + abi-encoded string). Falls back to a fixed string for any
-    /// other shape (e.g. a custom error or an out-of-gas revert with no payload) rather than
-    /// reverting itself while reporting a revert.
-    function _decodeRevertReason(bytes memory ret) internal pure returns (string memory) {
-        if (ret.length < 4) return '<no revert reason>';
-        bytes memory encoded = new bytes(ret.length - 4);
-        for (uint256 i = 0; i < encoded.length; i++) {
-            encoded[i] = ret[i + 4];
-        }
-        return abi.decode(encoded, (string));
     }
 
     function _fixedPart(Ctx memory c, uint64 channelNonce) internal view returns (INitroTypes.FixedPart memory) {

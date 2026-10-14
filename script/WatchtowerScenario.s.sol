@@ -12,6 +12,7 @@ import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {CommitmentPreimage} from 'src/armada/IArmadaPool.sol';
 import {ArmadaNotes} from '../test/helpers/ArmadaNotes.sol';
 import {ChannelStates} from '../test/helpers/ChannelStates.sol';
+import {PerAssetPayout} from './helpers/PerAssetPayout.sol';
 
 /**
  * @notice `armada-watchtower-e2e` gate (E15): a participant holding a newer co-signed state
@@ -42,16 +43,17 @@ import {ChannelStates} from '../test/helpers/ChannelStates.sol';
  * the outcome or (if any single asset's token reverts on transfer) reverts the whole transaction,
  * including the finalization `_conclude` performed in the same call. Per design 15's invariant I5
  * and task E16's deliverable S4, `respond` falls back to a per-asset transfer in that case: it
- * finalizes the channel via the payout-free `conclude`, then pays out only the outcome's first
- * asset via `transfer(assetIndex: 0, ...)`, so one broken asset can never block payout of a
- * working one. It decides which path to take by attempting the all-assets payout on a disposable
- * `vm.snapshotState()` first (reverted immediately after) rather than broadcasting a transaction
- * known to fail. A channel's second asset (if any) is carried via SECOND_ASSET/
- * SECOND_ASSET_AMOUNT below, not through the deposits/manifest files that fund the first asset --
- * see `_withSecondAsset`.
+ * finalizes the channel via the payout-free `conclude`, then pays each asset of the outcome on
+ * its own via `transfer(assetIndex, ...)` (`PerAssetPayout.payEachAsset`), so one broken asset
+ * can never block payout of a working one. It decides which path to take by attempting the
+ * all-assets payout on a disposable `vm.snapshotState()` first (reverted immediately after)
+ * rather than broadcasting a transaction known to fail. A channel's second asset (if any) is
+ * carried via SECOND_ASSET/SECOND_ASSET_AMOUNT below, not through the deposits/manifest files
+ * that fund the first asset -- see `_withSecondAsset`.
  *
  * Scenario B skips `respond` entirely; after the window elapses, `settleStale` pays out the
- * stale challenged state N, mirroring script/FixturenetScenario.s.sol's `settle()`.
+ * stale challenged state N with the same per-asset fallback as script/FixturenetScenario.s.sol's
+ * `settle()` (`PerAssetPayout.settle`).
  *
  * `payoutSince` reads the Shield logs emitted after a recorded start block for a note paid to
  * USER_PAYOUT_NPK and prints its value on a `PAYOUT_LAMPORTS <value>` line for the orchestrating
@@ -147,9 +149,9 @@ contract WatchtowerScenario is Script {
     /// otherwise have performed -- and even assets whose own transfer would have succeeded are
     /// left unpaid. This is checked first on a disposable `vm.snapshotState()` (reverted right
     /// after) so a transaction already known to fail is never broadcast; if it would fail, the
-    /// channel is instead finalized via the payout-free `conclude`, then only the outcome's first
-    /// asset is paid out via `transfer(assetIndex: 0, ...)`, so its payout never depends on
-    /// whether any other asset's token is broken.
+    /// channel is instead finalized via the payout-free `conclude`, then each asset of the
+    /// outcome is paid on its own via `transfer(assetIndex, ...)`, so no asset's payout depends
+    /// on whether another asset's token is broken.
     function respond(uint256 index) external {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(index);
@@ -177,13 +179,13 @@ contract WatchtowerScenario is Script {
         vm.broadcast(c.deployerKey);
         c.adjudicator.conclude(fp, signedN1);
 
-        vm.broadcast(c.deployerKey);
-        c.adjudicator.transfer(
-            0,
+        // `conclude` records the outcome fingerprint with a zero state hash.
+        PerAssetPayout.payEachAsset(
+            c.adjudicator,
+            c.deployerKey,
             NitroUtils.getChannelId(fp),
-            abi.encode(stateN1.outcome),
-            bytes32(0),
-            new uint256[](0)
+            stateN1.outcome,
+            bytes32(0)
         );
     }
 
@@ -228,8 +230,9 @@ contract WatchtowerScenario is Script {
         Deposit memory d = _deposit(index);
         INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
         INitroTypes.VariablePart memory stateN = _stateN(c);
-        vm.broadcast(c.deployerKey);
-        c.adjudicator.transferAllAssets(
+        PerAssetPayout.settle(
+            c.adjudicator,
+            c.deployerKey,
             NitroUtils.getChannelId(fp),
             stateN.outcome,
             NitroUtils.hashState(fp, stateN)

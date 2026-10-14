@@ -15,8 +15,11 @@ runs below
      (script/WatchtowerScenario.s.sol's `openAndChallenge(uint256)`, unmodified);
   3. has the watcher answer with the newer, fully-signed, final state N+1
      (script/WatchtowerScenario.s.sol's `respond(uint256)`, unmodified -- this is the function
-     under test: it tries `concludeAndTransferAllAssets` first, and falls back to a per-asset
-     `conclude` + `transfer(assetIndex: 0, ...)` only if that reverts);
+     under test: it tries `concludeAndTransferAllAssets` first, and if that reverts it falls back
+     to `conclude` + one `transfer(assetIndex, ...)` per asset). With `--scenario stale`
+     (scenario B) no answer arrives instead: the check waits out the challenge window and calls
+     `settleStale(uint256)`, which tries `transferAllAssets` and falls back to one
+     `transfer(assetIndex, ...)` per asset;
   4. reads the first asset's paid amount (script/WatchtowerScenario.s.sol's `payoutSince(uint256)`,
      unmodified -- a `PAYOUT_LAMPORTS <value>` line parsed the same way the armada-watchtower-e2e
      job parses it).
@@ -114,9 +117,9 @@ def parse_payout(stdout: str) -> int:
     return int(m.group(1))
 
 
-def run_once(second_asset_reverts: bool, port: int) -> int:
+def run_once(second_asset_reverts: bool, port: int, scenario: str) -> int:
     """Fresh anvil + fresh two-asset channel; returns the first asset's paid amount."""
-    label = "reverting" if second_asset_reverts else "normal"
+    label = f"{scenario}-{'reverting' if second_asset_reverts else 'normal'}"
     rpc_url = f"http://127.0.0.1:{port}"
     scratch = os.path.join(REPO_ROOT, "deployments", f"31337-watchtower-per-asset-check-{label}")
     shutil.rmtree(scratch, ignore_errors=True)
@@ -165,7 +168,16 @@ def run_once(second_asset_reverts: bool, port: int) -> int:
         forge_script(
             "script/WatchtowerScenario.s.sol", "openAndChallenge(uint256)", ["0"], True, rpc_url, env
         )
-        forge_script("script/WatchtowerScenario.s.sol", "respond(uint256)", ["0"], True, rpc_url, env)
+        if scenario == "respond":
+            forge_script("script/WatchtowerScenario.s.sol", "respond(uint256)", ["0"], True, rpc_url, env)
+        else:
+            # Scenario B: no response; wait out the challenge window, then settle state N.
+            run(
+                ["cast", "rpc", "evm_increaseTime", str(int(CHALLENGE_DURATION) + 5), "--rpc-url", rpc_url],
+                env,
+            )
+            run(["cast", "rpc", "evm_mine", "--rpc-url", rpc_url], env)
+            forge_script("script/WatchtowerScenario.s.sol", "settleStale(uint256)", ["0"], True, rpc_url, env)
         payout_p = forge_script(
             "script/WatchtowerScenario.s.sol", "payoutSince(uint256)", ["0"], False, rpc_url, env
         )
@@ -180,9 +192,15 @@ def run_once(second_asset_reverts: bool, port: int) -> int:
         anvil_log.close()
 
 
-def main() -> int:
-    normal_payout = run_once(False, ANVIL_PORT_BASE)
-    reverting_payout = run_once(True, ANVIL_PORT_BASE + 1)
+def main(argv: list[str]) -> int:
+    scenario = "respond"
+    if argv[:1] == ["--scenario"] and len(argv) == 2 and argv[1] in ("respond", "stale"):
+        scenario = argv[1]
+    elif argv:
+        log("usage: check-watchtower-respond-per-asset.py [--scenario respond|stale]")
+        return 2
+    normal_payout = run_once(False, ANVIL_PORT_BASE, scenario)
+    reverting_payout = run_once(True, ANVIL_PORT_BASE + 1, scenario)
 
     # Metamorphic output contract (exophial spec_oracle): the runner json.loads the whole
     # stdout; a non-zero exit fails the check. The conservation relation passes when
@@ -199,4 +217,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
