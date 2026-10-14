@@ -11,12 +11,12 @@
 #   cold (no snapshot):      start a fresh chain, run the BASE reconcile (~24m),
 #         snapshot it, then run the full reconcile.
 #
-# The tmpfs over data/ is owned by laconic-tech-ops infra/kelce (the
-# host_cpu_policy role, applied continuously by ansible-pull), not this script:
-# if it is not mounted this script stops and tells you where to provision it.
-# Because `deploy create` must run before the tmpfs is mounted and refuses an
-# existing dir, the script is resumable -- run it, provision the tmpfs when
-# told, then run it again to continue.
+# The chain lives only in RAM: this script mounts a capped tmpfs over data/
+# (size FIXTURENET_DATA_SIZE, default 3G) after `deploy create` and before
+# `start`. Nothing mounts it at boot, and the chain services do not restart
+# (restart: "no"), so after a host reboot nothing runs and nothing is written to
+# disk; stack/scripts/fixturenet-recover brings the fixturenet back. On disk,
+# data/ is only an empty mountpoint.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
@@ -120,28 +120,25 @@ else
   echo "fixturenet-new: ${DEP} exists -- resuming (skipping init/create)"
 fi
 
-# --- tmpfs must be provided by laconic-tech-ops infra/kelce, not us ----------
-if ! findmnt --mountpoint "${DEP}/data" >/dev/null 2>&1; then
-  cat >&2 <<EOF
-fixturenet-new: ${DEP}/data is not a tmpfs mount.
-The capped RAM disk is owned by laconic-tech-ops infra/kelce (the host_cpu_policy
-role), not this script. Add this deployment's data dir to that role's
-host_cpu_policy_tmpfs_mounts and apply it, then re-run this command:
-
-  # in laconic-tech-ops infra/kelce/inventory/kelce.yml, under
-  # host_cpu_policy_tmpfs_mounts, add:
-  #   - path: ${DEP}/data
-  #     size: 3G
-  cd <laconic-tech-ops>/infra/kelce
-  ansible-playbook site.yml
-
-(ansible-pull reapplies it every 30 min; see that repo's infra/kelce/README.md.
-The tmpfs goes on AFTER 'deploy create' and BEFORE 'start', which is why this
-script stops here.)
-EOF
+# --- the RAM disk over data/ (owned by this script) --------------------------
+# `deploy create` leaves empty per-volume directories under data/ on disk. Remove
+# them, so data/ on disk is a bare mountpoint, then mount the tmpfs. Refuse if
+# data/ on disk holds any file: chain data must never live on disk.
+DATA_SIZE="${FIXTURENET_DATA_SIZE:-3G}"
+data_fs() { stat -f -c %T "${DEP}/data"; }
+if [ "$(data_fs)" != tmpfs ]; then
+  if sudo find "${DEP}/data" -mindepth 1 -not -type d -print -quit | grep -q .; then
+    echo "fixturenet-new: ${DEP}/data on disk holds files -- refusing to mount the RAM disk over them" >&2
+    exit 1
+  fi
+  sudo find "${DEP}/data" -mindepth 1 -depth -type d -empty -delete
+  sudo mount -t tmpfs -o "size=${DATA_SIZE},mode=0700" tmpfs "${DEP}/data"
+fi
+if [ "$(data_fs)" != tmpfs ]; then
+  echo "fixturenet-new: ${DEP}/data is $(data_fs), not a tmpfs, after mounting" >&2
   exit 1
 fi
-echo "fixturenet-new: tmpfs OK: $(findmnt -no SOURCE,SIZE --mountpoint "${DEP}/data")"
+echo "fixturenet-new: RAM disk OK: ${DEP}/data is a tmpfs, $(df -h --output=size "${DEP}/data" | tail -1 | tr -d ' ')"
 
 if [ "$MODE" = warm ]; then
   # ---- WARM: restore the EL-only base snapshot, then only armada_nitro + funding.
@@ -161,8 +158,7 @@ if [ "$MODE" = warm ]; then
   echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
 else
   # ---- COLD: build the base layer, snapshot it, then finish the full run ----
-  # The tmpfs was mounted over data/ after `deploy create`, hiding the volume dirs
-  # create made; recreate them so the bind-mounted volumes can populate.
+  # data/ is a fresh RAM disk: create the volume dirs the bind mounts need.
   for v in armada_env $SNAP_ALL_VOLUMES; do sudo mkdir -p "${DEP}/data/${v}"; done
   "$LACONIC" deployment --dir "$DEP" start
   wait_for_blocks

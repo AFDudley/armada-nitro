@@ -124,9 +124,12 @@ found in sequence as each was ruled out:
    bursts tracked the pool's write operations: every dataset on `kelce-qvos` sits on the same six SATA
    QLC disks (three mirrors, no separate log device), so the chain's fsyncs wait behind every other
    writer on the host. That is a property of this pool's devices and load, not of ZFS. The chain's
-   data now lives in RAM: `~/deployments/armada-fixturenet-e12/data` is a tmpfs (`size=3G`), mounted by
-   the systemd unit `home-rix-deployments-armada\x2dfixturenet\x2de12-data.mount`. The cap is
-   deliberate: a fixturenet left running fills it and dies, and nothing else on the host is affected.
+   data now lives in RAM: `~/deployments/armada-fixturenet-e12/data` is a tmpfs (`size=3G`).
+   `stack/scripts/fixturenet-new` mounts it; nothing mounts it at boot (see `stack/README.md`, "Chain
+   data lives in RAM, capped"). A boot-time systemd mount unit used to provide it. On 2026-10-12 that
+   unit mounted the tmpfs before ZFS mounted `/home/rix`, so ZFS hid it and the chain wrote to
+   `kelce-qvos`. The cap is deliberate: a fixturenet left running fills it and dies, and nothing else
+   on the host is affected.
    (The acceptance runs below ran from an interim directory on the NVMe root,
    `/opt/armada-deployments`, since removed.)
 3. **geth's own HTTP `IdleTimeout`.** Even at 0 reorgs, a real, deterministic, reorg-independent failure

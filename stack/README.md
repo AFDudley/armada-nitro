@@ -75,24 +75,21 @@ Notes:
   fail with `EPIPE`. `armada-fixturenet-geth`'s command generates a `--config` file overriding
   only `[Node.HTTPTimeouts] IdleTimeout` (1 hour), leaving every other timeout/flag at its
   default.
-- **Chain data lives in RAM, capped.** A size-capped tmpfs goes over the
-  deployment's `data/` directory (the laconic-tech-ops `infra/kelce`
-  host_cpu_policy role installs a systemd mount unit with `Options=size=3G` on
-  `~/deployments/<name>/data`; it is provisioned before `... start`). Two reasons: on
-  kelce every disk-backed path shares devices with other heavy writers, and the chain's fsyncs waiting
-  behind them caused reorgs and late blocks (measurements in `docs/tasks/E12-lido-full-scratch.md`'s
-  "As built"); and the cap makes a forgotten fixturenet fill its RAM disk and die instead of growing on
-  a shared filesystem. A reboot or an unmount loses the chain's state (accepted 2026-09-27). The
-  fixturenet itself comes back by the warm-snapshot design: after a reboot the mount unit mounts the
-  tmpfs again, empty, and a boot-time oneshot unit runs `stack/scripts/fixturenet-recover <name>`.
-  That script stops the dead deployment (docker restarted its containers against the empty directory,
-  and they exited) and runs `fixturenet-new`, which restores the base snapshot for the current inputs
-  from `~/deployments/.snapshots` (warm path) and deploys `armada_nitro` and `funding` again. When no
-  snapshot matches the current inputs, it builds and snapshots the base layer instead (cold path,
-  about 25 min). Chain state after the base snapshot is lost either way. The script and the unit both
-  run only while `data/armada_fixturenet_genesis/metadata/genesis.json` is absent, so neither touches
-  a live chain. The laconic-tech-ops `infra/roles/host_cpu_policy` role installs the unit from the
-  tmpfs item's `restore` field. To recover by hand, run the same script.
+- **Chain data lives in RAM, capped.** `stack/scripts/fixturenet-new` mounts a size-capped tmpfs
+  (`FIXTURENET_DATA_SIZE`, default `3G`, mode `0700`) over the deployment's `data/` directory after
+  `deploy create` and before `start`. On disk, `data/` is only an empty mountpoint: the script removes
+  the empty volume directories that `deploy create` leaves there, and refuses to mount if `data/` on
+  disk holds any file. Two reasons for RAM: on kelce every disk-backed path shares devices with other
+  heavy writers, and the chain's fsyncs waiting behind them caused reorgs and late blocks
+  (measurements in `docs/tasks/E12-lido-full-scratch.md`'s "As built"); and the cap makes a forgotten
+  fixturenet fill its RAM disk and die instead of growing on a shared filesystem.
+  Nothing mounts the RAM disk at boot, and every chain service has `restart: "no"`. A host reboot
+  therefore loses the chain (accepted 2026-09-27), starts nothing, and writes nothing to disk.
+  `stack/scripts/fixturenet-recover <name>` brings the fixturenet back: it stops the deployment and
+  runs `fixturenet-new`, which mounts the RAM disk and restores the base snapshot for the current
+  inputs from `~/deployments/.snapshots` (warm path), then deploys `armada_nitro` and `funding`.
+  When no snapshot matches the current inputs, it builds and snapshots the base layer instead (cold
+  path, about 25 min). Chain state after the base snapshot is lost either way.
   geth runs with `--datadir.minfreedisk=64` (MB): its default floor (~2 GB free) would shut it down
   with a third of a 3 GB disk used. With the flag it uses the disk until 64 MB remain, then shuts down
   cleanly.
@@ -267,12 +264,9 @@ every other `armada-fixturenet-base-*` snapshot and key file.
 ```sh
 # Bring up ~/deployments/<name>, restoring the cached base if the key matches,
 # else building + snapshotting it first. Prints the warm/cold decision and
-# per-phase timings. The tmpfs over data/ must already be provided by the
-# laconic-tech-ops infra/kelce host_cpu_policy role (see that repo's
-# infra/kelce/README.md); the script refuses to mount it
-# itself and stops with instructions if it is missing. Because `deploy create`
-# runs before the tmpfs mount and refuses an existing dir, the script is
-# resumable: run it, mount the tmpfs when told, run it again.
+# per-phase timings. Mounts the capped RAM disk over data/ itself (see "Chain
+# data lives in RAM, capped"); refuses if data/ on disk holds any file. On an
+# existing deployment dir it skips init/create and resumes.
 stack/scripts/fixturenet-new <name>
 
 # Snapshot a deployment that reconciled ONLY the base target (its manifest must
@@ -283,10 +277,10 @@ stack/scripts/fixturenet-new <name>
 # calls this for you.
 stack/scripts/fixturenet-base-snapshot <deployment-dir>
 
-# Bring ~/deployments/<name> back after a reboot emptied its tmpfs data/. Refuses
-# while data/armada_fixturenet_genesis/metadata/genesis.json exists (a live chain).
-# Stops the dead deployment, then runs fixturenet-new (warm path when the cached
-# base matches). The boot-time unit from the host_cpu_policy role runs this.
+# Bring ~/deployments/<name> back after its chain is gone (e.g. a host reboot).
+# Refuses while data/ is a RAM disk that holds the chain's EL genesis (a live
+# chain). Stops the deployment, then runs fixturenet-new (warm path when the
+# cached base matches).
 stack/scripts/fixturenet-recover <name>
 ```
 

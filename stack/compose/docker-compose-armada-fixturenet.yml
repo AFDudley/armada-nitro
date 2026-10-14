@@ -47,7 +47,11 @@ services:
     depends_on:
       armada-fixturenet-genesis:
         condition: service_completed_successfully
-    restart: unless-stopped
+    # restart "no" on every chain service: the chain lives only in its RAM-backed
+    # data/ (stack/README.md). After a host reboot no container may start against the
+    # bare on-disk mountpoint; stack/scripts/fixturenet-recover brings the chain back.
+    # A geth that fills its capped RAM disk dies and stays down.
+    restart: "no"
     cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
     cpuset: "${GETH_CPUSET:-10,26}"
     volumes:
@@ -92,7 +96,7 @@ services:
         condition: service_completed_successfully
       armada-fixturenet-geth:
         condition: service_healthy
-    restart: unless-stopped
+    restart: "no"
     cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
     cpuset: "${BEACON_CPUSET:-11,27}"
     volumes:
@@ -113,7 +117,7 @@ services:
         condition: service_completed_successfully
       armada-fixturenet-geth:
         condition: service_healthy
-    restart: unless-stopped
+    restart: "no"
     cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
     cpuset: "${VALIDATOR_0_CPUSET:-12}"
     volumes:
@@ -137,7 +141,7 @@ services:
         condition: service_completed_successfully
       armada-fixturenet-geth:
         condition: service_healthy
-    restart: unless-stopped
+    restart: "no"
     cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
     cpuset: "${VALIDATOR_1_CPUSET:-13}"
     volumes:
@@ -161,7 +165,7 @@ services:
         condition: service_completed_successfully
       armada-fixturenet-geth:
         condition: service_healthy
-    restart: unless-stopped
+    restart: "no"
     cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
     cpuset: "${VALIDATOR_2_CPUSET:-14}"
     volumes:
@@ -185,7 +189,7 @@ services:
         condition: service_completed_successfully
       armada-fixturenet-geth:
         condition: service_healthy
-    restart: unless-stopped
+    restart: "no"
     cgroup_parent: ${FIXTURENET_SLICE:-fixturenet.slice}
     cpuset: "${VALIDATOR_3_CPUSET:-15}"
     volumes:
