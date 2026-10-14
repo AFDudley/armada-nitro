@@ -458,7 +458,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
             (bool success, ) = destination.call{value: amount}(''); //solhint-disable-line avoid-low-level-calls
             require(success, 'Could not transfer ETH');
         } else {
-            IERC20(asset).transfer(destination, amount);
+            IERC20(asset).safeTransfer(destination, amount);
         }
     }
 
