@@ -1,0 +1,66 @@
+status: completed
+pebble_id: arn-5a6
+summary: >
+  WatchtowerScenario.s.sol's respond() fell back to adjudicator.conclude plus a single
+  adjudicator.transfer(assetIndex: 0, ...) whenever concludeAndTransferAllAssets would revert,
+  so any asset at index 1+ stayed unpaid even when its own token's transfer would have
+  succeeded. Changed respond()'s fallback to loop over every asset index in the outcome:
+  for each index it probes the transfer on a disposable vm.snapshotState()/vm.revertToState()
+  pair (so a still-broken asset's transfer is skipped rather than reverting the whole
+  response or blocking later indices), and after each successful broadcast it zeroes that
+  asset's allocations in a local mutable copy of the outcome and re-encodes outcomeBytes for
+  the next iteration -- mirroring the on-chain mutation MultiAssetHolder's
+  _apply_transfer_effects performs (zeroing the paid asset's allocations and updating the
+  stored fingerprint), which the original single-transfer code never had to account for.
+  Extended Ctx/_ctx/_withSecondAsset to carry an optional third asset (THIRD_ASSET/
+  THIRD_ASSET_AMOUNT) alongside the existing second asset. Added
+  script/WatchtowerFallbackSetup.s.sol, a three-asset local-anvil fixture (real USDC paid to
+  the user, a ToggleableERC20 middle asset whose transfers can be switched to always-revert,
+  a second working ToggleableERC20 third asset paid to the hub), and
+  scripts/check-watchtower-respond-fallback-all-assets.py (the spec's declared new
+  entrypoint), which drives setup(true) -> openAndChallenge -> respond against a fresh local
+  anvil node and reads the adjudicator's AllocationUpdated events (initialHoldings -
+  finalHoldings per asset) to report {"first_asset_payout": <int>, "third_asset_payout":
+  <int>}. Verified by running the new script directly (not just via the gate) multiple times:
+  it consistently exits 0 printing {"first_asset_payout": 2500000, "third_asset_payout":
+  400000} -- both satisfying the spec's gt-0 assertions -- confirming the first and third
+  assets are paid out even though the middle asset's token refuses its transfer. Debugged and
+  fixed along the way: a missing env["SECOND_ASSET"]/env["THIRD_ASSET"] propagation bug in the
+  check script (meant _withSecondAsset saw address(0) and built a single-asset outcome), a
+  vm.startBroadcast/vm.broadcast scoping bug in WatchtowerFallbackSetup's _fundSecondAsset
+  (only mint ran as deployer; approve/deposit ran as the script contract itself), and forge
+  script's --target-contract requirement in this environment. Regression-checked the existing
+  scripts/check-watchtower-respond-per-asset.py (still exits 0, {"flows": [2000000, -2000000,
+  0]}) and scripts/check-watchtower-settle-stale-per-asset.py compare (settleStale's own
+  single-asset fallback is arn-16a's scope, untouched here; still exits 0, {"flows": [1000000,
+  -1000000, 0]}). Ran the full forge test suite: 40/40 tests pass. forge build is clean, and
+  pre-commit (ruff, ruff-format, mypy, tdd-trailer, etc.) passes on the commit.
+cost: "~210k tokens"
+commits:
+  - "23ce8d7"
+verify_transcript:
+  hooks:
+    - name: python3 scripts/check-watchtower-respond-fallback-all-assets.py
+      outcome: passed
+      duration_s: 13
+    - name: python3 scripts/check-watchtower-respond-per-asset.py (regression)
+      outcome: passed
+      duration_s: 36
+    - name: python3 scripts/check-watchtower-settle-stale-per-asset.py compare (regression)
+      outcome: passed
+      duration_s: 23
+    - name: forge build
+      outcome: passed
+      duration_s: 12
+    - name: forge test
+      outcome: passed
+      duration_s: 1
+    - name: pre-commit (on commit)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-5a6.spec.json
+  command: "python3 scripts/check-watchtower-respond-fallback-all-assets.py"
+  result: passed
+  ran_at_sha: "23ce8d7"
+  mocks_in_path: false
