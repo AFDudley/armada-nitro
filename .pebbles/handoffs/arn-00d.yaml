@@ -1,0 +1,35 @@
+status: completed
+pebble_id: arn-00d
+summary: >
+  Rewrote test/ReentryDeposit.t.sol so the hooked token's transferFrom now deposits a
+  second, approved, allow-listed token into the same channel (instead of the hooked token
+  itself), and the test asserts the per-channel holdingsLock guard's exact revert reason
+  ('Re-entered while in progress') and that the nested deposit credited nothing. The test now
+  passes with the guard present (forge test: 1 passed) and fails on 32ad5e5^ (the commit
+  before holdingsLock was added) with 'nested deposit did not revert', making it a true
+  detector of the guard. Added the two engine-derived acceptance scripts:
+  scripts/check_guard_conserves_channel_value.py (c1: both channels end with AMOUNT = 100e6,
+  conservation) and scripts/check_test_fails_without_guard.py (c2: the test passes with the
+  guard and fails on a throwaway checkout of 32ad5e5^, monotonicity). Verified: c1 exits 0
+  (both holdings = 100000000, net flow 0); c2 exits 0 (pass_with_guard=true,
+  fail_without_guard=true).
+cost: "~40k tokens"
+commits:
+  - "8fd8770d37f728229b5265f65e4b77cc25110d0"
+verify_transcript:
+  hooks:
+    - name: "forge test (test/ReentryDeposit.t.sol)"
+      outcome: passed
+      duration_s: 5
+    - name: "python3 scripts/check_guard_conserves_channel_value.py"
+      outcome: passed
+      duration_s: 5
+    - name: "python3 scripts/check_test_fails_without_guard.py"
+      outcome: passed
+      duration_s: 35
+e2e_gate:
+  spec: contracts/specs/derived-arn-00d.spec.json
+  command: "python3 scripts/check_guard_conserves_channel_value.py && python3 scripts/check_test_fails_without_guard.py"
+  result: passed
+  ran_at_sha: "8fd8770d37f728229b5265f65e4b77cc25110d0"
+  mocks_in_path: false
