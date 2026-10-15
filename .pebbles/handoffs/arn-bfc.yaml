@@ -1,0 +1,37 @@
+status: completed
+pebble_id: arn-bfc
+summary: >
+  Added forge test coverage (test/PerAssetExitS4.t.sol) proving the E16 S4 per-asset-exit
+  invariant (I5) named in docs/tasks/E16-adjudicator-hardening.md:38-39: in a two-asset
+  channel (USDC + RevertingTransferToken) whose second token always reverts on transfer, the
+  single-asset exit transfer(assetIndex) still pays out the other (good) asset, and
+  transferAllAssets reverts as a whole (no partial payout). The test deploys the existing
+  RevertingTransferToken helper (previously used only by script/CheckSettlePerAssetSetup.s.sol,
+  never by a .t.sol), funds a two-asset channel (USDC via the user's note + the hub's
+  custodian, and the reverting token via a direct deposit since only transfer reverts while
+  transferFrom works), finalizes it through the challenge window, then proves both clauses.
+  Also added the two spec entrypoint scripts (scripts/verify-s4-other-asset-paid.sh for c1 and
+  scripts/verify-s4-transfer-all-reverts.sh for c2) that drive the S4 forge tests and print the
+  spec's required JSON fields (other_asset_paid / transfer_all_reverted) while exiting 0.
+  Verified: ran the full forge suite (40 tests, 9 suites, all passing), and ran both spec
+  verify scripts directly: each prints its required JSON field as true and exits 0.
+cost: "~40k tokens"
+commits:
+  - "185c2f1"
+verify_transcript:
+  hooks:
+    - name: forge test (full suite)
+      outcome: passed
+      duration_s: 1
+    - name: scripts/verify-s4-other-asset-paid.sh
+      outcome: passed
+      duration_s: 5
+    - name: scripts/verify-s4-transfer-all-reverts.sh
+      outcome: passed
+      duration_s: 5
+e2e_gate:
+  spec: contracts/specs/derived-arn-bfc.spec.json
+  command: "bash scripts/verify-s4-other-asset-paid.sh && bash scripts/verify-s4-transfer-all-reverts.sh"
+  result: passed
+  ran_at_sha: "185c2f1"
+  mocks_in_path: false
