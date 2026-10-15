@@ -1,0 +1,39 @@
+{
+  "id": "derived-arn-7f8",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. contracts/specs/derived-arn-5db.spec.json clause c2: running forge test executes a check for the S6 rule and fails the suite when a forbidden name is present in the adjudicator source, so the forge suite is itself the enforcement, not an unexercised side script. docs/ORACLES.md section 9: an oracle must not report a verdict it did not compute.\nWhat holds now? Describe the current, observed state. On integrated df56543, clause c2 of derived-arn-5db runs python3 scripts/check-settlement-rate-free-gate.py. The script contains no subprocess or os.system call. On a scan without findings it prints the literal {\"series\": [[0, 0], [1, 1]]} (scripts/check-settlement-rate-free-gate.py:117) and exits 0. On 2026-10-15, in a worktree at integrated, the script printed {\"series\": [[0, 0], [1, 1]]} with exit 0, and after git rm test/SettlementRateFree.t.sol it printed the same output with exit 0. arn-5db closed on 2026-10-15 with this clause graded as passed.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. git worktree add <dir> integrated. 2. In <dir> run python3 scripts/check-settlement-rate-free-gate.py and record stdout and exit code. 3. git rm test/SettlementRateFree.t.sol, run the script again, and compare: the output and exit code are the same. 4. Read scripts/check-settlement-rate-free-gate.py:89-123.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) scripts/check-settlement-rate-free-gate.py (oracle of derived-arn-5db clause c2)",
+  "restatement": "The acceptance oracle that exophial runs to grade clause c2 of derived-arn-5db must compute its pass or fail verdict from forge test's real execution of the enforcing Solidity test, not from an independent Python re-implementation of the same source scan. Today scripts/check-settlement-rate-free-gate.py scans src/ArmadaNitroAdjudicator.sol and every .sol file under src/nitro/ for the forbidden names ERC4626, IERC4626, convertToAssets, convertToShares, and preview entirely in Python, with no subprocess or os.system call to forge anywhere in the script. Because of this, deleting test/SettlementRateFree.t.sol, the forge test that clause c2 requires as the real enforcement, does not change the script's output: it still prints {\"series\": [[0, 0], [1, 1]]} and exits 0, exactly as it does when that test file is present. The oracle therefore reports that forge test enforces the rule, a fact it never computed, which violates docs/ORACLES.md section 9: an oracle must not report a verdict it did not compute. The fix must make the check's result track forge test's real outcome for the SettlementRateFreeTest contract, so deleting test/SettlementRateFree.t.sol causes the check to report failure instead of the false pass it reports today.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "scripts/check-settlement-rate-free-gate.py must compute its pass or fail result from forge test's real execution of the SettlementRateFreeTest contract in test/SettlementRateFree.t.sol, so that deleting test/SettlementRateFree.t.sol causes the check to report failure instead of the {\"series\": [[0, 0], [1, 1]]} pass it reports today."
+    }
+  ],
+  "goal": "Make the clause-c2 gate depend on forge test actually running the enforcing test, so deleting the enforcing test file is caught as a failure instead of a silent pass.",
+  "acceptance_criteria": [
+    "Run the check twice against two throwaway copies of the repository: one with the forge test file test/SettlementRateFree.t.sol in place, and one with that file deleted. The first run reports a passing result, same as today. The second run, with the enforcing test gone, now reports a failing result instead of the same passing result it reports today."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Run the check twice against two throwaway copies of the repository: one with the forge test file test/SettlementRateFree.t.sol in place, and one with that file deleted. The first run reports a passing result, same as today. The second run, with the enforcing test gone, now reports a failing result instead of the same passing result it reports today."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Run the check twice against two throwaway copies of the repository: one with the forge test file test/SettlementRateFree.t.sol in place, and one with that file deleted. The first run reports a passing result, same as today. The second run, with the enforcing test gone, now reports a failing result instead of the same passing result it reports today.",
+      "proves": "Clause c1: the check's verdict changes when the real forge-test enforcement is removed, proving the check is actually driven by forge test's own execution and not by an independent copy of the logic that never calls forge.",
+      "restatement_clause_id": "c1",
+      "type": "metamorphic",
+      "relation_class": "monotonicity",
+      "run": [
+        "python3",
+        "scripts/check-settlement-rate-free-gate.py"
+      ],
+      "clause_id": "c1"
+    }
+  ],
+  "criticality": "critical",
+  "declared_new_entrypoints": [
+    "scripts/check-settlement-rate-free-gate.py"
+  ]
+}
