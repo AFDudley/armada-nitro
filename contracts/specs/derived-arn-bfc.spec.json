@@ -1,0 +1,96 @@
+{
+  "id": "derived-arn-bfc",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:33-39: forge test output for four tests, each failing on the commit before E16 and passing after. The S4 test (lines 38-39): in a two-asset channel with one asset's token made to revert on transfer, transfer(assetIndex) still pays the other asset, and transferAllAssets reverts as a whole.\nWhat holds now? Describe the current, observed state. On integrated d51ae19, forge test runs 38 tests in 8 suites. git grep over test/*.t.sol finds no reference to RevertingTransferToken or ToggleableERC20. The .t.sol calls of transferAllAssets (test/ArmadaNitroAdjudicator.t.sol:168, 198, 227; test/ReentryGuard.t.sol:163) use no such token. test/helpers/RevertingTransferToken.sol exists, and script/CheckSettlePerAssetSetup.s.sol is its only user.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. In armada-nitro at d51ae19 run git grep -lE 'RevertingTransferToken|ToggleableERC20' -- 'test/*.t.sol': no output. 2. Run git grep -n transferAllAssets -- 'test/*.t.sol' and read each call's token setup. 3. Run forge test and list the suites.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro forge suite (test/)",
+  "restatement": "The armada-nitro forge test suite must gain a test that proves the S4 per-asset-exit invariant named in docs/tasks/E16-adjudicator-hardening.md:38-39 (invariant I5): in a two-asset channel where one asset's token is made to revert on transfer, calling transfer(assetIndex) still pays out the other (non-reverting) asset, and calling transferAllAssets reverts as a whole instead of partially succeeding. This proof does not exist today: on commit d51ae19, forge test runs 38 tests across 8 suites, a grep of test/*.t.sol for RevertingTransferToken or ToggleableERC20 finds no match, and the existing transferAllAssets call sites (test/ArmadaNitroAdjudicator.t.sol:168,198,227; test/ReentryGuard.t.sol:163) set up tokens that never revert on transfer. The helper contract test/helpers/RevertingTransferToken.sol already exists but is used only by script/CheckSettlePerAssetSetup.s.sol, never by a .t.sol test. The doc states no contract change is expected for S4 (the behavior already exists); the gap is purely missing test coverage.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "In a two-asset channel with one asset's token made to revert on transfer, transfer(assetIndex) still pays the other asset."
+    },
+    {
+      "id": "c2",
+      "text": "In that same two-asset channel scenario, transferAllAssets reverts as a whole."
+    }
+  ],
+  "goal": "Add forge test coverage proving that, in a two-asset channel with one asset's token forced to revert on transfer, transfer(assetIndex) still pays the other asset and transferAllAssets reverts as a whole.",
+  "acceptance_criteria": [
+    "Set up a channel holding two different assets, force the token for one of them to revert on every transfer, then exit only the other asset through the single-asset exit path. Check that the other asset is still paid out correctly.",
+    "Using the same two-asset channel, with one asset's token forced to revert on every transfer, call the all-assets exit for the whole channel. Check that the call reverts as a whole, with no partial payout."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Set up a channel holding two different assets, force the token for one of them to revert on every transfer, then exit only the other asset through the single-asset exit path. Check that the other asset is still paid out correctly."
+    },
+    {
+      "id": "c2",
+      "text": "Using the same two-asset channel, with one asset's token forced to revert on every transfer, call the all-assets exit for the whole channel. Check that the call reverts as a whole, with no partial payout."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Set up a channel holding two different assets, force the token for one of them to revert on every transfer, then exit only the other asset through the single-asset exit path. Check that the other asset is still paid out correctly.",
+      "proves": "Proves restatement clause c1: transfer(assetIndex) still pays the other asset when the paired asset's token reverts on transfer.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/verify-s4-other-asset-paid.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "other_asset_paid",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Using the same two-asset channel, with one asset's token forced to revert on every transfer, call the all-assets exit for the whole channel. Check that the call reverts as a whole, with no partial payout.",
+      "proves": "Proves restatement clause c2: transferAllAssets reverts as a whole when one asset's token reverts on transfer.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/verify-s4-transfer-all-reverts.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "transfer_all_reverted",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/verify-s4-other-asset-paid.sh",
+    "scripts/verify-s4-transfer-all-reverts.sh"
+  ]
+}
