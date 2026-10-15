@@ -1,0 +1,67 @@
+status: completed
+pebble_id: arn-5db
+summary: >
+  Made `forge test` itself enforce E16 S6 (the adjudicator imports no ERC-4626 interface
+  and calls no exchange rate) instead of relying on the standalone check-settlement-rate-free.py
+  that forge never runs. Added test/SettlementRateFree.t.sol (SettlementRateFreeTest): three
+  tests - (1) the adjudicator's compiled-metadata sources list no path containing "4626", (2)
+  the deployed adjudicator bytecode holds no PUSH4 of the six ERC-4626 rate selectors, and
+  (3) the same bytecode scan positively finds a convertToAssets call in a helper contract.
+  Added scripts/check-settlement-rate-free-gate.py, the c2 metamorphic gate: it runs the S6 test
+  in a scratch copy of the repo. The before-state (real adjudicator source) passes 3/3; the
+  after-state (injected IERC4626 import + convertToAssets call) makes the forge suite fail
+  (1 passed, 2 failed). Ran the gate directly: before rc=0 (pass), after rc=1 (fail) -
+  monotonicity holds. c1 also verified: git grep over test/ and src/ArmadaNitroAdjudicator.sol
+  + src/nitro/ finds no ERC4626/IERC4626/convertToAssets/convertToShares/preview. Full forge
+  suite: 31/33 pass (2 pre-existing failures in other reports, untouched here). Pre-commit
+  (ruff, ruff-format, mypy, tdd-trailer, etc.) passes on the commit.
+cost: "~60k tokens"
+commits:
+  - "1a9b56b"
+verify_transcript:
+  hooks:
+    - name: python3 scripts/check-settlement-rate-free-gate.py
+      outcome: passed
+      duration_s: 11
+    - name: forge test (SettlementRateFreeTest, S6)
+      outcome: passed
+      duration_s: 1
+    - name: forge test (full suite)
+      outcome: passed
+      duration_s: 8
+    - name: pre-commit (on commit)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-5db.spec.json
+  command: "python3 scripts/check-settlement-rate-free-gate.py"
+  result: passed
+  ran_at_sha: "1a9b56b"
+  mocks_in_path: false
+discrimination:
+  - mechanism: mutation_kill
+    oracle: "forge test (SettlementRateFreeTest)"
+    target: "src/ArmadaNitroAdjudicator.sol"
+    perturbation: "injected IERC4626 import + convertToAssets call into a scratch copy of the adjudicator"
+    assertions_fired:
+      - assertion: "adjudicator bytecode holds no PUSH4 of the six ERC-4626 rate selectors (test_adjudicatorBytecode_hasNoRateSelector)"
+        moved: ["absent: pass", "present: fail"]
+      - assertion: "adjudicator import closure lists no '4626' source (test_adjudicatorImportClosure_hasNoERC4626Source)"
+        moved: ["absent: pass", "present: fail"]
+    took:
+      applied:
+        observable: "re-read scratch adjudicator after writing the injected helper"
+        moved: ["no IERC4626 import", "IERC4626 import + convertToAssets present"]
+      observed:
+        observable: "forge test outcome (S6 suite)"
+        moved: ["pass (3/3)", "fail (1 passed, 2 failed)"]
+    pinned_at: "scripts/check-settlement-rate-free-gate.py"
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: true
+    negative_control:
+      variant: "no mutation (real adjudicator source)"
+      applied: "re-read scratch adjudicator; IERC4626 import absent (unmoved)"
+      observable: "S6 test assertion holds on the real source"
+      unmoved: "pass (3/3)"
+      exit_code: 0
