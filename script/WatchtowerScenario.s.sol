@@ -228,11 +228,38 @@ contract WatchtowerScenario is Script {
         Deposit memory d = _deposit(index);
         INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
         INitroTypes.VariablePart memory stateN = _stateN(c);
+        bytes32 channelId = NitroUtils.getChannelId(fp);
+        bytes32 stateHash = NitroUtils.hashState(fp, stateN);
+
+        // E16 S4: probe `transferAllAssets` on a disposable snapshot (reverted immediately
+        // after) so a transaction known to fail is never broadcast. A reverting low-level
+        // `.call()` made under an active `vm.broadcast()` prank still gets queued by forge
+        // script and fails the later broadcast replay. The real (broadcast) attempt runs only
+        // once we already know it won't revert.
+        uint256 snapshotId = vm.snapshotState();
+        (bool allAssetsOk, ) = address(c.adjudicator).call(
+            abi.encodeCall(c.adjudicator.transferAllAssets, (channelId, stateN.outcome, stateHash))
+        );
+        vm.revertToState(snapshotId);
+
+        if (allAssetsOk) {
+            vm.broadcast(c.deployerKey);
+            c.adjudicator.transferAllAssets(channelId, stateN.outcome, stateHash);
+            return;
+        }
+
+        // Per-asset fallback (E16 S4 / design 15 I5): when `transferAllAssets` would revert,
+        // pay only the outcome's first asset (index 0) via `transfer`, so one broken asset can
+        // no longer block payout of a working one. The channel is already Finalized (the stale
+        // challenge settled when the window elapsed), so no prior `conclude` is needed here --
+        // unlike `respond`, which must `conclude` first in scenario A.
         vm.broadcast(c.deployerKey);
-        c.adjudicator.transferAllAssets(
-            NitroUtils.getChannelId(fp),
-            stateN.outcome,
-            NitroUtils.hashState(fp, stateN)
+        c.adjudicator.transfer(
+            0,
+            channelId,
+            abi.encode(stateN.outcome),
+            stateHash,
+            new uint256[](0)
         );
     }
 
