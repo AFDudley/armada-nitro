@@ -26,7 +26,7 @@ import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADJUDICATOR = os.path.join(REPO_ROOT, "src", "ArmadaNitroAdjudicator.sol")
-SCRATCH = os.path.join(REPO_ROOT, "test", "fixtures", "scratch-adjudicator-4626-violation.sol")
+SCRATCH = os.path.join(REPO_ROOT, "src", "scratch-adjudicator-4626-violation.sol")
 
 FORBIDDEN_NAMES = [
     "ERC4626",
