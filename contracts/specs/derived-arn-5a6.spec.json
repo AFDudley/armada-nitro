@@ -1,0 +1,89 @@
+{
+  "id": "derived-arn-5a6",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:10-13 and 23-25: each asset of a finalized channel exits even when another asset's payout reverts, and the watchtower falls back to per-asset transfer(assetIndex, ...) when transferAllAssets reverts.\nWhat holds now? Describe the current, observed state. On integrated d51ae19, script/WatchtowerScenario.s.sol:171-187: when concludeAndTransferAllAssets would revert, respond() calls conclude and then adjudicator.transfer with assetIndex 0. No call in respond() pays any other asset index. This is read from the source; no run with a reverting first asset was made.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Read script/WatchtowerScenario.s.sol:153-188 at d51ae19.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) script/WatchtowerScenario.s.sol respond()",
+  "restatement": "The watchtower script must pay out every asset of a finalized channel, even when a different asset's payout transfer reverts. Today, WatchtowerScenario.s.sol's respond() function falls back to conclude plus one transfer call, with assetIndex fixed at 0, whenever concludeAndTransferAllAssets would revert. No call in respond() pays any asset index other than 0. So an asset at index 1 or higher, whose own transfer would succeed, stays unpaid whenever the fallback path runs. The fix must make respond() call adjudicator.transfer(assetIndex, ...) for every asset index in the channel's outcome, not only index 0.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Each asset of a finalized channel exits, even when a different asset's payout reverts."
+    },
+    {
+      "id": "c2",
+      "text": "When concludeAndTransferAllAssets would revert, respond() calls adjudicator.transfer(assetIndex, ...) for every asset index in the channel's outcome, not only assetIndex 0."
+    }
+  ],
+  "goal": "Fix WatchtowerScenario.s.sol's respond() so its per-asset fallback pays every asset index in the channel's outcome, not only index 0, when concludeAndTransferAllAssets reverts.",
+  "acceptance_criteria": [
+    "Set up a three-asset channel, challenge it, and have the watchtower answer in a way that forces the one-asset-at-a-time fallback. The middle asset's token refuses the transfer. The third asset still gets paid out.",
+    "In that same fallback run, both the first asset and the third asset get paid out, showing the watchtower's answer pays every asset index in turn, not only the first one."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Set up a three-asset channel, challenge it, and have the watchtower answer in a way that forces the one-asset-at-a-time fallback. The middle asset's token refuses the transfer. The third asset still gets paid out."
+    },
+    {
+      "id": "c2",
+      "text": "In that same fallback run, both the first asset and the third asset get paid out, showing the watchtower's answer pays every asset index in turn, not only the first one."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Set up a three-asset channel, challenge it, and have the watchtower answer in a way that forces the one-asset-at-a-time fallback. The middle asset's token refuses the transfer. The third asset still gets paid out.",
+      "proves": "An asset other than the first still exits a finalized channel when a different asset's payout reverts.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-watchtower-respond-fallback-all-assets.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "third_asset_payout",
+          "op": "gt",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "In that same fallback run, both the first asset and the third asset get paid out, showing the watchtower's answer pays every asset index in turn, not only the first one.",
+      "proves": "respond() calls transfer for every asset index in the outcome, not only assetIndex 0.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-watchtower-respond-fallback-all-assets.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "first_asset_payout",
+          "op": "gt",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "third_asset_payout",
+          "op": "gt",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-watchtower-respond-fallback-all-assets.py"
+  ]
+}
