@@ -1,0 +1,79 @@
+{
+  "id": "derived-arn-5db",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:27-28: the adjudicator imports no ERC-4626 interface and calls no exchange rate, and the forge tests check this as a source-level assertion.\nWhat holds now? Describe the current, observed state. On integrated d51ae19, git grep over test/*.t.sol finds no ERC4626, IERC4626, convertToAssets, convertToShares or preview. scripts/check-settlement-rate-free.py scans src/ArmadaNitroAdjudicator.sol and src/nitro/ for these names; forge test does not run that script.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. In armada-nitro at d51ae19 run git grep -nE 'ERC4626|convertTo|preview' -- 'test/*.t.sol': no output. 2. Run forge test and list the suites.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro forge suite (test/)",
+  "restatement": "The armada-nitro forge test suite must itself enforce, by running real code, the rule that the adjudicator stays free of ERC-4626 exchange-rate machinery. Today that rule is checked only by the standalone script scripts/check-settlement-rate-free.py, which scans src/ArmadaNitroAdjudicator.sol and src/nitro/ for ERC4626, IERC4626, convertToAssets, convertToShares, and preview. forge test does not call that script, so a `forge test` run gives no signal on this rule at all; a future change could reintroduce one of those names into the adjudicator or the Nitro framework source and the forge suite would still pass. The fix must add a forge test that performs this same source check and fails the suite when a forbidden name is present, so that `forge test` alone is sufficient to catch a violation. The rule itself \u2014 that the adjudicator and Nitro source presently contain none of these names \u2014 already holds at commit d51ae19 and must keep holding.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "src/ArmadaNitroAdjudicator.sol and every .sol file under src/nitro/ contain none of ERC4626, IERC4626, convertToAssets, convertToShares, or preview."
+    },
+    {
+      "id": "c2",
+      "text": "Running `forge test` executes a check for this rule and fails the suite when a forbidden name is present in that source, so the forge suite is itself the enforcement, not an unexercised side script."
+    }
+  ],
+  "goal": "Make `forge test` itself fail if the adjudicator ever imports ERC-4626 or calls an exchange-rate function, instead of relying on a script forge test never runs.",
+  "acceptance_criteria": [
+    "The adjudicator contract file and every file in the Nitro framework source contain no mention of ERC4626, IERC4626, convertToAssets, convertToShares, or preview.",
+    "Running `forge test` passes against the real adjudicator source, but as soon as a forbidden name like convertToAssets is added to a scratch copy of that source and the suite is pointed at it, `forge test` fails. This shows the forge suite is the thing actually catching the violation, not a script it never calls."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The adjudicator contract file and every file in the Nitro framework source contain no mention of ERC4626, IERC4626, convertToAssets, convertToShares, or preview."
+    },
+    {
+      "id": "c2",
+      "text": "Running `forge test` passes against the real adjudicator source, but as soon as a forbidden name like convertToAssets is added to a scratch copy of that source and the suite is pointed at it, `forge test` fails. This shows the forge suite is the thing actually catching the violation, not a script it never calls."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep_absent",
+      "description": "The adjudicator contract file and every file in the Nitro framework source contain no mention of ERC4626, IERC4626, convertToAssets, convertToShares, or preview.",
+      "proves": "Clause c1: the adjudicator and Nitro source are presently free of ERC-4626 exchange-rate references.",
+      "restatement_clause_id": "c1",
+      "pattern": "ERC4626",
+      "additional_patterns": [
+        "IERC4626",
+        "convertToAssets",
+        "convertToShares",
+        "preview"
+      ],
+      "files": [
+        "src/ArmadaNitroAdjudicator.sol",
+        "src/nitro/ForceMove.sol",
+        "src/nitro/StatusManager.sol",
+        "src/nitro/ConsensusApp.sol",
+        "src/nitro/NitroAdjudicator.sol",
+        "src/nitro/MultiAssetHolder.sol",
+        "src/nitro/libraries/NitroUtils.sol",
+        "src/nitro/examples/HashLockedSwap.sol",
+        "src/nitro/interfaces/INitroAdjudicator.sol",
+        "src/nitro/interfaces/IForceMoveApp.sol",
+        "src/nitro/interfaces/IMultiAssetHolder.sol",
+        "src/nitro/interfaces/IStatusManager.sol",
+        "src/nitro/interfaces/IForceMove.sol",
+        "src/nitro/interfaces/INitroTypes.sol",
+        "src/nitro/libraries/signature-logic/Consensus.sol",
+        "src/nitro/libraries/signature-logic/StrictTurnTaking.sol"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "metamorphic",
+      "description": "Running `forge test` passes against the real adjudicator source, but as soon as a forbidden name like convertToAssets is added to a scratch copy of that source and the suite is pointed at it, `forge test` fails. This shows the forge suite is the thing actually catching the violation, not a script it never calls.",
+      "proves": "Clause c2: forge test executes the check at run time and its pass/fail outcome tracks whether the forbidden name is present.",
+      "restatement_clause_id": "c2",
+      "relation_class": "monotonicity",
+      "run": [
+        "python3",
+        "scripts/check-settlement-rate-free-gate.py"
+      ],
+      "clause_id": "c2"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check-settlement-rate-free-gate.py"
+  ]
+}
