@@ -1,0 +1,61 @@
+{
+  "id": "derived-arn-00d",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:37: a forge test shows that a re-entrant deposit through a hooking test token is refused by the adjudicator's per-channel reentrancy guard (holdingsLock), and the test detects a missing guard.\nWhat holds now? Describe the current, observed state. test/ReentryDeposit.t.sol was added in 32ad5e5 (arn-521), the commit that adds holdingsLock. On 2026-10-14, the 32ad5e5 version of that file, run with forge test on 32ad5e5^, passed (1 test). Its hooked token's transferFrom (test/ReentryDeposit.t.sol:42-47 at d51ae19) calls adjudicator.deposit(address(this), channelId, 0, amt), a deposit of the hooked token itself, and the test asserts that this nested call reverted (line 108) and that both channels end with AMOUNT.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. git worktree add <dir> 32ad5e5^. 2. Copy test/ReentryDeposit.t.sol from 32ad5e5 into <dir>/test/. 3. In <dir> run forge test --match-path test/ReentryDeposit.t.sol: 1 test passes.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) test/ReentryDeposit.t.sol",
+  "restatement": "The adjudicator's test/ReentryDeposit.t.sol must prove two separate facts. First, the per-channel reentrancy guard holdingsLock refuses a re-entrant deposit made through a hooking token's transferFrom callback during a deposit call, and both channels end up holding AMOUNT. Second, the test is a real detector of that guard: it must fail whenever holdingsLock is absent. On 2026-10-14, running the 32ad5e5 version of test/ReentryDeposit.t.sol against 32ad5e5^ (the commit immediately before holdingsLock was added) still passed. A test that passes whether or not the guard exists proves nothing about the guard. The test must be corrected so it fails when holdingsLock is missing, while it continues to pass when holdingsLock is present.",
+  "restatement_clauses": [
+    {
+      "id": "guard-refuses-reentry",
+      "text": "A re-entrant deposit through a hooking test token is refused by the adjudicator's per-channel reentrancy guard (holdingsLock), and both channels end with AMOUNT."
+    },
+    {
+      "id": "test-detects-missing-guard",
+      "text": "The test (test/ReentryDeposit.t.sol) detects a missing guard: it must fail when holdingsLock is absent, instead of passing as it did when the 32ad5e5 version of the test was run against 32ad5e5^ on 2026-10-14."
+    }
+  ],
+  "goal": "Make the adjudicator's reentrancy test a true detector of the holdingsLock guard: it must keep passing when the guard is present and refuses a re-entrant deposit, and it must fail when the guard is absent, which it currently does not.",
+  "acceptance_criteria": [
+    "Running the reentrancy test against the current code, which already includes the holdingsLock guard, shows that after the re-entrant deposit attempt, both channels still hold exactly AMOUNT: no value is lost or duplicated by the attempted re-entry.",
+    "Comparing the test's result on the current code against its result on a throwaway checkout of the commit right before holdingsLock was added shows the result gets strictly worse without the guard: the test passes with the guard present and fails without it."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the reentrancy test against the current code, which already includes the holdingsLock guard, shows that after the re-entrant deposit attempt, both channels still hold exactly AMOUNT: no value is lost or duplicated by the attempted re-entry."
+    },
+    {
+      "id": "c2",
+      "text": "Comparing the test's result on the current code against its result on a throwaway checkout of the commit right before holdingsLock was added shows the result gets strictly worse without the guard: the test passes with the guard present and fails without it."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Running the reentrancy test against the current code, which already includes the holdingsLock guard, shows that after the re-entrant deposit attempt, both channels still hold exactly AMOUNT: no value is lost or duplicated by the attempted re-entry.",
+      "proves": "Proves the per-channel reentrancy guard refuses the re-entrant deposit and both channels end up holding AMOUNT, matching the guard-refuses-reentry clause.",
+      "restatement_clause_id": "guard-refuses-reentry",
+      "type": "metamorphic",
+      "relation_class": "conservation",
+      "run": [
+        "python3",
+        "scripts/check_guard_conserves_channel_value.py"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "description": "Comparing the test's result on the current code against its result on a throwaway checkout of the commit right before holdingsLock was added shows the result gets strictly worse without the guard: the test passes with the guard present and fails without it.",
+      "proves": "Proves the test fails when holdingsLock is absent instead of passing regardless of whether the guard exists, matching the test-detects-missing-guard clause.",
+      "restatement_clause_id": "test-detects-missing-guard",
+      "type": "metamorphic",
+      "relation_class": "monotonicity",
+      "run": [
+        "python3",
+        "scripts/check_test_fails_without_guard.py"
+      ],
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "critical",
+  "declared_new_entrypoints": [
+    "scripts/check_guard_conserves_channel_value.py",
+    "scripts/check_test_fails_without_guard.py"
+  ]
+}
