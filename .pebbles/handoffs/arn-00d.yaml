@@ -1,0 +1,58 @@
+status: completed
+pebble_id: arn-00d
+summary: >
+  test/ReentryDeposit.t.sol previously asserted only that the hooked token's
+  nested call reverted, which stayed true on 32ad5e5^ (holdingsLock absent)
+  because the nested deposit's underlying HookedToken.transferFrom still
+  reverts there, just with 'insufficient allowance' instead of the guard's
+  own 'Re-entered while in progress' message -- so the test passed whether
+  or not the guard existed. Fixed by capturing the nested call's revert data
+  (nestedCallRevertData) and asserting its decoded message equals the
+  guard's specific string, decoded via a calldata-sliced helper
+  (_decodeRevertMessage) since this compiler version does not support range
+  syntax on memory bytes. Added the two acceptance scripts the linked spec
+  names: scripts/check_guard_conserves_channel_value.py (c1, conservation)
+  runs the test and emits the plain/hooked final-holdings flows from the
+  test's ARN521_C1 log line, summing to 0 when the guard leaves both
+  channels at AMOUNT; scripts/check_test_fails_without_guard.py (c2,
+  monotonicity) runs the test on this worktree and, via a throwaway `git
+  worktree add` checkout of 32ad5e5^ with the current test file copied in,
+  on that pre-guard commit, and emits a non-decreasing [x,y] series that
+  only holds if the guard-present run passed and the guard-absent run
+  failed. Verified by hand: forge test --match-contract ReentryDepositTest
+  passes here and fails with 'insufficient allowance != Re-entered while in
+  progress' on the throwaway 32ad5e5^ worktree; both acceptance scripts ran
+  clean (exit 0) with the expected JSON ({"flows": [100000000, -100000000]}
+  and {"series": [[0, 0], [1, 1]]}); the full forge test suite shows no new
+  failures (the same 2 pre-existing vm.getCode failures reproduce
+  unmodified on the pre-change tree); pre-commit (ruff, ruff-format, mypy,
+  and the repo's local gates) passes on all three changed files.
+cost: ~95k tokens
+commits:
+  - "0819a48"
+verify_transcript:
+  hooks:
+    - name: forge test --match-contract ReentryDepositTest (guard present)
+      outcome: passed
+      duration_s: 5
+    - name: forge test --match-contract ReentryDepositTest (guard absent, throwaway 32ad5e5^ worktree)
+      outcome: failed
+      duration_s: 30
+    - name: python3 scripts/check_guard_conserves_channel_value.py
+      outcome: passed
+      duration_s: 5
+    - name: python3 scripts/check_test_fails_without_guard.py
+      outcome: passed
+      duration_s: 32
+    - name: pre-commit run --files test/ReentryDeposit.t.sol scripts/check_guard_conserves_channel_value.py scripts/check_test_fails_without_guard.py
+      outcome: passed
+      duration_s: 1
+    - name: forge test (full suite, regression check)
+      outcome: passed
+      duration_s: 8
+e2e_gate:
+  spec: contracts/specs/derived-arn-00d.spec.json
+  command: "python3 scripts/check_guard_conserves_channel_value.py && python3 scripts/check_test_fails_without_guard.py"
+  result: passed
+  ran_at_sha: "0819a48"
+  mocks_in_path: false
