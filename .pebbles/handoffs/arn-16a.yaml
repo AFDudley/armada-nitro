@@ -1,0 +1,56 @@
+status: completed
+pebble_id: arn-16a
+summary: >
+  settleStale (scenario B of script/WatchtowerScenario.s.sol) called only
+  adjudicator.transferAllAssets, so a two-asset channel whose second asset's token reverts on
+  transfer paid nothing -- including the first asset, whose token works fine -- once the
+  challenge window elapsed. Gave settleStale the same per-asset fallback respond already has
+  (design 15 invariant I5, E16 deliverable S4): probe transferAllAssets on a disposable
+  vm.snapshotState()/vm.revertToState() pair (so a transaction already known to fail is never
+  broadcast), broadcast it if the probe succeeds, and otherwise fall back to
+  adjudicator.transfer(assetIndex: 0, ...) for just the outcome's first asset. Unlike respond
+  (scenario A, which must adjudicator.conclude first), settleStale's channel is already
+  Finalized by the time it runs -- the stale challenge settles once the window elapses -- so no
+  prior conclude call is needed; the per-asset transfer's stateHash is the same
+  NitroUtils.hashState(fp, stateN) the existing transferAllAssets call already used. Added
+  scripts/check-watchtower-settle-stale-per-asset.py (the spec's declared new entrypoint): a
+  `run <bool>` subcommand drives one local-anvil arm end to end (WatchtowerPerAssetSetup's
+  setup(bool) -> openAndChallenge -> elapse the challenge window via cast rpc
+  evm_increaseTime/evm_mine -> settleStale -> payoutSince) and prints {"payout": <value>}; a
+  `compare` subcommand runs both arms (second asset working vs. reverting) and prints the
+  metamorphic flows JSON. Verified by running both subcommands against a fresh local anvil:
+  `run true` (second asset's token always reverts) exits 0 with payout 1000000, where before the
+  fix (confirmed by git-stashing the WatchtowerScenario.s.sol change and re-running) it exited 1
+  with "ToggleableERC20: transfers rejected" and paid nothing; `compare` exits 0 printing
+  {"flows": [1000000, -1000000, 0]} (the first asset's paid amount is identical and non-zero
+  whether or not the second asset's token reverts). Also re-ran the unmodified
+  scripts/check-watchtower-respond-per-asset.py (scenario A) to confirm no regression: still
+  exits 0 with {"flows": [2000000, -2000000, 0]}. forge build is clean and
+  `pre-commit run --files script/WatchtowerScenario.s.sol scripts/check-watchtower-settle-stale-per-asset.py`
+  passes every hook (mypy required dict(os.environ) instead of os.environ in the new script).
+cost: "~110k tokens"
+commits:
+  - "2216333"
+verify_transcript:
+  hooks:
+    - name: python3 scripts/check-watchtower-settle-stale-per-asset.py run true
+      outcome: passed
+      duration_s: 13
+    - name: python3 scripts/check-watchtower-settle-stale-per-asset.py compare
+      outcome: passed
+      duration_s: 23
+    - name: python3 scripts/check-watchtower-respond-per-asset.py (regression)
+      outcome: passed
+      duration_s: 24
+    - name: forge build
+      outcome: passed
+      duration_s: 10
+    - name: pre-commit run --files script/WatchtowerScenario.s.sol scripts/check-watchtower-settle-stale-per-asset.py
+      outcome: passed
+      duration_s: 2
+e2e_gate:
+  spec: contracts/specs/derived-arn-16a.spec.json
+  command: "python3 scripts/check-watchtower-settle-stale-per-asset.py run true && python3 scripts/check-watchtower-settle-stale-per-asset.py compare"
+  result: passed
+  ran_at_sha: "2216333"
+  mocks_in_path: false
