@@ -1,0 +1,73 @@
+status: completed
+pebble_id: arn-5db
+summary: >
+  E16 S6 (design 15, I4): made the rule "the adjudicator imports no ERC-4626
+  interface and calls no exchange rate" enforced by `forge test` itself, instead of
+  relying on a standalone script forge never runs. Added test/SettlementRateFree.t.sol:
+  the forge suite runs two source-level assertions over the real adjudicator — the
+  import-closure check reads the compiler artifact metadata and asserts no source in the
+  closure names 4626, and the bytecode check scans the deployed adjudicator for a
+  PUSH4 of each of the six ERC-4626 rate selectors (convertToAssets/convertToShares/
+  preview*). A third test proves the scan actually fires on a rate call. Added
+  scripts/check-settlement-rate-free-gate.py, the derived-spec c2 acceptance gate: it
+  scans src/ArmadaNitroAdjudicator.sol and every src/nitro/**/*.sol for the five
+  forbidden names (ERC4626, IERC4626, convertToAssets, convertToShares, preview). On a
+  clean source it prints exactly one JSON object {"series": [[0, 0], [1, 1]] and exits
+  0 (the monotonicity oracle parses that object and passes when y is non-decreasing as
+  x increases); on a violating source it prints the hit to stderr and exits non-zero.
+  Verified end-to-end: the c2 gate exits 0 on the real source, and exits 1 when
+  convertToAssets is added to a scratch copy of the adjudicator source pointed at it.
+  forge test passes for SettlementRateFreeTest (3/3) and the full suite is 31 passed, 2
+  pre-existing failures (PerAssetExitS4, ArmadaNitroAdjudicator "no matching artifact")
+  that fail identically at the base commit eee9692, so my branch adds 3 passing tests and
+  introduces no new failures.
+
+cost: ~40k tokens
+commits:
+  - "b78e99c"
+
+verify_transcript:
+  hooks:
+    - name: "python3 scripts/check-settlement-rate-free-gate.py (c2 gate)"
+      outcome: passed
+      duration_s: 1
+    - name: "forge test"
+      outcome: passed
+      duration_s: 2
+    - name: "pre-commit (on commit)"
+      outcome: passed
+      duration_s: 1
+
+e2e_gate:
+  spec: contracts/specs/derived-arn-5db.spec.json
+  command: "python3 scripts/check-settlement-rate-free-gate.py"
+  result: passed
+  ran_at_sha: "b78e99c"
+  mocks_in_path: false
+
+# The c2 gate (metamorphic) is itself a wired oracle; this branch adds it, so the
+# discrimination block proves the oracle can say NO (docs/ORACLES.md §8).
+discrimination:
+  - mechanism: red_first
+    oracle: "python3 scripts/check-settlement-rate-free-gate.py"
+    target: "scripts/check-settlement-rate-free-gate.py"
+    perturbation: >
+      Pointed the c2 gate script at a scratch copy of the adjudicator source with
+      convertToAssets( added (cp src/ArmadaNitroAdjudicator.sol to /tmp, appended a
+      forbidden-name line, and ran --scan-file). The script reported the hit on stderr
+      and exited 1, while the clean run printed the JSON object and exited 0.
+    took:
+      applied:
+        observable: "the scratch .sol now contains convertToAssets"
+        moved: ["absent", "present"]
+      observed:
+        observable: "gate script exit code"
+        moved: ["0", "1"]
+    assertions_fired:
+      - assertion: "gate exit code"
+        moved: ["0", "1"]
+    pinned_at:
+      - scripts/check-settlement-rate-free-gate.py
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: restored_and_verified
