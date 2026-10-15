@@ -21,8 +21,9 @@ even when another asset's payout reverts.
 - **S3 · Reentrancy guard (I6).** One guard on every function that changes `holdings`: `deposit`, `depositFromNote`,
   `transfer`, `transferAllAssets`, `concludeAndTransferAllAssets`, `reclaim`.
 - **S4 · Per-asset exit (I5).** No contract change expected: `transfer(assetIndex, ...)` already pays one asset. Prove
-  it with the test below, and make the watchtower and the e2e gate fall back to per-asset `transfer` when
-  `transferAllAssets` reverts.
+  it with the test below. The watchtower and the e2e gate pay each asset of a finalized channel with its own
+  `transfer(assetIndex, ...)` call. No payout of theirs depends on `transferAllAssets` or
+  `concludeAndTransferAllAssets`, and no script tries one payout path and then falls back to another.
 - **S5 · Pin `HubCustodian`'s pragma** to an exact version (it is `^0.8.37`; the adjudicator is already `0.8.17`).
 - **S6 · No rate on the settlement path (I4).** The adjudicator imports no ERC-4626 interface and calls no exchange
   rate; check it in the forge tests as a source-level assertion.
