@@ -1,0 +1,82 @@
+{
+  "id": "derived-arn-16a",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:23-25: the watchtower and the e2e gate fall back to per-asset transfer(assetIndex, ...) when transferAllAssets reverts.\nWhat holds now? Describe the current, observed state. On integrated d51ae19, settleStale (script/WatchtowerScenario.s.sol:226-237, scenario B) calls only adjudicator.transferAllAssets. On 2026-10-14, on a local anvil with the two-asset channel from script/WatchtowerPerAssetSetup.s.sol setup(true) (second token reverts on transfer), after openAndChallenge(0) and the challenge window, forge script script/WatchtowerScenario.s.sol --sig 'settleStale(uint256)' 0 --broadcast exited 1.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Start anvil. 2. Run forge script script/WatchtowerPerAssetSetup.s.sol --sig 'setup(bool)' true --broadcast with the environment that scripts/check-watchtower-respond-per-asset.py sets. 3. Run WatchtowerScenario openAndChallenge(0). 4. cast rpc evm_increaseTime past CHALLENGE_DURATION, then evm_mine. 5. Run WatchtowerScenario settleStale(0) with --broadcast: exit 1.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) script/WatchtowerScenario.s.sol settleStale (scenario B)",
+  "restatement": "Design document 15 states invariant I5. Invariant I5 says each asset of a finalized channel must exit, even when another asset's payout reverts. Task E16 names this as deliverable S4: the watchtower and the e2e gate must fall back to a per-asset transfer(assetIndex, ...) call when transferAllAssets reverts. The respond function in script/WatchtowerScenario.s.sol already has this fallback. The settleStale function (scenario B) does not. settleStale calls only adjudicator.transferAllAssets. On a two-asset channel where the second asset's token reverts on transfer, after the challenge window elapses, settleStale(0) exits 1 and pays nothing, including the first asset whose token works fine. The fix must give settleStale the same per-asset fallback respond already has. After the fix, running settleStale on that same two-asset channel must succeed and must pay the first asset. The amount paid to the first asset must equal the amount it would receive if the second asset's token did not revert, so the fix removes only the failure, not any part of the correct payout.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "On a two-asset channel whose second asset's token reverts on transfer, after openAndChallenge(0) and the challenge window, running `forge script script/WatchtowerScenario.s.sol --sig 'settleStale(uint256)' 0 --broadcast` must exit 0 and pay the channel's first asset a non-zero amount, not exit 1 as it does now."
+    },
+    {
+      "id": "c2",
+      "text": "The first asset's paid amount from that settlement must equal the first asset's paid amount when the second asset's token does not revert (script/WatchtowerPerAssetSetup.s.sol's setup(false)), so the fallback changes only whether the settlement succeeds, not how much the first asset is paid."
+    }
+  ],
+  "goal": "Give settleStale (scenario B of script/WatchtowerScenario.s.sol) the same per-asset transfer(assetIndex, ...) fallback that respond already has, so a second asset's reverting token can no longer block payout of a working first asset.",
+  "acceptance_criteria": [
+    "After a challenged two-asset channel's challenge time runs out, settling it still finishes successfully and still pays money to the first asset, even though the second asset's token always refuses to move funds.",
+    "The amount of money the first asset receives when the channel is settled is the same whether or not the second asset's token refuses transfers."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After a challenged two-asset channel's challenge time runs out, settling it still finishes successfully and still pays money to the first asset, even though the second asset's token always refuses to move funds."
+    },
+    {
+      "id": "c2",
+      "text": "The amount of money the first asset receives when the channel is settled is the same whether or not the second asset's token refuses transfers."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c1",
+      "description": "After a challenged two-asset channel's challenge time runs out, settling it still finishes successfully and still pays money to the first asset, even though the second asset's token always refuses to move funds.",
+      "proves": "Shows the settlement no longer fails outright just because one of its two assets cannot be paid; the first asset still gets paid (design 15 invariant I5, task E16 deliverable S4).",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-watchtower-settle-stale-per-asset.py",
+        "args": [
+          "run",
+          "true"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "payout",
+          "op": "gt",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "metamorphic",
+      "restatement_clause_id": "c2",
+      "description": "The amount of money the first asset receives when the channel is settled is the same whether or not the second asset's token refuses transfers.",
+      "proves": "Shows that fixing the failure removes only the crash; it does not change how much the first asset is paid.",
+      "relation_class": "conservation",
+      "run": [
+        "python3",
+        "scripts/check-watchtower-settle-stale-per-asset.py",
+        "compare"
+      ],
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-watchtower-settle-stale-per-asset.py"
+  ]
+}
