@@ -1,0 +1,42 @@
+status: completed
+pebble_id: arn-5db
+summary: >
+  E16 S6: made the forge test suite itself enforce that the adjudicator and
+  Nitro framework source are free of ERC-4626 exchange-rate machinery. Added
+  test/SettlementRateFree.t.sol (a forge suite) that reads the adjudicator
+  source (path from the ARN5DB_ADJUDICATOR_SRC env var, default
+  src/ArmadaNitroAdjudicator.sol) and every .sol under src/nitro, and fails
+  the suite when any forbidden name (ERC4626, IERC4626, convertToAssets,
+  convertToShares, preview) is present. Extended foundry.toml fs_permissions
+  so the suite can read ./src. Added scripts/check-settlement-rate-free-gate.py
+  (the spec's c2 clause command), which drives the suite against the real
+  source (passes) and against a scratch copy with convertToAssets injected
+  (fails on the assertion '1 != 0'), proving the forge suite—not an
+  unexercised side script—catches the violation; it emits the monotonicity
+  series [[0, 0], [1, 1]. Verified: forge test -s SettlementRateFree passes
+  on the real source and fails on the scratch; the gate script runs clean
+  (exit 0) with the expected JSON. Both acceptance clauses hold.
+cost: ~40k tokens
+commits:
+  - "c6acf8c"
+  - "f0e2aeb"
+verify_transcript:
+  hooks:
+    - name: forge test -s SettlementRateFree (real source)
+      outcome: passed
+      duration_s: 2
+    - name: forge test -s SettlementRateFree (scratch copy, ARN5DB_ADJUDICATOR_SRC=src/scratch-adjudicator-4626-violation.sol)
+      outcome: failed
+      duration_s: 2
+    - name: python3 scripts/check-settlement-rate-free-gate.py
+      outcome: passed
+      duration_s: 3
+    - name: pre-commit (ruff, ruff-format, mypy, local gates)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-5db.spec.json
+  command: "python3 scripts/check-settlement-rate-free-gate.py"
+  result: passed
+  ran_at_sha: "f0e2aeb"
+  mocks_in_path: false
