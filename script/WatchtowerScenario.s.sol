@@ -42,13 +42,14 @@ import {ChannelStates} from '../test/helpers/ChannelStates.sol';
  * the outcome or (if any single asset's token reverts on transfer) reverts the whole transaction,
  * including the finalization `_conclude` performed in the same call. Per design 15's invariant I5
  * and task E16's deliverable S4, `respond` falls back to a per-asset transfer in that case: it
- * finalizes the channel via the payout-free `conclude`, then pays out only the outcome's first
- * asset via `transfer(assetIndex: 0, ...)`, so one broken asset can never block payout of a
- * working one. It decides which path to take by attempting the all-assets payout on a disposable
+ * finalizes the channel via the payout-free `conclude`, then pays out EVERY asset index of the
+ * outcome in turn via `transfer(assetIndex, ...)` (arn-5a6), probing each on a disposable
+ * snapshot first so a still-broken asset is skipped rather than blocking the working ones. It
+ * decides which path to take by attempting the all-assets payout on a disposable
  * `vm.snapshotState()` first (reverted immediately after) rather than broadcasting a transaction
- * known to fail. A channel's second asset (if any) is carried via SECOND_ASSET/
- * SECOND_ASSET_AMOUNT below, not through the deposits/manifest files that fund the first asset --
- * see `_withSecondAsset`.
+ * known to fail. A channel's second and third assets (if any) are carried via SECOND_ASSET/
+ * SECOND_ASSET_AMOUNT and THIRD_ASSET/THIRD_ASSET_AMOUNT below, not through the deposits/manifest
+ * files that fund the first asset -- see `_withSecondAsset`.
  *
  * Scenario B skips `respond` entirely; after the window elapses, `settleStale` pays out the
  * stale challenged state N, mirroring script/FixturenetScenario.s.sol's `settle()`.
@@ -86,6 +87,8 @@ contract WatchtowerScenario is Script {
         uint256 total;
         address secondAsset;
         uint256 secondAssetAmount;
+        address thirdAsset;
+        uint256 thirdAssetAmount;
     }
 
     struct Deposit {
@@ -147,9 +150,9 @@ contract WatchtowerScenario is Script {
     /// otherwise have performed -- and even assets whose own transfer would have succeeded are
     /// left unpaid. This is checked first on a disposable `vm.snapshotState()` (reverted right
     /// after) so a transaction already known to fail is never broadcast; if it would fail, the
-    /// channel is instead finalized via the payout-free `conclude`, then only the outcome's first
-    /// asset is paid out via `transfer(assetIndex: 0, ...)`, so its payout never depends on
-    /// whether any other asset's token is broken.
+    /// channel is instead finalized via the payout-free `conclude`, then each asset of the outcome
+    /// is paid out one at a time via `transfer(assetIndex, ...)`, so one broken asset never blocks
+    /// payout of the working ones (arn-5a6).
     function respond(uint256 index) external {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(index);
@@ -177,14 +180,43 @@ contract WatchtowerScenario is Script {
         vm.broadcast(c.deployerKey);
         c.adjudicator.conclude(fp, signedN1);
 
-        vm.broadcast(c.deployerKey);
-        c.adjudicator.transfer(
-            0,
-            NitroUtils.getChannelId(fp),
-            abi.encode(stateN1.outcome),
-            bytes32(0),
-            new uint256[](0)
-        );
+        // Per-asset fallback (arn-5a6 / E16 S4 / design 15 I5): pay out every asset index of the
+        // outcome in turn, so a broken asset never blocks payout of a working one -- not only
+        // assetIndex 0. Each asset is probed on a disposable snapshot first, and only the
+        // transfers that would succeed are broadcast, so the middle asset's refused transfer
+        // does not prevent the first and third assets from being paid out. Each successful
+        // `transfer` zeroes that asset's allocations and updates the on-chain fingerprint to
+        // match (MultiAssetHolder's `_apply_transfer_effects`), so the outcome re-encoded for
+        // the NEXT asset's call must mirror that mutation -- reusing the original, stale
+        // `outcomeBytes` across iterations would mismatch the updated fingerprint.
+        bytes32 channelId = NitroUtils.getChannelId(fp);
+        Outcome.SingleAssetExit[] memory outcome = stateN1.outcome;
+        uint256[] memory emptyIndices = new uint256[](0);
+        for (uint256 assetIndex = 0; assetIndex < outcome.length; assetIndex++) {
+            bytes memory outcomeBytes = abi.encode(outcome);
+            uint256 snapId = vm.snapshotState();
+            (bool transferOk, ) = address(c.adjudicator).call(
+                abi.encodeCall(
+                    c.adjudicator.transfer,
+                    (assetIndex, channelId, outcomeBytes, bytes32(0), emptyIndices)
+                )
+            );
+            vm.revertToState(snapId);
+            if (transferOk) {
+                vm.broadcast(c.deployerKey);
+                c.adjudicator.transfer(
+                    assetIndex,
+                    channelId,
+                    outcomeBytes,
+                    bytes32(0),
+                    emptyIndices
+                );
+                Outcome.Allocation[] memory allocations = outcome[assetIndex].allocations;
+                for (uint256 j = 0; j < allocations.length; j++) {
+                    allocations[j].amount = 0;
+                }
+            }
+        }
     }
 
     /// @dev Scenario B: no response arrived; after the challenge window has elapsed, pay out the
@@ -331,33 +363,55 @@ contract WatchtowerScenario is Script {
             );
     }
 
-    /// @dev Appends a second asset (SECOND_ASSET/SECOND_ASSET_AMOUNT), paid entirely to the hub as
-    /// a plain external-destination allocation, to `vp`'s outcome -- a no-op when SECOND_ASSET is
-    /// unset, which is the real fixturenet gate's single-asset shape.
+    /// @dev Appends a second and/or third asset (SECOND_ASSET/SECOND_ASSET_AMOUNT,
+    /// THIRD_ASSET/THIRD_ASSET_AMOUNT), each paid entirely to the hub as a plain
+    /// external-destination allocation, to `vp`'s outcome -- a no-op when neither is set, which
+    /// is the real fixturenet gate's single-asset shape.
     function _withSecondAsset(
         Ctx memory c,
         INitroTypes.VariablePart memory vp
     ) internal pure returns (INitroTypes.VariablePart memory) {
-        if (c.secondAsset == address(0)) return vp;
+        bool hasSecond = c.secondAsset != address(0);
+        bool hasThird = c.thirdAsset != address(0);
+        if (!hasSecond && !hasThird) return vp;
 
-        Outcome.Allocation[] memory allocations = new Outcome.Allocation[](1);
-        allocations[0] = Outcome.Allocation({
-            destination: bytes32(uint256(uint160(c.hub))),
-            amount: c.secondAssetAmount,
-            allocationType: uint8(Outcome.AllocationType.simple),
-            metadata: ''
-        });
-        Outcome.SingleAssetExit[] memory outcome = new Outcome.SingleAssetExit[](2);
+        uint256 numAssets = 1 + (hasSecond ? 1 : 0) + (hasThird ? 1 : 0);
+        Outcome.SingleAssetExit[] memory outcome = new Outcome.SingleAssetExit[](numAssets);
         outcome[0] = vp.outcome[0];
-        outcome[1] = Outcome.SingleAssetExit({
-            asset: c.secondAsset,
-            assetMetadata: Outcome.AssetMetadata({assetType: Outcome.AssetType.Default, metadata: ''}),
-            allocations: allocations
-        });
+        uint256 idx = 1;
+
+        if (hasSecond) {
+            Outcome.Allocation[] memory allocations = new Outcome.Allocation[](1);
+            allocations[0] = Outcome.Allocation({
+                destination: bytes32(uint256(uint160(c.hub))),
+                amount: c.secondAssetAmount,
+                allocationType: uint8(Outcome.AllocationType.simple),
+                metadata: ''
+            });
+            outcome[idx] = Outcome.SingleAssetExit({
+                asset: c.secondAsset,
+                assetMetadata: Outcome.AssetMetadata({assetType: Outcome.AssetType.Default, metadata: ''}),
+                allocations: allocations
+            });
+            idx++;
+        }
+        if (hasThird) {
+            Outcome.Allocation[] memory allocations = new Outcome.Allocation[](1);
+            allocations[0] = Outcome.Allocation({
+                destination: bytes32(uint256(uint160(c.hub))),
+                amount: c.thirdAssetAmount,
+                allocationType: uint8(Outcome.AllocationType.simple),
+                metadata: ''
+            });
+            outcome[idx] = Outcome.SingleAssetExit({
+                asset: c.thirdAsset,
+                assetMetadata: Outcome.AssetMetadata({assetType: Outcome.AssetType.Default, metadata: ''}),
+                allocations: allocations
+            });
+        }
         vp.outcome = outcome;
         return vp;
     }
-
     function _startBlockPath(uint256 index) internal pure returns (string memory) {
         return string.concat('deployments/watchtower-e2e-start-block-', vm.toString(index));
     }
@@ -403,5 +457,7 @@ contract WatchtowerScenario is Script {
 
         c.secondAsset = vm.envOr('SECOND_ASSET', address(0));
         c.secondAssetAmount = vm.envOr('SECOND_ASSET_AMOUNT', uint256(0));
+        c.thirdAsset = vm.envOr('THIRD_ASSET', address(0));
+        c.thirdAssetAmount = vm.envOr('THIRD_ASSET_AMOUNT', uint256(0));
     }
 }
