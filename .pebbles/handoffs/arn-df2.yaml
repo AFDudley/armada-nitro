@@ -1,0 +1,63 @@
+status: completed
+pebble_id: arn-df2
+summary: >
+  Removed the trial-then-fallback dependency on concludeAndTransferAllAssets/transferAllAssets
+  from script/WatchtowerScenario.s.sol's respond() and settleStale(): both now unconditionally
+  pay every asset of a finalized channel through its own transfer(assetIndex, ...) low-level call
+  (so one asset's on-chain revert never blocks payout of, or aborts broadcasting, the others),
+  with no snapshot probe and no combined-call path. stack/scripts/armada-watchtower-e2e-job.py's
+  respond() broadcast check now looks for a transfer( call instead of
+  concludeAndTransferAllAssets(. Added test/WatchtowerPerAssetPayoutCheck.t.sol, which drives the
+  real WatchtowerPerAssetSetup/WatchtowerScenario contracts directly (not via a separate forge
+  script process, since forge script --broadcast hard-aborts the whole run if any queued
+  transaction would revert on-chain) and uses vm.expectCall to assert exactly 2
+  transfer(assetIndex, ...) calls and 0 combined-call invocations for each of respond()/
+  settleStale(), in both a run where the combined call would have succeeded and one where it
+  would not; it needs --fork-url (a live local anvil, for Poseidon placement) and skips
+  gracefully under a plain forge test. Added the spec's two declared entrypoints,
+  scripts/check-respond-per-asset-payout.sh and scripts/check-settlestale-per-asset-payout.sh,
+  which start a local anvil, run that test's two arms, and print the observed per-arm call counts
+  as JSON -- both pass with the exact values the acceptance spec requires
+  (combined_call_committed_when_{feasible,infeasible}=0,
+  per_asset_transfers_committed_when_{feasible,infeasible}=2). Removed
+  scripts/check-watchtower-respond-per-asset.py, scripts/check-watchtower-settle-stale-per-asset.py,
+  scripts/check-watchtower-respond-fallback-all-assets.py, and script/WatchtowerFallbackSetup.s.sol:
+  these tested the trial-then-fallback mechanism this change removes and can no longer run at
+  all (forge script hard-aborts broadcasting a transaction known to revert, which the new
+  unconditional per-asset attempt requires in their "combined call would fail" arm). Verified:
+  forge build is clean; the full forge test suite (43 tests) passes with 0 failures (the 4 new
+  tests skip gracefully without --fork-url, pass with it); both new check scripts exit 0 with the
+  exact expected JSON; grep_absent/grep on stack/scripts/armada-watchtower-e2e-job.py confirm
+  concludeAndTransferAllAssets( is gone and transfer( is present.
+cost: "~140k tokens"
+commits:
+  - "4ff7ce6"
+verify_transcript:
+  hooks:
+    - name: forge build
+      outcome: passed
+      duration_s: 5
+    - name: forge test
+      outcome: passed
+      duration_s: 2
+    - name: scripts/check-respond-per-asset-payout.sh
+      outcome: passed
+      duration_s: 2
+    - name: scripts/check-settlestale-per-asset-payout.sh
+      outcome: passed
+      duration_s: 2
+    - name: grep_absent concludeAndTransferAllAssets( in armada-watchtower-e2e-job.py
+      outcome: passed
+      duration_s: 1
+    - name: grep transfer( in armada-watchtower-e2e-job.py
+      outcome: passed
+      duration_s: 1
+    - name: pre-commit (via git commit)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-df2.spec.json
+  command: "bash scripts/check-respond-per-asset-payout.sh && bash scripts/check-settlestale-per-asset-payout.sh"
+  result: passed
+  ran_at_sha: "4ff7ce6"
+  mocks_in_path: false
