@@ -60,12 +60,16 @@ def _dep_running(dep: pathlib.Path) -> bool:
 
 
 def _geth_host_rpc(cluster: str) -> str:
-    """Discover the geth host RPC with `docker port` (arn-e7a c2/c3)."""
+    """Discover the geth host RPC with `docker port` (arn-e7a c2/c3). `docker port
+    <ctr> 8545` prints `127.0.0.1:<port>`; the older `<private> -> <host>` form is
+    handled too."""
     ctr = f"{cluster}-armada-fixturenet-geth-1"
     r = subprocess.run(["docker", "port", ctr, "8545"], capture_output=True, text=True)
     if r.returncode != 0 or not r.stdout.strip():
         return ""
-    return "http://" + r.stdout.splitlines()[0].split("->", 1)[1].strip()
+    line = r.stdout.splitlines()[0].strip()
+    hostport = line.split("->", 1)[1].strip() if "->" in line else line
+    return "http://" + hostport
 
 
 def _rpc(url: str, method: str, params: list[object]) -> object:
