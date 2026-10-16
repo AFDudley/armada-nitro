@@ -1,0 +1,46 @@
+status: completed
+pebble_id: arn-2e6
+summary: >
+  Strengthened the two E16 S4 per-asset-exit regression tests in
+  test/PerAssetExitS4.t.sol so each one proves the real, externally visible
+  outcome. Clause c1 (test_transfer_assetIndex_paysOtherAsset_whenPairedTokenReverts):
+  the test now records the custodian's real USDC wallet balance before and
+  after the single-asset payout, and asserts the balance rose by exactly
+  HUB_FUNDS (100e6), proving the USDC payment really reached the custodian's
+  wallet rather than only the adjudicator's internal ledger. Clause c2
+  (test_transferAllAssets_revertsAsWhole_whenPairedTokenReverts): the bare
+  reason-less vm.expectRevert() was replaced with the exact revert reason
+  'RevertingTransferToken: transfer blocked', so a revert from any unrelated
+  cause no longer passes the test. Both forge tests pass (2/2). Added the two
+  spec-acceptance scripts the derived spec re-runs: scripts/verify-s4-real-balance-paid.sh
+  (c1) and scripts/verify-s4-exact-revert-reason.sh (c2), each building the
+  out/ artifacts via `forge build` (the worktree's out/ is a git-ignored
+  build cache, so the script is self-contained) then running the corresponding
+  forge test and printing `{"passed": true}`. Verified: ran both scripts —
+  each printed `{"passed": true}; confirmed the three grep/behavior acceptance
+  tests in contracts/specs/derived-arn-2e6.spec.json (c1 count >=2, c2
+  behavior passed, c3 pattern matches line 120, c4 bare-revert absent, c5
+  behavior passed).
+cost: "~40k tokens"
+commits:
+  - "623d006"
+verify_transcript:
+  hooks:
+    - name: "forge test (S4 suite, 2 tests)"
+      outcome: passed
+      duration_s: 11
+    - name: "scripts/verify-s4-real-balance-paid.sh (c1)"
+      outcome: passed
+      duration_s: 10
+    - name: "scripts/verify-s4-exact-revert-reason.sh (c2)"
+      outcome: passed
+      duration_s: 10
+    - name: "pre-commit (tdd-trailer)"
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-2e6.spec.json
+  command: "bash scripts/verify-s4-real-balance-paid.sh && bash scripts/verify-s4-exact-revert-reason.sh"
+  result: passed
+  ran_at_sha: "623d006"
+  mocks_in_path: false
