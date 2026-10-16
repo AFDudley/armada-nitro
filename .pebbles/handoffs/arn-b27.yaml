@@ -1,0 +1,56 @@
+status: completed
+pebble_id: arn-b27
+summary: >
+  FixturenetScenario._hubExecute signed every HubCustodian.execute call with a single
+  secp256k1 scalar (HUB_GROUP_SCALAR, FrostTestSigner), but fixturenet-new's
+  armada-frost-keygen job writes a 2-of-3 FROST group (share-1..3 + group-pubkey.json) that
+  the reconciler deploys the custodian with, and that group key did not match the scalar's
+  public key -- HubCustodian.execute reverted InvalidGroupSignature() and the
+  armada-nitro-e2e job's setUpHub phase failed, exiting 1. Changed FixturenetScenario.s.sol
+  to sign each hub operation with two real FROST shares (share-1, share-2) via the env
+  image's frost-signer binary through forge's vm.ffi (frost-signer sign --format json),
+  reading FROST_SHARES_DIR (default /env) and FROST_SIGNER (default frost-signer on PATH)
+  instead of HUB_GROUP_SCALAR. Updated docker-compose-armada-nitro-e2e.yml to pass --ffi to
+  every forge script call and dropped the HUB_GROUP_SCALAR default in favor of
+  FROST_SHARES_DIR/FROST_SIGNER. Updated CheckSettlePerAssetSetup.s.sol to deploy its
+  one-shot custodian with the group key read from FROST_SHARES_DIR/group-pubkey.json instead
+  of a FrostTestSigner-derived scalar pubkey, and updated both host-side check scripts
+  (check-e2e-settle-per-asset.py, check-fixturenet-per-asset-no-fallback.py) to build the
+  host frost-signer via cargo, keygen a 2-of-3 group into their own workdir, pass
+  FROST_SHARES_DIR/FROST_SIGNER, and add --ffi to their forge invocations. Updated
+  stack/README.md's armada-nitro-e2e job description accordingly.
+  Verified: (1) both host-side check scripts pass end-to-end against a fresh local anvil
+  node, each keygenning its own FROST group, deploying a custodian with that group's key,
+  and driving the real scenario through setUpHub -- proving the scenario's FROST-share
+  signature verifies against the deployed custodian's group key (no InvalidGroupSignature);
+  check-e2e-settle-per-asset.py printed {"first_asset_paid": true,
+  "second_asset_holdings_unchanged": true} and check-fixturenet-per-asset-no-fallback.py
+  printed all six expected booleans. (2) Rebuilt cerc/armada-nitro-env at this branch's HEAD
+  (d53061e) and ran the real armada-nitro-e2e job twice against the live, previously-broken
+  armada-fixturenet-e12 fixturenet (geth confirmed running via docker port) after refreshing
+  that deployment's stale compose-jobs/docker-compose-armada-nitro-e2e.yml copy with the
+  updated one (an operator action on the live deployment, not a repo change) -- both runs
+  exited 0, with setUpHub, cooperativeClose, openAndChallenge, earlySettle (correctly
+  reverting inside the challenge window), and settle all completing and the final log line
+  "verified: both channels paid the user by shielding a note". (3) Ran armada-env-verify on
+  the same fixturenet immediately after: exit 0 ("verified: shield, private transfer and
+  unshield each landed on chain with real proofs..."), so the reconciler's allow-list stays
+  verified alongside the now-passing e2e gate. (4) forge test: 43 passed, 0 failed, 4 skipped
+  -- no regression.
+cost: "~170k tokens"
+commits:
+  - "d53061e"
+verify_transcript:
+  hooks:
+    - name: pre-commit (full suite)
+      outcome: passed
+      duration_s: 2
+    - name: forge build and test
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: stack/compose-jobs/docker-compose-armada-nitro-e2e.yml
+  command: "ARMADA_IMAGE_TAG=$(git rev-parse HEAD) laconic-so deployment --dir ~/deployments/armada-fixturenet-e12 run-job armada-nitro-e2e"
+  result: passed
+  ran_at_sha: "d53061e"
+  mocks_in_path: false
