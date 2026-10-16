@@ -224,3 +224,20 @@ repos:
         args: [--all, --]
       - id: clippy
         args: [--workspace, --, -D, warnings]
+
+  # === Solidity: build and test with forge ===
+  # The commit-boundary gate (`pre-commit run --all-files`, .exophial/config.yaml) runs the
+  # forge suite, so an acceptance check needs no wrapper script to put forge in the grading
+  # path. Under --all-files the hook runs whenever the repo holds a .sol file.
+  # A fresh worktree has no lib/ submodules; without them forge installs them itself and
+  # rewrites foundry.lock. `forge build` compiles script/ too: tests load some artifacts by
+  # name with deployCode (for example FrostTestSigner), and `forge test` alone does not
+  # compile those.
+  - repo: local
+    hooks:
+      - id: forge-test
+        name: forge build and test
+        entry: bash -c 'git submodule update --init --recursive --quiet && forge build && forge test'
+        language: system
+        pass_filenames: false
+        files: \.sol$|^foundry\.(toml|lock)$
