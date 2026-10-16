@@ -1,0 +1,57 @@
+status: completed
+pebble_id: arn-58d
+summary: >
+  FixturenetScenario.s.sol's cooperativeClose() and settle() now pay every asset of their
+  finalized channel through the adjudicator's own per-asset transfer(assetIndex, ...), never
+  through the all-assets functions transferAllAssets / concludeAndTransferAllAssets, and
+  never by trying an all-assets call and falling back. cooperativeClose() now calls conclude()
+  to finalize channel 0, then pays its (single) asset via _settlePerAsset -- the same per-asset
+  helper settle() already used for channel 1 -- instead of the single
+  concludeAndTransferAllAssets call. conclude() (ForceMove) stores the channel's on-chain
+  fingerprint with stateHash = bytes32(0), not hashState of the final state (confirmed by
+  reading concludeAndTransferAllAssets's own call into _transferAllAssetsBody, which passes
+  bytes32(0)); the per-asset transfer calls after conclude() must match that same bytes32(0),
+  which I verified empirically (the fingerprint check reverted with "incorrect fingerprint"
+  until I passed bytes32(0) instead of hashState(fp, finalState)). settle() no longer probes
+  transferAllAssets on a snapshot and falls back on failure; it goes straight to
+  _settlePerAsset. That change also surfaced a second real bug: settle() had a stray
+  vm.broadcast(c.deployerKey) immediately before calling _settlePerAsset, which itself issues
+  its own per-asset vm.broadcast calls -- the resulting double-broadcast setup corrupted the
+  first per-asset transfer's fingerprint check (confirmed by reverting just that line and
+  rerunning, which fixed it). Added scripts/check-fixturenet-per-asset-no-fallback.py, the
+  linked spec's acceptance oracle: deploys a fresh local anvil environment (reusing
+  script/CheckSettlePerAssetSetup.s.sol's two-asset forced channel, whose second asset always
+  reverts on transfer), drives the real cooperativeClose()/openAndChallenge()/earlySettle()/
+  settle() end to end, and reads forge's own broadcast-transactions JSON
+  (broadcast/FixturenetScenario.s.sol/31337/<sig>-latest.json) for the ground truth of which
+  functions actually got sent -- not a string match against console output, which forge omits
+  for successful broadcasts at default verbosity. Verified: the new check prints
+  {"cooperative_close_is_per_asset_transfer": true, "settle_broadcast_is_per_asset_only": true,
+  "settle_first_asset_paid": true, "settle_second_asset_holdings_unchanged": true,
+  "cooperative_close_used_conclude_all": false, "settle_mentions_transfer_all_in_trace": false}
+  and exits 0, matching every acceptance_test field/value in the spec; the pre-existing
+  scripts/check-e2e-settle-per-asset.py (arn-7de's oracle, which also drives settle()) still
+  passes unmodified; and the full forge test suite (43 tests, 10 suites) still passes.
+cost: "~180k tokens"
+commits:
+  - "b3d1820"
+verify_transcript:
+  hooks:
+    - name: python3 scripts/check-fixturenet-per-asset-no-fallback.py
+      outcome: passed
+      duration_s: 20
+    - name: python3 scripts/check-e2e-settle-per-asset.py (pre-existing oracle, re-run against the new settle())
+      outcome: passed
+      duration_s: 14
+    - name: forge test (full suite)
+      outcome: passed
+      duration_s: 8
+    - name: pre-commit (full hook set on changed files)
+      outcome: passed
+      duration_s: 2
+e2e_gate:
+  spec: contracts/specs/derived-arn-58d.spec.json
+  command: python3 scripts/check-fixturenet-per-asset-no-fallback.py
+  result: passed
+  ran_at_sha: "b3d1820"
+  mocks_in_path: false
