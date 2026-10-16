@@ -83,12 +83,19 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         // Let the challenge window expire, finalizing the channel.
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
 
+        // Record the custodian's real USDC wallet balance before the single-asset payout (arn-2e6, clause c1).
+        uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
+
         // Single-asset exit: pay out the other (USDC) asset via `transfer(assetIndex, ...)`.
         adjudicator.transfer(0, channelId, outcomeBytes, stateHash, new uint256[](0));
 
         // The other asset (USDC) is fully paid out; the reverting asset is untouched.
         assertEq(adjudicator.holdings(address(usdc), channelId), 0);
         assertEq(adjudicator.holdings(address(revToken), channelId), HUB_FUNDS);
+
+        // The USDC payment really reached the custodian's wallet (arn-2e6, clause c1).
+        uint256 custodianBalAfter = usdc.balanceOf(address(custodian));
+        assertEq(custodianBalAfter, custodianBalBefore + HUB_FUNDS);
     }
 
     // c2: the all-assets exit `transferAllAssets` reverts as a whole (no partial payout).
@@ -109,8 +116,8 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         );
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
 
-        // The all-assets exit reverts as a whole because the reverting token blocks its transfer.
-        vm.expectRevert();
+        // The all-assets exit reverts as a whole with the blocked token's own message (arn-2e6, clause c2).
+        vm.expectRevert('RevertingTransferToken: transfer blocked');
         adjudicator.transferAllAssets(channelId, state.outcome, stateHash);
 
         // No partial payout: both assets' holdings are unchanged.
