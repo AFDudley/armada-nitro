@@ -10,7 +10,7 @@ import json
 import subprocess
 import sys
 
-OLD_PIN = "532bc0641443879e30c07b98970f6e11d500c"
+OLD_PIN = "532bc0641443879e30c07b98970f6e11d5d9400c"
 
 
 def current_gitlink() -> str:
@@ -22,9 +22,10 @@ def current_gitlink() -> str:
     )
     if out.returncode != 0 or not out.stdout.strip():
         return ""
+    # Line format: "160000 commit <sha>\tlib/armada-poc"
     parts = out.stdout.split()
-    if len(parts) >= 2:
-        return parts[1]
+    if len(parts) >= 3:
+        return parts[2]
     return ""
 
 
