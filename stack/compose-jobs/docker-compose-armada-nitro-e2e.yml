@@ -46,8 +46,11 @@ services:
         # ---- stage 2: script/FixturenetScenario.s.sol -- cooperative close, then force close ----
         export KEYS_DIR=/env
 
+        # The custodian's `execute` calls are signed with the fixturenet's real FROST shares
+        # (/env/share-1, /env/share-2, written by the armada-frost-keygen job) through the env
+        # image's frost-signer, which forge reaches through --ffi.
         run_script() {
-          forge script "$$@" --rpc-url "$$HUB_RPC" --slow --broadcast
+          forge script "$$@" --rpc-url "$$HUB_RPC" --slow --ffi --broadcast
         }
 
         run_script script/FixturenetScenario.s.sol --sig 'setUpHub()'
@@ -66,7 +69,8 @@ services:
       DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/nitro-e2e/deposits.json}
       CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
       DELEGATE_KEY: ${DELEGATE_KEY:-0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a}
-      HUB_GROUP_SCALAR: ${HUB_GROUP_SCALAR:-0xa4ddf31f7f32ba696f14ce50ecf3f21e3e100e83bdf47966e7b07468e9500b6e}
+      FROST_SHARES_DIR: ${FROST_SHARES_DIR:-/env}
+      FROST_SIGNER: ${FROST_SIGNER:-frost-signer}
       NITRO_E2E_BAD_ADAPT_PARAMS: ${NITRO_E2E_BAD_ADAPT_PARAMS:-}
       NITRO_E2E_BAD_ADAPT_CONTRACT: ${NITRO_E2E_BAD_ADAPT_CONTRACT:-}
     volumes:

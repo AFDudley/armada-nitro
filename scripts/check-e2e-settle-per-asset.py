@@ -41,12 +41,36 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEPLOYER_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 USER_KEY = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 DELEGATE_KEY = "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
-HUB_GROUP_SCALAR = "0xa4ddf31f7f32ba696f14ce50ecf3f21e3e100e83bdf47966e7b07468e9500b6e"
 CHALLENGE_DURATION = 5
 HUB_REVOCATION_DELAY = 60
 FORCED_HUB = 50_000_000
 
 WORKDIR = REPO_ROOT / "deployments" / "check-settle-per-asset"
+# The FROST 2-of-3 group (shares + group key) for the custodian the scenario signs for.
+FROST_SHARES_DIR = WORKDIR / "frost"
+# The host-side frost-signer binary (built by cargo):
+FROST_SIGNER = REPO_ROOT / "target" / "release" / "frost-signer"
+
+
+def _keygen_frost_group() -> None:
+    """Build the host frost-signer and keygen a 2-of-3 FROST group into FROST_SHARES_DIR. The
+    setup script deploys the custodian with this group's key, and FixturenetScenario.s.sol signs
+    the custodian's `execute` calls with two of its shares."""
+    if not FROST_SIGNER.exists():
+        _run(["cargo", "build", "--release", "-p", "frost-signer"], os.environ.copy(), REPO_ROOT)
+    if (FROST_SHARES_DIR / "group-pubkey.json").exists():
+        # already keygen'd; the shares + group key persist in WORKDIR/frost
+        return
+    # ensure the directory exists
+    FROST_SHARES_DIR.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [str(FROST_SIGNER), "keygen", "--out", str(FROST_SHARES_DIR)], capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        sys.stderr.write(f"frost-signer keygen failed (exit {result.returncode})")
+        sys.stderr.write(result.stdout[-4000:])
+        sys.stderr.write(result.stderr[-4000:])
+        raise SystemExit(result.returncode)
 
 
 def _free_port() -> int:
@@ -69,7 +93,7 @@ def _forge_script(sig: str | None, rpc: str, env: dict[str, str], broadcast: boo
     cmd = ["forge", "script", "script/FixturenetScenario.s.sol"]
     if sig:
         cmd += ["--sig", sig]
-    cmd += ["--rpc-url", rpc, "--slow"]
+    cmd += ["--rpc-url", rpc, "--slow", "--ffi"]
     if broadcast:
         cmd += ["--broadcast"]
     return _run(cmd, env, REPO_ROOT)
@@ -137,6 +161,8 @@ def main() -> int:
             sys.stderr.write("anvil did not become ready\n")
             return 1
 
+        _keygen_frost_group()
+
         manifest_path = WORKDIR / "manifest.json"
         deposits_path = WORKDIR / "nitro-e2e" / "deposits.json"
         env = os.environ.copy()
@@ -145,7 +171,8 @@ def main() -> int:
                 "DEPLOYER_KEY": DEPLOYER_KEY,
                 "USER_KEY": USER_KEY,
                 "DELEGATE_KEY": DELEGATE_KEY,
-                "HUB_GROUP_SCALAR": HUB_GROUP_SCALAR,
+                "FROST_SHARES_DIR": str(FROST_SHARES_DIR.relative_to(REPO_ROOT)),
+                "FROST_SIGNER": str(FROST_SIGNER),
                 "CHALLENGE_DURATION": str(CHALLENGE_DURATION),
                 "HUB_REVOCATION_DELAY": str(HUB_REVOCATION_DELAY),
                 "MANIFEST_PATH": str(manifest_path.relative_to(REPO_ROOT)),

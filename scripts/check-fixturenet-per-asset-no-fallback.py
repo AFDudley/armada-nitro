@@ -42,14 +42,38 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEPLOYER_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 USER_KEY = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 DELEGATE_KEY = "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
-HUB_GROUP_SCALAR = "0xa4ddf31f7f32ba696f14ce50ecf3f21e3e100e83bdf47966e7b07468e9500b6e"
 CHALLENGE_DURATION = 5
 HUB_REVOCATION_DELAY = 60
 # Scenario constants (must match FixturenetScenario.s.sol's payout amounts):
 FORCED_HUB = 50_000_000
 
 WORKDIR = REPO_ROOT / "deployments" / "check-fixturenet-per-asset"
+# The FROST 2-of-3 group (shares + group key) for the custodian the scenario signs for.
+FROST_SHARES_DIR = WORKDIR / "frost"
+# The host-side frost-signer binary (built by cargo):
+FROST_SIGNER = REPO_ROOT / "target" / "release" / "frost-signer"
 CHAIN_ID = 31337
+
+
+def _keygen_frost_group() -> None:
+    """Build the host frost-signer and keygen a 2-of-3 FROST group into FROST_SHARES_DIR. The
+    setup script deploys the custodian with this group's key, and FixturenetScenario.s.sol signs
+    the custodian's `execute` calls with two of its shares."""
+    if not FROST_SIGNER.exists():
+        _run(["cargo", "build", "--release", "-p", "frost-signer"], os.environ.copy(), REPO_ROOT)
+    if (FROST_SHARES_DIR / "group-pubkey.json").exists():
+        # already keygen'd; the shares + group key persist in WORKDIR/frost
+        return
+    # Ensure the directory exists, then keygen the group.
+    FROST_SHARES_DIR.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [str(FROST_SIGNER), "keygen", "--out", str(FROST_SHARES_DIR)], capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        sys.stderr.write(f"frost-signer keygen failed (exit {result.returncode})")
+        sys.stderr.write(result.stdout[-4000:])
+        sys.stderr.write(result.stderr[-4000:])
+        raise SystemExit(result.returncode)
 
 
 def _free_port() -> int:
@@ -82,6 +106,7 @@ def _forge_script(sig: str, rpc: str, env: dict[str, str]) -> list[str]:
         rpc,
         "--slow",
         "--broadcast",
+        "--ffi",
     ]
     _run(cmd, env, REPO_ROOT)
     bare_sig = sig.split("(")[0]
@@ -131,6 +156,7 @@ def main() -> int:
     if WORKDIR.exists():
         shutil.rmtree(WORKDIR)
     (WORKDIR / "nitro-e2e").mkdir(parents=True)
+    _keygen_frost_group()
 
     port = _free_port()
     rpc = f"http://127.0.0.1:{port}"
@@ -164,7 +190,8 @@ def main() -> int:
                 "DEPLOYER_KEY": DEPLOYER_KEY,
                 "USER_KEY": USER_KEY,
                 "DELEGATE_KEY": DELEGATE_KEY,
-                "HUB_GROUP_SCALAR": HUB_GROUP_SCALAR,
+                "FROST_SHARES_DIR": str(FROST_SHARES_DIR.relative_to(REPO_ROOT)),
+                "FROST_SIGNER": str(FROST_SIGNER),
                 "CHALLENGE_DURATION": str(CHALLENGE_DURATION),
                 "HUB_REVOCATION_DELAY": str(HUB_REVOCATION_DELAY),
                 "MANIFEST_PATH": str(manifest_path.relative_to(REPO_ROOT)),

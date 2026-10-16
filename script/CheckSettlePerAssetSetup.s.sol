@@ -11,7 +11,7 @@ import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {ArmadaNotes} from '../test/helpers/ArmadaNotes.sol';
 import {ChannelStates} from '../test/helpers/ChannelStates.sol';
-import {IHubCustodian, IFrostTestSigner} from '../test/helpers/IHubCustodian.sol';
+import {IHubCustodian} from '../test/helpers/IHubCustodian.sol';
 import {RevertingTransferToken} from '../test/helpers/RevertingTransferToken.sol';
 
 /**
@@ -28,9 +28,10 @@ import {RevertingTransferToken} from '../test/helpers/RevertingTransferToken.sol
  * check), writing its calldata to deposits.json instead of broadcasting it immediately, so
  * `FixturenetScenario.s.sol`'s unmodified `_fund`/`_deposit` helpers can consume it verbatim.
  *
- * Environment: DEPLOYER_KEY, USER_KEY, DELEGATE_KEY, HUB_GROUP_SCALAR, CHALLENGE_DURATION,
- * HUB_REVOCATION_DELAY, MANIFEST_PATH, DEPOSITS_PATH, KEYS_DIR (all share FixturenetScenario's
- * defaults/semantics).
+ * Environment: DEPLOYER_KEY, USER_KEY, DELEGATE_KEY, CHALLENGE_DURATION, HUB_REVOCATION_DELAY,
+ * MANIFEST_PATH, DEPOSITS_PATH, KEYS_DIR, FROST_SHARES_DIR (all share FixturenetScenario's
+ * defaults/semantics). The custodian is deployed with the group key in
+ * `FROST_SHARES_DIR/group-pubkey.json`, so FixturenetScenario signs for it with that group's shares.
  */
 contract CheckSettlePerAssetSetup is Script {
     uint256 internal constant FORCED_USER = 150e6;
@@ -41,7 +42,7 @@ contract CheckSettlePerAssetSetup is Script {
     struct Env {
         uint256 deployerKey;
         uint256 userKey;
-        uint256 groupScalar;
+        string frostSharesDir;
         uint48 challengeDuration;
         uint256 revocationDelay;
         string manifestPath;
@@ -103,8 +104,9 @@ contract CheckSettlePerAssetSetup is Script {
         d.consensusApp = new ConsensusApp();
         vm.stopBroadcast();
 
-        IFrostTestSigner frost = IFrostTestSigner(deployCode('FrostTestSigner.sol:FrostTestSigner'));
-        (uint256 gx, uint256 gy) = frost.publicKey(e.groupScalar);
+        string memory pubkeyJson = vm.readFile(string.concat(e.frostSharesDir, '/group-pubkey.json'));
+        uint256 gx = vm.parseJsonUint(pubkeyJson, '.x');
+        uint256 gy = vm.parseJsonUint(pubkeyJson, '.y');
         vm.broadcast(e.deployerKey);
         d.custodian = deployCode('HubCustodian.sol:HubCustodian', abi.encode(gx, gy, e.revocationDelay));
     }
@@ -226,7 +228,7 @@ contract CheckSettlePerAssetSetup is Script {
     function _env() internal view returns (Env memory e) {
         e.deployerKey = vm.envUint('DEPLOYER_KEY');
         e.userKey = vm.envUint('USER_KEY');
-        e.groupScalar = vm.envUint('HUB_GROUP_SCALAR');
+        e.frostSharesDir = vm.envOr('FROST_SHARES_DIR', string('/env'));
         e.challengeDuration = uint48(vm.envUint('CHALLENGE_DURATION'));
         e.revocationDelay = vm.envUint('HUB_REVOCATION_DELAY');
         e.manifestPath = vm.envOr('MANIFEST_PATH', string('/env/manifest.json'));

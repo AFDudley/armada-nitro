@@ -327,7 +327,10 @@ laconic-so deployment --dir <deployment> run-job armada-nitro-e2e
   2. `script/FixturenetScenario.s.sol`: `LocalScenario.s.sol`'s cooperative close and force
      close against `/env/manifest.json` (not `deployments/31337*.json`), funded by
      `deposits.json`'s calldata sent by the test account instead of `ArmadaNotes.unshield`'s
-     testing-mode notes. `CHALLENGE_DURATION` (default 30s, must match what stage 1 bound into
+     testing-mode notes. The hub custodian's group-authorized `execute` calls are signed with the
+     fixturenet's real FROST shares (`/env/share-1`, `/env/share-2`, written by
+     `armada-frost-keygen`) through the env image's `frost-signer` (`forge script --ffi`).
+     `CHALLENGE_DURATION` (default 30s, must match what stage 1 bound into
      the channelId) comes from the job environment. After the second channel's `challenge()`,
      `earlySettle()` (E10) attempts `transferAllAssets` immediately -- strictly inside the
      window, before any sleep -- and it must revert `'Channel not finalized.'`
