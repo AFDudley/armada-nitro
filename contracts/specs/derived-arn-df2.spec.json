@@ -1,0 +1,158 @@
+{
+  "id": "derived-arn-df2",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:23-26 (E16 S4): the watchtower and the e2e gate pay each asset of a finalized channel with its own transfer(assetIndex, ...) call. No payout of theirs depends on transferAllAssets or concludeAndTransferAllAssets, and no script tries one payout path and then falls back to another.\nWhat holds now? Describe the current, observed state. On integrated df56543, script/WatchtowerScenario.s.sol: respond() (lines 156-220) runs concludeAndTransferAllAssets on a vm.snapshotState() copy, reverts the snapshot, broadcasts concludeAndTransferAllAssets when that run succeeded (line 176), and otherwise calls conclude and then, for each asset, runs transfer(i, ...) on a snapshot and broadcasts the ones that succeeded. settleStale() (lines 258-296) runs transferAllAssets on a snapshot, broadcasts it when that run succeeded (line 279), and otherwise broadcasts transfer(0, ...) for asset index 0 only. stack/scripts/armada-watchtower-e2e-job.py:133 reads the respond() broadcast for a transaction whose function starts with concludeAndTransferAllAssets(. respondSingleSigner() (line 238) and respondLate() (line 251) call the all-assets functions in discrimination checks that expect a revert.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Read script/WatchtowerScenario.s.sol:156-220 and :258-296 at df56543. 2. Read stack/scripts/armada-watchtower-e2e-job.py:127-133.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) script/WatchtowerScenario.s.sol (watchtower scenarios) and stack/scripts/armada-watchtower-e2e-job.py",
+  "restatement": "The watchtower scenario script and the e2e gate must pay every asset of a finalized channel with its own separate transfer(assetIndex, ...) call. No payout step may depend on, or try, the combined functions transferAllAssets or concludeAndTransferAllAssets. No script may attempt one payout function first and fall back to a different payout function when the first attempt fails. Today, respond() in script/WatchtowerScenario.s.sol (lines 156-220) tries concludeAndTransferAllAssets on a throwaway state copy first. It broadcasts that combined call if the trial succeeds. If the trial fails, respond() calls conclude() and then tries transfer(i, ...) on a throwaway copy for each asset, broadcasting only the calls that succeeded. settleStale() (lines 258-296) tries transferAllAssets on a throwaway copy first and broadcasts it if that trial succeeds. If the trial fails, settleStale() broadcasts transfer(0, ...) for asset index 0 only, and never attempts the other asset indexes. stack/scripts/armada-watchtower-e2e-job.py (line 133) reads the respond() broadcast by looking for a transaction whose function name starts with concludeAndTransferAllAssets(. That check will stop matching once respond() stops broadcasting the combined call, so the job script must check for the per-asset transfer calls instead. The fix removes the trial-then-fallback logic from respond() and settleStale(), makes each function always pay through transfer(assetIndex, ...) for every asset, and updates the e2e job script's check to match. This is scenario and e2e-gate script hardening (docs/tasks/E16-adjudicator-hardening.md, S4): its worst failure is a wrong or flaky e2e signal about watchtower payout behavior, not a loss of custody over live user funds.",
+  "restatement_clauses": [
+    {
+      "id": "respond-per-asset-payout",
+      "text": "respond() in script/WatchtowerScenario.s.sol pays every asset of a finalized channel with its own transfer(assetIndex, ...) call, and never broadcasts a concludeAndTransferAllAssets call as its payout, whether or not that combined call would have succeeded."
+    },
+    {
+      "id": "settlestale-per-asset-payout",
+      "text": "settleStale() in script/WatchtowerScenario.s.sol pays every asset of a finalized channel with its own transfer(assetIndex, ...) call for every asset index, not only asset index 0, and never broadcasts a transferAllAssets call as its payout, whether or not that combined call would have succeeded."
+    },
+    {
+      "id": "e2e-job-removes-combined-check",
+      "text": "stack/scripts/armada-watchtower-e2e-job.py no longer checks the respond() broadcast for a transaction whose function starts with concludeAndTransferAllAssets(."
+    },
+    {
+      "id": "e2e-job-adds-per-asset-check",
+      "text": "stack/scripts/armada-watchtower-e2e-job.py checks the respond() broadcast for per-asset transfer(assetIndex, ...) calls instead of the combined-payout call."
+    }
+  ],
+  "goal": "Make the watchtower's respond() and settleStale() scenarios always pay every asset of a finalized channel through its own transfer(assetIndex, ...) call, remove their trial-then-fallback dependency on concludeAndTransferAllAssets and transferAllAssets, and update the e2e job script's broadcast check to match.",
+  "acceptance_criteria": [
+    "Finalize a two-asset channel and run the watchtower's respond() step twice: once under conditions where a single combined payout covering both assets would have gone through, and once where it would not. In both runs, the recorded transactions show one separate payment per asset, and never one transaction that pays both assets at once.",
+    "Finalize a two-asset channel and run the watchtower's settleStale() step twice: once under conditions where a single combined payout covering both assets would have gone through, and once where it would not. In both runs, the recorded transactions show one separate payment for each asset, including the second asset, and never one transaction that pays all assets at once.",
+    "The e2e watchtower job no longer looks for a combined-payout transaction name when it reads the respond() result.",
+    "The e2e watchtower job looks for per-asset payment transactions when it reads the respond() result."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Finalize a two-asset channel and run the watchtower's respond() step twice: once under conditions where a single combined payout covering both assets would have gone through, and once where it would not. In both runs, the recorded transactions show one separate payment per asset, and never one transaction that pays both assets at once."
+    },
+    {
+      "id": "c2",
+      "text": "Finalize a two-asset channel and run the watchtower's settleStale() step twice: once under conditions where a single combined payout covering both assets would have gone through, and once where it would not. In both runs, the recorded transactions show one separate payment for each asset, including the second asset, and never one transaction that pays all assets at once."
+    },
+    {
+      "id": "c3",
+      "text": "The e2e watchtower job no longer looks for a combined-payout transaction name when it reads the respond() result."
+    },
+    {
+      "id": "c4",
+      "text": "The e2e watchtower job looks for per-asset payment transactions when it reads the respond() result."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Finalize a two-asset channel and run the watchtower's respond() step twice: once under conditions where a single combined payout covering both assets would have gone through, and once where it would not. In both runs, the recorded transactions show one separate payment per asset, and never one transaction that pays both assets at once.",
+      "proves": "respond() always pays each asset with its own transfer call and never depends on, or falls back from, a single combined payout call.",
+      "restatement_clause_id": "respond-per-asset-payout",
+      "when": {
+        "script": "scripts/check-respond-per-asset-payout.sh",
+        "interpreter": "bash",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "combined_call_committed_when_feasible",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "combined_call_committed_when_infeasible",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "per_asset_transfers_committed_when_feasible",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "observe": "stdout_json",
+          "field": "per_asset_transfers_committed_when_infeasible",
+          "op": "eq",
+          "value": 2
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Finalize a two-asset channel and run the watchtower's settleStale() step twice: once under conditions where a single combined payout covering both assets would have gone through, and once where it would not. In both runs, the recorded transactions show one separate payment for each asset, including the second asset, and never one transaction that pays all assets at once.",
+      "proves": "settleStale() always pays every asset, not only the first one, with its own transfer call, and never depends on, or falls back from, a single combined payout call.",
+      "restatement_clause_id": "settlestale-per-asset-payout",
+      "when": {
+        "script": "scripts/check-settlestale-per-asset-payout.sh",
+        "interpreter": "bash",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "combined_call_committed_when_feasible",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "combined_call_committed_when_infeasible",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "per_asset_transfers_committed_when_feasible",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "observe": "stdout_json",
+          "field": "per_asset_transfers_committed_when_infeasible",
+          "op": "eq",
+          "value": 2
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The e2e watchtower job no longer looks for a combined-payout transaction name when it reads the respond() result.",
+      "proves": "The job script dropped its check for a transaction whose function starts with concludeAndTransferAllAssets(.",
+      "restatement_clause_id": "e2e-job-removes-combined-check",
+      "pattern": "concludeAndTransferAllAssets\\(",
+      "files": [
+        "stack/scripts/armada-watchtower-e2e-job.py"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep",
+      "description": "The e2e watchtower job looks for per-asset payment transactions when it reads the respond() result.",
+      "proves": "The job script checks for the per-asset transfer(assetIndex, ...) calls instead of the combined-payout call.",
+      "restatement_clause_id": "e2e-job-adds-per-asset-check",
+      "pattern": "transfer\\(",
+      "files": [
+        "stack/scripts/armada-watchtower-e2e-job.py"
+      ],
+      "clause_id": "c4"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check-respond-per-asset-payout.sh",
+    "scripts/check-settlestale-per-asset-payout.sh"
+  ]
+}
