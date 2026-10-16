@@ -8,10 +8,10 @@
 # its own isolated loopback: the scratch copy (an anvil fork of the real fixturenet, reverted
 # after) binds to 127.0.0.1:8545 *inside the job's own network namespace*, which is safe only
 # because that namespace is not shared with the host (the host's own geth keeps its 8545). This
-# matters because armada-poc's Railgun-engine chain config (lib/sdk/chain-config.ts) hardcodes
-# chain 31337's RPC to "http://localhost:8545" with no environment override, so the deposit
-# stage's balance scan only ever looks at loopback:8545 -- it must be the fork, not the real
-# chain. The job reaches the real fixturenet only to fork from it, by the geth pod's compose
+# matters because armada-poc's Railgun-engine chain config (lib/sdk/chain-config.ts, arn-e7a
+# c5) reads its RPC from HUB_RPC; this job sets HUB_RPC to the fork's own loopback (below), so
+# the deposit stage's balance scan looks at the fork, not the real chain. The job reaches the
+# real fixturenet only to fork from it, by the geth pod's compose
 # service DNS name (armada-fixturenet-geth:8545) on the deployment's own docker network --
 # never by touching the deployment's data directory (RC7) and never by stopping/resetting it.
 #

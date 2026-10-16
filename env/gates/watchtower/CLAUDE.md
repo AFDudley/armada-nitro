@@ -38,9 +38,9 @@ Runs against the operator-managed fixturenet via the `armada-watchtower-scenario
 laconic-so job (`scenario.sh` invokes the job through a helper in `scripts/`).
 The job mounts the `armada_env` volume at `/env`, so the manifest and the
 test-account keys are read from `/env` (not a host path), with no host access
-to the deployment's key files. The job runs with host networking, so
-`$WATCH_RPC` (default `http://127.0.0.1:8545`) resolves to geth's host-published
-port.
+to the deployment's key files. The job runs on the deployment's own docker network (no host networking,
+arn-e7a c3), so `$WATCH_RPC` (default `http://armada-fixturenet-geth:8545`)
+resolves geth by its compose service name.
 
 `held-state.json`/`challenge.json`/`.watcher-out` are per-run scratch files
 written inside the job's container (gitignored on the off chance anything

@@ -2,8 +2,8 @@ services:
   armada-nitro-e2e:
     image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     # Same reason as armada-env-verify: env/gates/nitro-e2e/prepare.ts uses
-    # lib/sdk/chain-config.ts's hardcoded http://localhost:8545 for chain 31337 (merkle-tree
-    # scan). Host networking makes that resolve to geth's host-published 127.0.0.1:8545.
+    # lib/sdk/chain-config.ts's merkle-tree scan for chain 31337, which reads its RPC from
+    # HUB_RPC (arn-e7a c5). No host networking: HUB_RPC (compose service name) resolves it.
     #
     # Every `$NAME` in the command block below is written `$$NAME` (docker compose's escape for
     # a literal `$`) and read from the container's real environment (set once, with defaults, by

@@ -57,10 +57,10 @@ MANIFEST_PATH: str = os.environ.get("MANIFEST_PATH", "/env/manifest.json")
 DEPOSITS_PATH: str = os.environ.get("DEPOSITS_PATH", "/env/watchtower-discrimination-e2e/deposits.json")
 # Scratch copy: fork the fixturenet, run the scenario, then revert the fork. The fork binds to
 # this container's own loopback at port 8545 -- the SAME port the real fixturenet's geth uses --
-# which is safe only because this job does not share the host's network namespace. Binding here
-# (rather than some other port) matters: armada-poc's Railgun-engine chain config
-# (lib/sdk/chain-config.ts) hardcodes chain 31337's RPC to "http://localhost:8545" with no env
-# override, so the deposit-building stage's balance scan only ever looks at loopback:8545.
+# which is safe only because this job does not share the host's network namespace.
+# armada-poc's Railgun-engine chain config (lib/sdk/chain-config.ts, arn-e7a c5) reads its RPC
+# from the HUB_RPC env var; this job sets HUB_RPC to the fork's own loopback below (build_deposits'
+# penv), so the deposit-building stage's balance scan looks at the fork, not the real chain.
 FORK_PORT: int = 8545
 FORK_RPC = f"http://127.0.0.1:{FORK_PORT}"
 HUB_RPC: str = FORK_RPC

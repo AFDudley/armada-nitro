@@ -2,12 +2,10 @@ services:
   armada-env-verify:
     image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     # lib/sdk/chain-config.ts (loadNetworkIntoEngine's merkle-tree scan, used by
-    # env/gates/pool-e2e/pool-e2e.ts) hardcodes the RPC for chain 31337 to
-    # http://localhost:8545 -- it ignores HUB_RPC. Host networking is what makes that
-    # resolve to the fixturenet: geth's 8545 is published to 127.0.0.1:8545 on the host
-    # (stack/README.md, `--map-ports-to-host localhost-same`).
-    # arn-e7a c3/c4: no host networking; the job runs on the deployment's own
-    # docker network and reaches geth by the compose service name (armada-fixturenet-geth:8545).
+    # env/gates/pool-e2e/pool-e2e.ts) reads its RPC from HUB_RPC, falling back to the
+    # compose service name (arn-e7a c5). No host networking: the job runs on the
+    # deployment's own docker network and reaches geth by the compose service name
+    # (armada-fixturenet-geth:8545, arn-e7a c3/c4).
     working_dir: /src/armada-nitro/env
     entrypoint: ["sh", "-c"]
     command:
@@ -22,7 +20,7 @@ services:
           --state /env --key-file /env/deployer.key --only funding)
         python3 -m reconciler \
           --target "${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}" \
-          --rpc "${RECONCILER_RPC_URL:-http://127.0.0.1:8545}" \
+          --rpc "${RECONCILER_RPC_URL:-http://armada-fixturenet-geth:8545}" \
           --state /env \
           --key-file "${DEPLOYER_KEY_FILE:-/env/deployer.key}" \
           --verify-only
@@ -43,11 +41,11 @@ services:
         cp /src/armada-nitro/env/gates/pool-e2e/pool-e2e.ts /src/armada-poc/scripts/gates/pool-e2e.ts
         cd /src/armada-poc
         MANIFEST_PATH="${MANIFEST_PATH:-/env/manifest.json}" \
-        HUB_RPC="${HUB_RPC:-http://127.0.0.1:8545}" DEPLOY_ENV=local CCTP_MODE=real \
+        HUB_RPC="${HUB_RPC:-http://armada-fixturenet-geth:8545}" DEPLOY_ENV=local CCTP_MODE=real \
           npx hardhat run scripts/gates/pool-e2e.ts --network hub
     environment:
       RECONCILER_TARGET: ${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}
-      RECONCILER_RPC_URL: ${RECONCILER_RPC_URL:-http://127.0.0.1:8545}
+      RECONCILER_RPC_URL: ${RECONCILER_RPC_URL:-http://armada-fixturenet-geth:8545}
       DEPLOYER_KEY_FILE: ${DEPLOYER_KEY_FILE:-/env/deployer.key}
       MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
       HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}

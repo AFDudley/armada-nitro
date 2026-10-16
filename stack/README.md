@@ -10,12 +10,13 @@ Osaka active at genesis.
 ### Commands
 
 ```sh
-# 1. Generate the deployment spec (maps geth's 8545/8546 and the beacon's 5052 to
-#    127.0.0.1 on the host). --config DEPLOYER_KEY=<key> puts the reconciler's deployer
-#    key into the spec's `config:` section (on the fixturenet, anvil account 0) -- see
-#    "Environment reconciler" below.
+# 1. Generate the deployment spec (maps geth's 8545/8546 and the beacon's 5052 to a
+#    random host port each, arn-e7a c1 -- no deployment pins a fixed host port).
+#    --config DEPLOYER_KEY=<key> puts the reconciler's deployer key into the spec's
+#    `config:` section (on the fixturenet, anvil account 0) -- see "Environment
+#    reconciler" below.
 laconic-so --stack stack/stacks/armada-nitro-fixturenet deploy init \
-  --map-ports-to-host localhost-same \
+  --map-ports-to-host localhost-fixed-random \
   --config DEPLOYER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
   --output ~/deployments/armada-fixturenet-e1-spec.yml
 
@@ -288,13 +289,12 @@ stack/scripts/fixturenet-recover <name>
 
 Two jobs whose green result on the fixturenet defines "done" for the environment
 (docs/ENVIRONMENT.md §7, `docs/tasks/E7-gates.md`). Both need `armada-env-reconcile` to have
-completed a full deploy first (they read `/env/manifest.json`), and both run with
-`network_mode: host`: `lib/sdk/chain-config.ts` inside armada-poc (used by both
+completed a full deploy first (they read `/env/manifest.json`), and neither uses host
+networking (arn-e7a c3): `lib/sdk/chain-config.ts` inside armada-poc (used by both
 `scripts/capture/e2e-armada-circuits.ts` and `env/gates/nitro-e2e/prepare.ts` for the Railgun
-engine's merkle-tree scan) hardcodes `http://localhost:8545` for chain 31337 rather than reading
-`HUB_RPC`; host networking is what makes `localhost:8545` inside the job container reach the
-fixturenet, since geth's 8545 is published to `127.0.0.1:8545` on the host (`deploy init
---map-ports-to-host localhost-same` above).
+engine's merkle-tree scan) reads its RPC from `HUB_RPC` (arn-e7a c5), which each job sets to
+geth's compose service name (`armada-fixturenet-geth:8545`) on the deployment's own docker
+network.
 
 ```sh
 laconic-so deployment --dir <deployment> run-job armada-env-verify
@@ -348,7 +348,7 @@ them (docs/tasks/E9-operability.md).
 ```sh
 laconic-so --stack stack/stacks/armada-nitro-fixturenet build-containers
 laconic-so --stack stack/stacks/armada-nitro-fixturenet deploy init \
-  --map-ports-to-host localhost-same \
+  --map-ports-to-host localhost-fixed-random \
   --config DEPLOYER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
   --output ~/deployments/armada-fixturenet-spec.yml
 laconic-so --stack stack/stacks/armada-nitro-fixturenet deploy create \
