@@ -33,7 +33,13 @@ export DOCKER_BUILDKIT=1
 # The gitlink shas come from the parent's tree (git ls-tree). If a submodule is not
 # checked out at its committed sha, fetch it (git submodule update) so the tar is
 # complete.
-CTX_TAR="/tmp/armada-env-ctx.tar"
+# The context tar and the submodule tars live in one per-run directory under the
+# repo's gitignored .scratch/, never /tmp (a size-capped tmpfs on the host), and
+# the directory is removed on exit.
+mkdir -p "${REPO_ROOT}/.scratch"
+BUILD_SCRATCH="$(mktemp -d "${REPO_ROOT}/.scratch/armada-env-build.XXXXXX")"
+trap 'rm -rf "$BUILD_SCRATCH"' EXIT
+CTX_TAR="${BUILD_SCRATCH}/ctx.tar"
 git -C "$REPO_ROOT" archive --format=tar HEAD > "$CTX_TAR"
 git -C "$REPO_ROOT" ls-tree HEAD lib/ | while read -r mode type sha name; do
   # `name` is the full path `lib/<basename>` (git ls-tree lists children of lib/).
@@ -48,7 +54,7 @@ git -C "$REPO_ROOT" ls-tree HEAD lib/ | while read -r mode type sha name; do
     cd "$REPO_ROOT"
     git submodule update --init -q "$name" 2>/dev/null || true
     if [ -d "$sub_dir" ] && git -C "$sub_dir" rev-parse HEAD >/dev/null 2>/dev/null; then
-      sub_tar="$(mktemp)"
+      sub_tar="$(mktemp -p "$BUILD_SCRATCH")"
       git -C "$sub_dir" archive --format=tar HEAD --prefix="$name/" > "$sub_tar"
       tar --concatenate --file="$CTX_TAR" "$sub_tar"
       rm -f "$sub_tar"

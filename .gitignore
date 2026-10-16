@@ -1,3 +1,6 @@
+# Throwaway scratch (per-run build dirs, logs, worktrees): never /tmp
+.scratch/
+
 # Compiler files
 cache/
 out/

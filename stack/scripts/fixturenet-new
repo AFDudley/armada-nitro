@@ -86,7 +86,8 @@ run_frost_keygen() {
 
 run_reconcile() {  # run_reconcile <label> [RECONCILER_TARGET-in-container]
   local label="$1" target="${2:-}"
-  local log="/tmp/fixturenet-new-${NAME}-${label}.log"
+  mkdir -p "${REPO_ROOT}/.scratch"
+  local log="${REPO_ROOT}/.scratch/fixturenet-new-${NAME}-${label}.log"
   echo "fixturenet-new: ${label} reconcile ..."
   if [ -n "$target" ]; then
     RECONCILER_TARGET="$target" "$LACONIC" deployment --dir "$DEP" \
