@@ -109,8 +109,17 @@ contract FixturenetScenario is Script {
             fp,
             finalState
         );
+        bytes32 channelId = NitroUtils.getChannelId(fp);
+        // E16 S4: the cooperative close finalizes channel 0 via `conclude`, then pays each
+        // asset through the adjudicator's own per-asset `transfer(assetIndex, ...)` call, never
+        // the single `concludeAndTransferAllAssets` all-assets payout. `conclude` (ForceMove)
+        // stores the channel's fingerprint with `stateHash = bytes32(0)` (not the hash of the
+        // final state) -- `concludeAndTransferAllAssets` itself relies on this, passing
+        // `bytes32(0)` to `_transferAllAssetsBody` -- so the per-asset `transfer` calls below
+        // must match that same `bytes32(0)` stateHash.
         vm.broadcast(c.deployerKey);
-        c.adjudicator.concludeAndTransferAllAssets(fp, signedFinal);
+        c.adjudicator.conclude(fp, signedFinal);
+        _settlePerAsset(c, channelId, finalState.outcome, bytes32(0));
     }
 
     function openAndChallenge() external {
@@ -177,32 +186,11 @@ contract FixturenetScenario is Script {
         bytes32 channelId = NitroUtils.getChannelId(fp);
         bytes32 stateHash = NitroUtils.hashState(fp, latest);
 
-        // E16 S4: probe `transferAllAssets` without ever marking it for broadcast (the same
-        // reason `earlySettle` above stays unwrapped): a reverting low-level `.call()` made
-        // under an active `vm.broadcast()` prank still gets queued by forge script and fails
-        // the later broadcast replay with "Simulated execution failed.", aborting this whole
-        // script before the fallback below could ever run. `vm.snapshotState`/`revertTo` undo
-        // the probe's own state change, so the real (broadcast) attempt below -- made only once
-        // we already know it won't revert -- runs against the exact state the probe did.
-        uint256 snap = vm.snapshotState();
-        bytes memory allData = abi.encodeCall(
-            c.adjudicator.transferAllAssets,
-            (channelId, latest.outcome, stateHash)
-        );
-        (bool ok, bytes memory ret) = address(c.adjudicator).call(allData);
-        vm.revertTo(snap);
-
-        if (ok) {
-            vm.broadcast(c.deployerKey);
-            c.adjudicator.transferAllAssets(channelId, latest.outcome, stateHash);
-            console2.log('transferAllAssets succeeded');
-        } else {
-            console2.log('transferAllAssets reverted:', _decodeRevertReason(ret));
-            // Fall back to the per-asset transfer path (MultiAssetHolder.transfer): pay each
-            // asset one at a time so a good asset is still paid and a reverting asset's
-            // recorded holdings stay untouched.
-            _settlePerAsset(c, channelId, latest.outcome, stateHash);
-        }
+        // E16 S4: settle goes straight to the per-asset path -- pay each asset of the forced
+        // channel through its own `transfer(assetIndex, ...)` call (which broadcasts itself,
+        // once per successfully-probed asset), with no all-assets `transferAllAssets` attempt
+        // or fallback.
+        _settlePerAsset(c, channelId, latest.outcome, stateHash);
     }
 
     /// @dev E16 S4: the per-asset fallback. For each asset of the outcome, probe (then, only if
