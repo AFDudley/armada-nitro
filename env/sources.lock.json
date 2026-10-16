@@ -26,9 +26,9 @@
     },
     {
       "name": "armada-poc",
-      "repo": "ship-armada/armada-poc",
-      "ref": "532bc0641443879e30c07b98970f6e11d5d9400c",
-      "commit": "532bc0641443879e30c07b98970f6e11d5d9400c"
+      "repo": "AFDudley/armada-poc",
+      "ref": "2db1d33889d9c7fb3f40f058a373081850aeb66f",
+      "commit": "2db1d33889d9c7fb3f40f058a373081850aeb66f"
     },
     {
       "name": "community-staking-module",
