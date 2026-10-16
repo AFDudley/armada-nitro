@@ -1,0 +1,135 @@
+{
+  "id": "derived-arn-2e6",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:38-39 (E16 S4 test): in a two-asset channel with one asset's token made to revert on transfer, transfer(assetIndex) still pays the other asset, and transferAllAssets reverts as a whole.\nWhat holds now? Describe the current, observed state. On integrated df56543, test/PerAssetExitS4.t.sol (arn-bfc): test_transfer_assetIndex_paysOtherAsset_whenPairedTokenReverts calls adjudicator.transfer(0, ...) and asserts only adjudicator.holdings(usdc, channelId) == 0 and adjudicator.holdings(revToken, channelId) == HUB_FUNDS (lines 87-91); it reads no recipient's token balance. test_transferAllAssets_revertsAsWhole_whenPairedTokenReverts uses vm.expectRevert() with no reason (line 113) before transferAllAssets. No search was made for a mutation that these tests miss.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Read test/PerAssetExitS4.t.sol:66-121 at df56543.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) test/PerAssetExitS4.t.sol",
+  "restatement": "Two regression tests in test/PerAssetExitS4.t.sol check the per-asset-exit invariant for the adjudicator contract. The first test, test_transfer_assetIndex_paysOtherAsset_whenPairedTokenReverts, calls adjudicator.transfer(0, channelId, outcomeBytes, stateHash, new uint256[](0)). It currently asserts only adjudicator.holdings(usdc, channelId) == 0 and adjudicator.holdings(revToken, channelId) == HUB_FUNDS (lines 90-91). It never reads the custodian's real USDC token balance. A defect that clears the internal ledger without a real payment would still pass this test undetected. The fix adds an assertion that the custodian's real USDC balance increases by exactly HUB_FUNDS (100e6) when transfer(0, ...) runs. The second test, test_transferAllAssets_revertsAsWhole_whenPairedTokenReverts, currently expects any revert through a bare vm.expectRevert() (line 113) before adjudicator.transferAllAssets(channelId, state.outcome, stateHash) runs. A revert for any unrelated cause would still pass this test undetected. The fix replaces the bare revert expectation with the exact reason 'RevertingTransferToken: transfer blocked'. Both changes are confined to the test file; they do not touch adjudicator production code.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "test_transfer_assetIndex_paysOtherAsset_whenPairedTokenReverts (test/PerAssetExitS4.t.sol:67-92) calls adjudicator.transfer(0, channelId, outcomeBytes, stateHash, new uint256[](0)) and currently asserts only adjudicator.holdings(usdc, channelId) == 0 and adjudicator.holdings(revToken, channelId) == HUB_FUNDS (lines 90-91); it must instead also prove the USDC actually reached the custodian, by asserting the custodian's real USDC token balance increases by HUB_FUNDS (100e6) when transfer(0, ...) runs."
+    },
+    {
+      "id": "c2",
+      "text": "test_transferAllAssets_revertsAsWhole_whenPairedTokenReverts (test/PerAssetExitS4.t.sol:95-119) currently expects any revert with a bare, reason-less vm.expectRevert() (line 113) before adjudicator.transferAllAssets(channelId, state.outcome, stateHash); it must instead expect the exact revert reason 'RevertingTransferToken: transfer blocked', so a revert for any other cause does not pass the test."
+    }
+  ],
+  "goal": "Strengthen the two S4 regression tests so each one proves the real, externally visible outcome. The first test must prove a real USDC payment to the custodian's wallet. The second test must prove the one specific blocked-token revert reason, not any revert.",
+  "acceptance_criteria": [
+    "Someone reading the first test sees it record the custodian's real USDC wallet balance twice: once before the single-asset payout, once after.",
+    "Running the single-asset payout test against the real adjudicator, custodian, and token contracts still shows a pass, confirming the custodian's balance really rose by the full HUB_FUNDS amount.",
+    "Someone reading the second test sees it expect the exact wording 'RevertingTransferToken: transfer blocked' before the whole-channel payout call.",
+    "Someone reading the second test no longer finds a bare revert expectation with no stated reason before the whole-channel payout call.",
+    "Running the whole-channel payout test against the real adjudicator, custodian, and token contracts still shows a pass, confirming the one stated reason really is the reason the call fails."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Someone reading the first test sees it record the custodian's real USDC wallet balance twice: once before the single-asset payout, once after."
+    },
+    {
+      "id": "c2",
+      "text": "Running the single-asset payout test against the real adjudicator, custodian, and token contracts still shows a pass, confirming the custodian's balance really rose by the full HUB_FUNDS amount."
+    },
+    {
+      "id": "c3",
+      "text": "Someone reading the second test sees it expect the exact wording 'RevertingTransferToken: transfer blocked' before the whole-channel payout call."
+    },
+    {
+      "id": "c4",
+      "text": "Someone reading the second test no longer finds a bare revert expectation with no stated reason before the whole-channel payout call."
+    },
+    {
+      "id": "c5",
+      "text": "Running the whole-channel payout test against the real adjudicator, custodian, and token contracts still shows a pass, confirming the one stated reason really is the reason the call fails."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Someone reading the first test sees it record the custodian's real USDC wallet balance twice: once before the single-asset payout, once after.",
+      "proves": "Proves the test now checks the custodian's real wallet balance, not only the adjudicator's internal ledger, as required by clause c1.",
+      "restatement_clause_id": "c1",
+      "type": "grep",
+      "pattern": "usdc\\.balanceOf\\(address\\(custodian\\)\\)",
+      "files": [
+        "test/PerAssetExitS4.t.sol"
+      ],
+      "count": {
+        "unit": "lines",
+        "op": "ge",
+        "value": 2
+      },
+      "clause_id": "c1"
+    },
+    {
+      "description": "Running the single-asset payout test against the real adjudicator, custodian, and token contracts still shows a pass, confirming the custodian's balance really rose by the full HUB_FUNDS amount.",
+      "proves": "Proves the real USDC payment to the custodian actually happens, closing clause c1.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/verify-s4-real-balance-paid.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "passed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    },
+    {
+      "description": "Someone reading the second test sees it expect the exact wording 'RevertingTransferToken: transfer blocked' before the whole-channel payout call.",
+      "proves": "Proves the test checks the one specific blocked-token reason required by clause c2.",
+      "restatement_clause_id": "c2",
+      "type": "grep",
+      "pattern": "vm\\.expectRevert\\((bytes\\()?[\"']RevertingTransferToken: transfer blocked[\"']\\)?\\)",
+      "files": [
+        "test/PerAssetExitS4.t.sol"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "description": "Someone reading the second test no longer finds a bare revert expectation with no stated reason before the whole-channel payout call.",
+      "proves": "Proves the weak, reason-less revert check named in clause c2 is gone.",
+      "restatement_clause_id": "c2",
+      "type": "grep_absent",
+      "pattern": "vm\\.expectRevert\\(\\s*\\)\\s*;",
+      "files": [
+        "test/PerAssetExitS4.t.sol"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "description": "Running the whole-channel payout test against the real adjudicator, custodian, and token contracts still shows a pass, confirming the one stated reason really is the reason the call fails.",
+      "proves": "Proves the whole-channel payout really fails with that one specific reason, closing clause c2.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/verify-s4-exact-revert-reason.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "passed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c5"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/verify-s4-exact-revert-reason.sh",
+    "scripts/verify-s4-real-balance-paid.sh"
+  ]
+}
