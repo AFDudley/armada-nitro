@@ -4,7 +4,7 @@
 # after the challenge window (late-response) reverts and the payout still equals state N; and the
 # watchtower's normal (both-parties-signed, in-window) behavior is unchanged.
 #
-# Unlike the other gate jobs in this stack, this job does NOT use network_mode: host. It needs
+# Unlike the other gate jobs in this stack, this job does NOT use host networking (arn-e7a c3). It needs
 # its own isolated loopback: the scratch copy (an anvil fork of the real fixturenet, reverted
 # after) binds to 127.0.0.1:8545 *inside the job's own network namespace*, which is safe only
 # because that namespace is not shared with the host (the host's own geth keeps its 8545). This
