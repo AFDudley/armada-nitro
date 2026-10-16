@@ -170,6 +170,28 @@ if [ "$(data_fs)" != tmpfs ]; then
 fi
 echo "fixturenet-new: RAM disk OK: ${DEP}/data is a tmpfs, $(df -h --output=size "${DEP}/data" | tail -1 | tr -d ' ')"
 
+# `docker compose up` can transiently fail right after a fresh bind-mount-over-tmpfs
+# volume is created (a newly created volume's empty tmpfs `_data` is occasionally not
+# yet visible to the OCI runtime's mount syscall, independent of this script's own
+# port/volume changes) -- "error mounting ... to rootfs at /data: ... no such file or
+# directory". Retry `start` a few times before giving up.
+start_deployment() {
+  local attempt out rc
+  for attempt in 1 2 3; do
+    out=$("$LACONIC" deployment --dir "$DEP" start 2>&1)
+    rc=$?
+    if [ $rc -eq 0 ]; then
+      return 0
+    fi
+    echo "$out" >&2
+    if [ "$attempt" -lt 3 ]; then
+      echo "fixturenet-new: start failed (attempt ${attempt}/3); retrying in 5s ..." >&2
+      sleep 5
+    fi
+  done
+  return 1
+}
+
 if [ "$MODE" = warm ]; then
   # ---- WARM: restore the EL-only base snapshot, then only armada_nitro + funding.
   # restore_snapshot puts geth's data + armada_env + the EL genesis back and hands
@@ -180,7 +202,7 @@ if [ "$MODE" = warm ]; then
   tr=$(now)
   restore_snapshot "$DEP" "$SNAP"
   echo "fixturenet-new: restore took $(secs $(($(now)-tr)))"
-  "$LACONIC" deployment --dir "$DEP" start
+  start_deployment
   wait_for_blocks
   tf=$(now)
   run_frost_keygen
@@ -190,7 +212,7 @@ else
   # ---- COLD: build the base layer, snapshot it, then finish the full run ----
   # data/ is a fresh RAM disk: create the volume dirs the bind mounts need.
   for v in armada_env $SNAP_ALL_VOLUMES; do sudo mkdir -p "${DEP}/data/${v}"; done
-  "$LACONIC" deployment --dir "$DEP" start
+  start_deployment
   wait_for_blocks
   # Deliver the committed base target into the armada_env volume (seen as /env)
   # and select it with RECONCILER_TARGET; the image's default full target is
