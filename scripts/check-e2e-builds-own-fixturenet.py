@@ -69,11 +69,14 @@ def _own_name() -> str:
 
 def _build_or_reuse(name: str) -> tuple[pathlib.Path, bool]:
     """Build the own fixturenet from the tree under test, or reuse it when it is
-    already running (so a sibling oracle does not rebuild it)."""
+    already running (so a sibling oracle does not rebuild it). The build's own
+    output goes to stderr so this oracle's stdout stays pure JSON."""
     dep = pathlib.Path.home() / "deployments" / name
     if dep.exists() and _dep_running(dep):
         return dep, True
-    r = subprocess.run(["bash", "stack/scripts/fixturenet-new", name])
+    r = subprocess.run(["bash", "stack/scripts/fixturenet-new", name], capture_output=True, text=True)
+    sys.stderr.write(r.stdout)
+    sys.stderr.write(r.stderr)
     return dep, (r.returncode == 0 and _dep_running(dep))
 
 

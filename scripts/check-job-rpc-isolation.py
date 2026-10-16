@@ -102,7 +102,9 @@ def _build_or_reuse(name: str) -> tuple[pathlib.Path, bool]:
     dep = pathlib.Path.home() / "deployments" / name
     if dep.exists() and _dep_running(dep):
         return dep, True
-    r = subprocess.run(["bash", "stack/scripts/fixturenet-new", name])
+    r = subprocess.run(["bash", "stack/scripts/fixturenet-new", name], capture_output=True, text=True)
+    sys.stderr.write(r.stdout)
+    sys.stderr.write(r.stderr)
     return dep, (r.returncode == 0 and _dep_running(dep))
 
 
