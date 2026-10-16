@@ -10,7 +10,8 @@ services:
     # the `environment:` section) -- docker compose interpolates any *unescaped* `$NAME`/`${NAME}`
     # in this file against the *host*'s environment at parse time, which would otherwise silently
     # blank a variable this container's own shell was meant to read at runtime.
-    network_mode: host
+    # arn-e7a c3/c4: no host networking; the job runs on the deployment's own
+    # docker network and reaches geth by the compose service name (armada-fixturenet-geth:8545).
     working_dir: /src/armada-nitro
     entrypoint: ["sh", "-c"]
     command:
@@ -21,7 +22,7 @@ services:
         # funding target first so the funding postcondition and later gate runs hold. funding.py
         # mints only the shortfall and sends nothing when balances are already at target.
         (cd /src/armada-nitro/env && python3 -m reconciler \
-          --target /src/armada-nitro/env/targets/fixturenet.json --rpc http://127.0.0.1:8545 \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc http://armada-fixturenet-geth:8545 \
           --state /env --key-file /env/deployer.key --only funding)
 
         # Circuits are baked into the image (docs/tasks/E9-operability.md); this verifies them
@@ -60,7 +61,7 @@ services:
         run_script script/FixturenetScenario.s.sol --sig 'settle()'
         forge script script/FixturenetScenario.s.sol --sig 'verify()' --rpc-url "$$HUB_RPC"
     environment:
-      HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
       MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
       DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/nitro-e2e/deposits.json}
       CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}

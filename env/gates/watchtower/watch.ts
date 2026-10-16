@@ -25,7 +25,7 @@
 import { ethers } from "ethers";
 import * as fs from "node:fs";
 
-const RPC = process.env.WATCH_RPC ?? "http://127.0.0.1:8545";
+const RPC = process.env.WATCH_RPC ?? "http://armada-fixturenet-geth:8545";
 const ADJUDICATOR = process.env.WATCH_ADJUDICATOR;
 const CHANNEL = process.env.WATCH_CHANNEL;
 const HELD_FILE = process.env.WATCH_STATE_FILE;

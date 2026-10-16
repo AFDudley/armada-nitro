@@ -27,7 +27,7 @@ import subprocess
 import sys
 import time
 
-HUB_RPC: str = os.environ.get("HUB_RPC", "http://127.0.0.1:8545")
+HUB_RPC: str = os.environ.get("HUB_RPC", "http://armada-fixturenet-geth:8545")
 STATE_N_USER: int = int(os.environ.get("STATE_N_USER", "1000000"))
 STATE_N1_USER: int = int(os.environ.get("STATE_N1_USER", "2000000"))
 CHALLENGE_DURATION: str = os.environ.get("CHALLENGE_DURATION", "30")

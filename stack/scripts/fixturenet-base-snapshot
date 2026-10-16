@@ -26,7 +26,26 @@ REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
 # shellcheck source=stack/scripts/fixturenet-base-common.sh
 source "${SCRIPT_DIR}/fixturenet-base-common.sh"
 
-RPC="${GETH_RPC_URL:-http://127.0.0.1:8545}"
+
+# arn-e7a c2: the geth host port is random per deployment, so it is discovered with
+# `docker port` (the geth container is named "<cluster-id>-armada-fixturenet-geth-1";
+# the cluster-id comes from the deployment's deployment.yml).
+get_rpc_url() {
+  local ctr line
+  local cluster
+  cluster=$(awk '/^cluster-id:/{print $2}' "${DEP}/deployment.yml" 2>/dev/null || true)
+  if [ -z "${cluster}" ]; then
+    echo "fixturenet-base-snapshot: no cluster-id in ${DEP}/deployment.yml" >&2
+    return 1
+  fi
+  ctr="${cluster}-armada-fixturenet-geth-1"
+  line=$(docker port "${ctr}" 8545 2>/dev/null || true)
+  if [ -z "${line}" ]; then
+    echo "fixturenet-base-snapshot: FAILED: no published 8545 for ${ctr}" >&2
+    return 1
+  fi
+  echo "http://${line#*->}"
+}
 
 usage() { echo "usage: $0 <deployment-dir>" >&2; exit 2; }
 [ $# -eq 1 ] || usage
@@ -49,10 +68,11 @@ echo "fixturenet-base-snapshot: halting block production (stopping the consensus
 dc "$DEP" stop $CL_SERVICES
 
 # 2. Record geth's final head block as the shadow-fork file.
-echo "fixturenet-base-snapshot: recording geth's head block from ${RPC} ..."
+RPC_URL=$(get_rpc_url)
+echo "fixturenet-base-snapshot: recording geth's head block from ${RPC_URL} ..."
 headfile=$(mktemp)
 trap 'rm -f "$headfile"' EXIT
-capture_head_block "$RPC" > "$headfile"
+capture_head_block "$RPC_URL" > "$headfile"
 echo "fixturenet-base-snapshot: head: number=$(jq -r .result.number "$headfile") ($(( $(jq -r .result.number "$headfile") ))) hash=$(jq -r .result.hash "$headfile")"
 
 # 3. Stop geth so its on-disk head equals the block we just recorded, then tar the

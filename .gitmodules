@@ -9,7 +9,7 @@
 	url = https://github.com/statechannels/exit-format
 [submodule "lib/armada-poc"]
 	path = lib/armada-poc
-	url = https://github.com/ship-armada/armada-poc
+	url = https://github.com/AFDudley/armada-poc
 [submodule "lib/frost-secp256k1-evm"]
 	path = lib/frost-secp256k1-evm
 	url = https://github.com/StackOverflowExcept1on/frost-secp256k1-evm

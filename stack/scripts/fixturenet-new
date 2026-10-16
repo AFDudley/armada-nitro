@@ -27,7 +27,10 @@ source "${SCRIPT_DIR}/fixturenet-base-common.sh"
 LACONIC="${LACONIC_SO:-${HOME}/bin/laconic-so}"
 STACK="stack/stacks/armada-nitro-fixturenet"
 CONFIG="stack/config/deployment-config.example.env"
-RPC="http://127.0.0.1:8545"
+# arn-e7a c1/c2: the host port is random per deployment (laconic-so
+# --map-ports-to-host localhost-fixed-random), so the geth RPC is not fixed and
+# is discovered with `docker port` (see resolve_geth_rpc, called by wait_for_blocks).
+RPC=
 
 # Jobs name their image as cerc/armada-nitro-{env,foundry}:${ARMADA_IMAGE_TAG}
 # (arn-895): the image built from this checkout's committed content (git archive
@@ -54,9 +57,35 @@ secs() { local s=$1; printf '%dm%02ds' $((s/60)) $((s%60)); }
 
 # Block until geth produces at least one new block (proves live block
 # production for both a fresh chain and a restored one), or time out.
+# Discover this deployment's geth RPC. The host port is random per deployment
+# (arn-e7a c1/c2), so it is found with `docker port` against the geth container
+# (named "<cluster-id>-armada-fixturenet-geth-1", cluster-id from deployment.yml).
+# The job itself reaches geth by the compose service name (c4), not the host port;
+# the host port here is only for this script's own block-production check.
+resolve_geth_rpc() {
+  local cluster ctr line
+  cluster=$(awk '/^cluster-id:/{print $2}' "${DEP}/deployment.yml" 2>/dev/null || true)
+  if [ -z "${cluster}" ]; then
+    echo "fixturenet-new: no cluster-id in ${DEP}/deployment.yml" >&2
+    return 1
+  fi
+  ctr="${cluster}-armada-fixturenet-geth-1"
+  line=$(docker port "${ctr}" 8545 2>/dev/null || true)
+  if [ -z "${line}" ]; then
+    echo "fixturenet-new: FAILED: no published 8545 for ${ctr}" >&2
+    return 1
+  fi
+  RPC="http://${line#*->}"
+  echo "fixturenet-new: geth RPC = ${RPC} (docker port)"
+  return 0
+}
+
 wait_for_blocks() {
   local deadline=$(( $(now) + 180 )) b0 b1
-  echo "fixturenet-new: waiting for block production on ${RPC} ..."
+  # Discover the random host port with `docker port` (arn-e7a c2).
+  if ! resolve_geth_rpc; then
+    return 1
+  fi
   b0=""
   while [ "$(now)" -lt "$deadline" ]; do
     b1=$(curl -s --max-time 3 -H 'Content-Type: application/json' \
@@ -112,7 +141,7 @@ echo "=============================================================="
 if [ ! -e "$DEP" ]; then
   echo "fixturenet-new: deploy init + create ${DEP}"
   "$LACONIC" --stack "$STACK" deploy init \
-    --map-ports-to-host localhost-same \
+    --map-ports-to-host localhost-fixed-random \
     --config-file "${REPO_ROOT}/${CONFIG}" \
     --output "$SPEC"
   "$LACONIC" --stack "$STACK" deploy create \

@@ -21,7 +21,7 @@ import { ethers } from "ethers";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-const RPC = process.env.WATCH_RPC ?? "http://127.0.0.1:8545";
+const RPC = process.env.WATCH_RPC ?? "http://armada-fixturenet-geth:8545";
 const MANIFEST = process.env.MANIFEST_PATH ?? "";
 const KEYS_DIR = process.env.KEYS_DIR ?? "";
 

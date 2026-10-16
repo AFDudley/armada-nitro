@@ -6,7 +6,8 @@ services:
     # http://localhost:8545 -- it ignores HUB_RPC. Host networking is what makes that
     # resolve to the fixturenet: geth's 8545 is published to 127.0.0.1:8545 on the host
     # (stack/README.md, `--map-ports-to-host localhost-same`).
-    network_mode: host
+    # arn-e7a c3/c4: no host networking; the job runs on the deployment's own
+    # docker network and reaches geth by the compose service name (armada-fixturenet-geth:8545).
     working_dir: /src/armada-nitro/env
     entrypoint: ["sh", "-c"]
     command:
@@ -17,7 +18,7 @@ services:
         # funding target first so the funding postcondition and later gate runs hold. funding.py
         # mints only the shortfall and sends nothing when balances are already at target.
         (cd /src/armada-nitro/env && python3 -m reconciler \
-          --target /src/armada-nitro/env/targets/fixturenet.json --rpc http://127.0.0.1:8545 \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc http://armada-fixturenet-geth:8545 \
           --state /env --key-file /env/deployer.key --only funding)
         python3 -m reconciler \
           --target "${RECONCILER_TARGET:-/src/armada-nitro/env/targets/fixturenet.json}" \
@@ -49,7 +50,7 @@ services:
       RECONCILER_RPC_URL: ${RECONCILER_RPC_URL:-http://127.0.0.1:8545}
       DEPLOYER_KEY_FILE: ${DEPLOYER_KEY_FILE:-/env/deployer.key}
       MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
-      HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
     volumes:
       - armada_env:/env
 

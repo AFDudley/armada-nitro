@@ -15,7 +15,7 @@
 #                         "payout_lamports": <int>, "check_line": "..."}}
 #
 # All state/keys come from the mounted armada_env volume at /env (RC2); the job reaches the
-# deployment only through geth RPC at 127.0.0.1:8545 (network_mode host), never by reading or
+# deployment only through geth RPC at the compose service name (armada-fixturenet-geth:8545, arn-e7a c4), never by reading or
 # writing files under the deployment's own data directory (RC7). The job needs no elevated
 # privileges and no file-ownership changes (RC5).
 services:
@@ -23,7 +23,8 @@ services:
     image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
     # Host networking so 127.0.0.1:8545 resolves to geth's host-published port ($$ escapes a
     # literal $ from the orchestrator's own template interpolation).
-    network_mode: host
+    # arn-e7a c3/c4: no host networking; the job runs on the deployment's own
+    # docker network and reaches geth by the compose service name (armada-fixturenet-geth:8545).
     working_dir: /src/armada-nitro
     entrypoint: ["sh", "-c"]
     command:
@@ -44,7 +45,7 @@ services:
         # window elapses, stale state settles), then prints the single JSON line to stdout.
         exec python3 /src/armada-nitro/stack/scripts/armada-watchtower-e2e-job.py
     environment:
-      HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
       MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
       DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/watchtower-e2e/deposits.json}
       CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}

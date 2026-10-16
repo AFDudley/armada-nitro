@@ -13,7 +13,8 @@
 services:
   armada-watchtower-scenario:
     image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
-    network_mode: host   # so 127.0.0.1:8545 resolves to geth's host-published port
+    # arn-e7a c3/c4: no host networking; the job runs on the deployment's own docker
+    # network and reaches geth by the compose service name (armada-fixturenet-geth:8545).
     working_dir: /src/armada-nitro/env/gates/watchtower
     entrypoint: ["sh", "-c"]
     command:
@@ -32,7 +33,7 @@ services:
         export MANIFEST_PATH="$${MANIFEST_PATH:-/env/manifest.json}"
         export KEYS_DIR="$${KEYS_DIR:-/env}"
         export WATCH_STATE_FILE="$${WATCH_STATE_FILE:-held-state.json}"
-        export WATCH_RPC="$${WATCH_RPC:-http://127.0.0.1:8545}"
+        export WATCH_RPC="$${WATCH_RPC:-http://armada-fixturenet-geth:8545}"
 
         # 1. Build + sign the demo channel's states; the helper writes held-state.json
         #    (the state the watcher holds) and challenge.json (the counterparty's

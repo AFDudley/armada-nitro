@@ -35,7 +35,7 @@ sys.path.insert(0, str(_repo_root / "scripts"))
 from armada_job_helper import run_job as _helper_run_job  # noqa: E402
 
 DEFAULT_DIR = pathlib.Path.home() / "deployments" / "armada-fixturenet-e12"
-DEFAULT_RPC = "http://127.0.0.1:8545"
+DEFAULT_RPC = "http://armada-fixturenet-geth:8545"
 JOB_NAME = "armada-watchtower-e2e"
 
 

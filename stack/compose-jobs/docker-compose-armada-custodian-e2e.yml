@@ -1,8 +1,9 @@
 services:
   armada-custodian-e2e:
     image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
-    # Mirrors docker-compose-armada-nitro-e2e.yml (host networking so 127.0.0.1:8545 resolves
-    # to geth's host-published port; $$ escapes for a literal $ in the container environment).
+    # Mirrors docker-compose-armada-nitro-e2e.yml: the job runs on the deployment's own
+    # docker network (no host networking) and reaches geth by the compose service name
+    # (armada-fixturenet-geth:8545, arn-e7a c3/c4). $$ escapes for a literal $.
     #
     # The difference (E14c): the hub custodian used here is freshly deployed under a real 2-of-3
     # FROST group (tools/frost-signer's deterministic trusted-dealer keygen), and the
@@ -14,7 +15,6 @@ services:
     # frost-signer has no cargo/rustc in this image; the checker builds it on the host
     # (`cargo build --release --target x86_64-unknown-linux-musl`, portable across the host's
     # and this image's glibc) and this volume mounts it in at a fixed PATH location.
-    network_mode: host
     working_dir: /src/armada-nitro
     entrypoint: ["sh", "-c"]
     command:
@@ -157,7 +157,7 @@ services:
           }')"
         echo "$$FINAL_JSON"
     environment:
-      HUB_RPC: ${HUB_RPC:-http://127.0.0.1:8545}
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
       MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
       DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/custodian-e2e/deposits.json}
       CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}

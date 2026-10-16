@@ -7,7 +7,7 @@ checkout's committed content if it is missing, selects it (ARMADA_IMAGE_TAG via
 `laconic-so deploy create --update` -- this also syncs the deployment's compose-jobs, so
 the job registers without a manual file copy), and calls run-job. The job's stdout is
 parsed for its JSON line; this checker then reads the hub custodian's on-chain group key
-via geth RPC (http://127.0.0.1:8545), and re-emits one JSON line:
+via geth RPC (the deployment's published geth port, discovered with `docker port`), and re-emits one JSON line:
 
   {"group_pubkey_x", "group_pubkey_y", "shares_present", "already_present",
    "custodian_group_key_matches"}
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import subprocess
 import sys
 
@@ -33,7 +34,42 @@ JOB = "armada-frost-keygen"
 # E12's hub custodian: the FROST group key the full reconcile deployed (from the
 # deployment's manifest, not the data dir).
 CUSTODIAN = "0xae2abbde6c9829141675fa0a629a675badbb0d9f"
-HOST_RPC = "http://127.0.0.1:8545"
+
+
+# arn-e7a c2: the host port is random per deployment (laconic-so --map-ports-to-host
+# localhost-fixed-random), so it is discovered with `docker port` (the geth container is
+# named "<cluster-id>-armada-fixturenet-geth-1"; the cluster-id comes from deployment.yml).
+def _find_host_rpc() -> str:
+    """Discover the deployment's published geth port with `docker port`."""
+    dep_dir = pathlib.Path(
+        os.environ.get(
+            "ARMADA_IMAGE_DEP_DIR", str(pathlib.Path.home() / "deployments" / "armada-fixturenet-e12")
+        )
+    )
+    cluster = None
+    deployment_yml = dep_dir / "deployment.yml"
+    if deployment_yml.exists():
+        for line in deployment_yml.read_text().splitlines():
+            if line.startswith("cluster-id:"):
+                cluster = line.split(":", 1)[1].strip()
+                break
+    if cluster is None:
+        print(f"run-frost-keygen-check: no cluster-id in {deployment_yml}", file=sys.stderr)
+        return "http://localhost:8545"
+    container = f"{cluster}-armada-fixturenet-geth-1"
+    r = subprocess.run(["docker", "port", container, "8545"], capture_output=True, text=True, timeout=30)
+    # `docker port` returns e.g. "8545/tcp -> 127.0.0.1:58332" or "8545/tcp -> 0.0.0.0:58332".
+    if r.returncode != 0 or not r.stdout.strip():
+        print(
+            f"run-frost-keygen-check: docker port failed (exit {r.returncode}): {r.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return "http://localhost:8545"
+    port = r.stdout.splitlines()[0].split("->", 1)[1].strip()
+    return f"http://{port}"
+
+
+HOST_RPC = _find_host_rpc()
 
 
 def run_job() -> dict[str, object]:
@@ -61,7 +97,7 @@ def run_job() -> dict[str, object]:
 
 
 def _cast_call(sig: str) -> str | None:
-    """Read a uint256 from the chain via `cast call` against geth's host-published port."""
+    """Read a uint256 from the chain via `cast call` against geth's host-published port (discovered via docker port)."""
     r = subprocess.run(
         ["cast", "call", CUSTODIAN, sig, "--rpc-url", HOST_RPC],
         capture_output=True,

@@ -48,7 +48,7 @@
   },
   "network": {
     "chainId": 31337,
-    "hostRpcUrl": "http://127.0.0.1:8545",
+    "hostRpcUrl": "http://armada-fixturenet-geth:8545",
     "name": "fixturenet",
     "rpcUrl": "http://armada-fixturenet-geth:8545"
   },
