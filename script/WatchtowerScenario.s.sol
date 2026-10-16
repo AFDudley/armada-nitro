@@ -29,30 +29,16 @@ import {ChannelStates} from '../test/helpers/ChannelStates.sol';
  * (turnNum 11, IS final, user gets STATE_N1_USER > STATE_N_USER). The hub then challenges with
  * the stale state N -- `openAndChallenge`.
  *
- * Scenario A's watcher response is `respond`: broadcasting `concludeAndTransferAllAssets` with
- * the fully-signed, final state N+1. `_conclude` (ForceMove.sol) only requires the channel not
- * already be finalized and the candidate be unanimously signed and final -- it does not care
- * whether a stale challenge is outstanding or whether the challenge window has elapsed. That
- * makes it strictly simpler than a `checkpoint` (which only clears the challenge and still needs
- * a later `transferAllAssets` once some state finalizes) while being just as valid a ForceMove
- * response, and it is what actually defeats a stale force-close the fastest: a single
- * transaction, immediately, finalizes the channel on the newer state and pays it out.
+ * Scenario A's watcher response is `respond`: it finalizes the channel on the fully-signed,
+ * final state N+1 via the payout-free `conclude`, then pays out EVERY asset of the outcome with
+ * its own `transfer(assetIndex, ...)` call (E16 S4 / design 15 I5 / arn-5a6) -- one broken
+ * asset never blocks payout of the working ones. A channel's second and third assets (if any)
+ * are carried via SECOND_ASSET/SECOND_ASSET_AMOUNT and THIRD_ASSET/THIRD_ASSET_AMOUNT below, not
+ * through the deposits/manifest files that fund the first asset -- see `_withSecondAsset`.
  *
- * `respond`'s all-assets payout is all-or-nothing: `transferAllAssets` either pays every asset of
- * the outcome or (if any single asset's token reverts on transfer) reverts the whole transaction,
- * including the finalization `_conclude` performed in the same call. Per design 15's invariant I5
- * and task E16's deliverable S4, `respond` falls back to a per-asset transfer in that case: it
- * finalizes the channel via the payout-free `conclude`, then pays out EVERY asset index of the
- * outcome in turn via `transfer(assetIndex, ...)` (arn-5a6), probing each on a disposable
- * snapshot first so a still-broken asset is skipped rather than blocking the working ones. It
- * decides which path to take by attempting the all-assets payout on a disposable
- * `vm.snapshotState()` first (reverted immediately after) rather than broadcasting a transaction
- * known to fail. A channel's second and third assets (if any) are carried via SECOND_ASSET/
- * SECOND_ASSET_AMOUNT and THIRD_ASSET/THIRD_ASSET_AMOUNT below, not through the deposits/manifest
- * files that fund the first asset -- see `_withSecondAsset`.
- *
- * Scenario B skips `respond` entirely; after the window elapses, `settleStale` pays out the
- * stale challenged state N, mirroring script/FixturenetScenario.s.sol's `settle()`.
+ * Scenario B skips `respond` entirely; after the window elapses, `settleStale` pays out EVERY
+ * asset of the stale challenged state N with its own `transfer(assetIndex, ...)` call (E16 S4 /
+ * design 15 I5 / arn-5a6), mirroring script/FixturenetScenario.s.sol's `settle()`.
  *
  * `payoutSince` reads the Shield logs emitted after a recorded start block for a note paid to
  * USER_PAYOUT_NPK and prints its value on a `PAYOUT_LAMPORTS <value>` line for the orchestrating
@@ -144,15 +130,12 @@ contract WatchtowerScenario is Script {
     /// @dev Scenario A's watcher: answer the stale challenge with the newer, fully-signed, final
     /// state N+1 -- finalizes and pays out immediately, regardless of the outstanding challenge or
     /// how much of the window remains.
-    /// @dev Per-asset fallback (arn-765 / E16 S4 / design 15 I5): `concludeAndTransferAllAssets`
-    /// pays every asset of the outcome in one all-or-nothing call, so if any one asset's token
-    /// reverts on transfer the whole transaction reverts -- including the finalization it would
-    /// otherwise have performed -- and even assets whose own transfer would have succeeded are
-    /// left unpaid. This is checked first on a disposable `vm.snapshotState()` (reverted right
-    /// after) so a transaction already known to fail is never broadcast; if it would fail, the
-    /// channel is instead finalized via the payout-free `conclude`, then each asset of the outcome
-    /// is paid out one at a time via `transfer(assetIndex, ...)`, so one broken asset never blocks
-    /// payout of the working ones (arn-5a6).
+    /// @dev Per-asset payout (arn-5a6 / E16 S4 / design 15 I5): the channel is finalized via the
+    /// payout-free `conclude`, then EVERY asset of the outcome is paid out one at a time via
+    /// `transfer(assetIndex, ...)` -- one broken asset never blocks payout of the working ones.
+    /// Each successful `transfer` zeroes that asset's allocations and updates the on-chain
+    /// fingerprint (MultiAssetHolder's `_apply_transfer_effects`), so the outcome re-encoded for
+    /// the NEXT asset's call must mirror that mutation.
     function respond(uint256 index) external {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(index);
@@ -164,57 +147,40 @@ contract WatchtowerScenario is Script {
             fp,
             stateN1
         );
-
-        uint256 snapshotId = vm.snapshotState();
-        (bool allAssetsOk, ) = address(c.adjudicator).call(
-            abi.encodeCall(c.adjudicator.concludeAndTransferAllAssets, (fp, signedN1))
-        );
-        vm.revertToState(snapshotId);
-
-        if (allAssetsOk) {
-            vm.broadcast(c.deployerKey);
-            c.adjudicator.concludeAndTransferAllAssets(fp, signedN1);
-            return;
-        }
-
-        vm.broadcast(c.deployerKey);
-        c.adjudicator.conclude(fp, signedN1);
-
-        // Per-asset fallback (arn-5a6 / E16 S4 / design 15 I5): pay out every asset index of the
-        // outcome in turn, so a broken asset never blocks payout of a working one -- not only
-        // assetIndex 0. Each asset is probed on a disposable snapshot first, and only the
-        // transfers that would succeed are broadcast, so the middle asset's refused transfer
-        // does not prevent the first and third assets from being paid out. Each successful
-        // `transfer` zeroes that asset's allocations and updates the on-chain fingerprint to
-        // match (MultiAssetHolder's `_apply_transfer_effects`), so the outcome re-encoded for
-        // the NEXT asset's call must mirror that mutation -- reusing the original, stale
-        // `outcomeBytes` across iterations would mismatch the updated fingerprint.
         bytes32 channelId = NitroUtils.getChannelId(fp);
         Outcome.SingleAssetExit[] memory outcome = stateN1.outcome;
         uint256[] memory emptyIndices = new uint256[](0);
+        bytes memory outcomeBytes = abi.encode(outcome);
+
+        // Finalize the channel on the newer, fully-signed, final state N+1 via the payout-free
+        // `conclude`, then pay out every asset of the outcome with its own transfer(assetIndex,
+        // ...) call (E16 S4 / design 15 I5 / arn-5a6) -- one broken asset never blocks the
+        // working ones. Each successful transfer zeroes that asset's allocations and updates the
+        // on-chain fingerprint, so the re-encoded outcome for the NEXT call mirrors that mutation.
+        vm.broadcast(c.deployerKey);
+        c.adjudicator.conclude(fp, signedN1);
         for (uint256 assetIndex = 0; assetIndex < outcome.length; assetIndex++) {
-            bytes memory outcomeBytes = abi.encode(outcome);
-            uint256 snapId = vm.snapshotState();
+            vm.broadcast(c.deployerKey);
+            // Low-level call (E16 S4 / design 15 I5 / arn-5a6): a broadcast transaction that
+            // reverts on-chain fails the whole `forge script` run if called through the typed
+            // ABI; routing through `.call()` lets this asset's payout fail on-chain (and still
+            // be committed to the broadcast file as its own transfer(assetIndex, ...) call)
+            // without blocking payout of the other assets or aborting the script.
             (bool transferOk, ) = address(c.adjudicator).call(
                 abi.encodeCall(
                     c.adjudicator.transfer,
                     (assetIndex, channelId, outcomeBytes, bytes32(0), emptyIndices)
                 )
             );
-            vm.revertToState(snapId);
+            // Only this asset's allocations zero on-chain when its own transfer succeeds; a
+            // reverting transfer leaves the fingerprint (and this outcome encoding) unchanged,
+            // so the NEXT asset's call must mirror that, not a zeroing that never happened.
             if (transferOk) {
-                vm.broadcast(c.deployerKey);
-                c.adjudicator.transfer(
-                    assetIndex,
-                    channelId,
-                    outcomeBytes,
-                    bytes32(0),
-                    emptyIndices
-                );
                 Outcome.Allocation[] memory allocations = outcome[assetIndex].allocations;
                 for (uint256 j = 0; j < allocations.length; j++) {
                     allocations[j].amount = 0;
                 }
+                outcomeBytes = abi.encode(outcome);
             }
         }
     }
@@ -262,37 +228,39 @@ contract WatchtowerScenario is Script {
         INitroTypes.VariablePart memory stateN = _stateN(c);
         bytes32 channelId = NitroUtils.getChannelId(fp);
         bytes32 stateHash = NitroUtils.hashState(fp, stateN);
+        Outcome.SingleAssetExit[] memory outcome = stateN.outcome;
+        uint256[] memory emptyIndices = new uint256[](0);
+        bytes memory outcomeBytes = abi.encode(outcome);
 
-        // E16 S4: probe `transferAllAssets` on a disposable snapshot (reverted immediately
-        // after) so a transaction known to fail is never broadcast. A reverting low-level
-        // `.call()` made under an active `vm.broadcast()` prank still gets queued by forge
-        // script and fails the later broadcast replay. The real (broadcast) attempt runs only
-        // once we already know it won't revert.
-        uint256 snapshotId = vm.snapshotState();
-        (bool allAssetsOk, ) = address(c.adjudicator).call(
-            abi.encodeCall(c.adjudicator.transferAllAssets, (channelId, stateN.outcome, stateHash))
-        );
-        vm.revertToState(snapshotId);
-
-        if (allAssetsOk) {
+        // Scenario B: no watcher response; the channel finalized on the stale state N when the
+        // challenge window elapsed. Pay out EVERY asset of that state with its own
+        // transfer(assetIndex, ...) call -- not only asset index 0 (E16 S4 / design 15 I5 /
+        // arn-5a6). One broken asset never blocks payout of the working ones. Each successful
+        // transfer zeroes that asset's allocations and updates the on-chain fingerprint
+        // (MultiAssetHolder's `_apply_transfer_effects`), so the re-encoded outcome for the NEXT
+        // asset's call mirrors that mutation.
+        for (uint256 assetIndex = 0; assetIndex < outcome.length; assetIndex++) {
             vm.broadcast(c.deployerKey);
-            c.adjudicator.transferAllAssets(channelId, stateN.outcome, stateHash);
-            return;
+            // Low-level call (E16 S4 / design 15 I5 / arn-5a6): see respond()'s identical
+            // comment -- a broken asset's transfer reverting on-chain must not abort the script
+            // or block payout of the other assets.
+            (bool transferOk, ) = address(c.adjudicator).call(
+                abi.encodeCall(
+                    c.adjudicator.transfer,
+                    (assetIndex, channelId, outcomeBytes, stateHash, emptyIndices)
+                )
+            );
+            // Only this asset's allocations zero on-chain when its own transfer succeeds; a
+            // reverting transfer leaves the fingerprint (and this outcome encoding) unchanged,
+            // so the NEXT asset's call must mirror that, not a zeroing that never happened.
+            if (transferOk) {
+                Outcome.Allocation[] memory allocations = outcome[assetIndex].allocations;
+                for (uint256 j = 0; j < allocations.length; j++) {
+                    allocations[j].amount = 0;
+                }
+                outcomeBytes = abi.encode(outcome);
+            }
         }
-
-        // Per-asset fallback (E16 S4 / design 15 I5): when `transferAllAssets` would revert,
-        // pay only the outcome's first asset (index 0) via `transfer`, so one broken asset can
-        // no longer block payout of a working one. The channel is already Finalized (the stale
-        // challenge settled when the window elapsed), so no prior `conclude` is needed here --
-        // unlike `respond`, which must `conclude` first in scenario A.
-        vm.broadcast(c.deployerKey);
-        c.adjudicator.transfer(
-            0,
-            channelId,
-            abi.encode(stateN.outcome),
-            stateHash,
-            new uint256[](0)
-        );
     }
 
     /// @dev Reads the Shield logs emitted since `openAndChallenge(index)`'s recorded start block

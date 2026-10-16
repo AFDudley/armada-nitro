@@ -125,12 +125,14 @@ def parse_payout(stdout: str) -> int:
 
 
 # ---- Scenario A: watcher ON -- the hub challenges with the stale, co-signed state N; the
-# watcher answers in time with the newer, fully-signed, final state N+1 via
-# concludeAndTransferAllAssets.
+# watcher answers in time with the newer, fully-signed, final state N+1, finalizing via
+# `conclude` and then paying out every asset of the outcome with its own
+# transfer(assetIndex, ...) call (E16 S4 / design 15 I5 / arn-df2): no combined
+# concludeAndTransferAllAssets call, no fallback.
 forge("openAndChallenge(uint256)", 0, broadcast=True)
 challenge_tx_a = bcast_tx("openAndChallenge", "challenge(")
 forge("respond(uint256)", 0, broadcast=True)
-response_tx_a = bcast_tx("respond", "concludeAndTransferAllAssets(")
+response_tx_a = bcast_tx("respond", "transfer(")
 lat_a = max(0, block_ts(response_tx_a) - block_ts(challenge_tx_a))
 p = forge("payoutSince(uint256)", 0, broadcast=False)
 payout_a = parse_payout(p.stdout)

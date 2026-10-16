@@ -5,10 +5,11 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 /**
  * @dev A minimal ERC20 whose owner can force every `transfer`/`transferFrom` to revert.
- * Used only by scripts/check-watchtower-respond-per-asset.py (arn-765) to drive the exact same
- * two-asset channel setup through two runs of script/WatchtowerScenario.s.sol's `respond`: one
- * where this (second) asset's payout succeeds, one where it reverts -- isolating the payout
- * step's behavior from everything else (funding, signatures, turn numbers) which stays identical.
+ * Used by `script/WatchtowerPerAssetSetup.s.sol` (arn-765 / arn-df2) to drive the exact same
+ * two-asset channel setup through two runs of script/WatchtowerScenario.s.sol's `respond`/
+ * `settleStale`: one where this (second) asset's payout succeeds, one where it reverts --
+ * isolating the payout step's behavior from everything else (funding, signatures, turn numbers)
+ * which stays identical.
  */
 contract ToggleableERC20 is IERC20 {
     address public immutable owner;

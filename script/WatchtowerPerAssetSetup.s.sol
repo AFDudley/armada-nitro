@@ -13,14 +13,14 @@ import {ArmadaNotes} from '../test/helpers/ArmadaNotes.sol';
 import {ToggleableERC20} from './helpers/ToggleableERC20.sol';
 
 /**
- * @notice Standalone fixture for `scripts/check-watchtower-respond-per-asset.py` (arn-765): a
+ * @notice Standalone fixture for `test/WatchtowerPerAssetPayoutCheck.t.sol` (arn-765 / arn-df2): a
  * fresh Armada pool + ArmadaNitroAdjudicator + ConsensusApp on a local anvil node, with a
  * two-asset channel funded between two plain EOAs (asset 0 = real USDC, deposited through the
  * same shield + Groth16-bypassed unshield depositFromNote path as script/LocalScenario.s.sol;
  * asset 1 = a ToggleableERC20 deposited through the plain `deposit` entrypoint). No Railgun SDK,
- * no hardhat: this fixture exists only to exercise WatchtowerScenario.s.sol's `respond(uint256)`
- * fallback (arn-765 / E16 S4), not the real-proof deposit pipeline that armada-watchtower-e2e
- * covers on the shared fixturenet.
+ * no hardhat: this fixture exists only to exercise WatchtowerScenario.s.sol's `respond(uint256)`/
+ * `settleStale(uint256)` per-asset payout (E16 S4), not the real-proof deposit pipeline that
+ * armada-watchtower-e2e covers on the shared fixturenet.
  *
  * Writes manifest.json + deposits.json in exactly the shape WatchtowerScenario.s.sol's `_ctx()` /
  * `_deposit()` already expect, so `openAndChallenge`/`respond`/`payoutSince` run unmodified
@@ -54,7 +54,7 @@ contract WatchtowerPerAssetSetup is Script {
         ToggleableERC20 secondAsset;
     }
 
-    function setup(bool secondAssetReverts) external {
+    function setup(bool secondAssetReverts) external returns (address secondAsset) {
         require(block.chainid == 31337, 'local anvil only');
 
         uint256 stateN1User = vm.envUint('STATE_N1_USER');
@@ -83,6 +83,7 @@ contract WatchtowerPerAssetSetup is Script {
         _writeKeys(cfg);
 
         console2.log('SECOND_ASSET', address(d.secondAsset));
+        return address(d.secondAsset);
     }
 
     function _deployAll(Cfg memory cfg) internal returns (Deployed memory d) {
