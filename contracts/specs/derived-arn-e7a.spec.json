@@ -1,0 +1,274 @@
+{
+  "id": "derived-arn-e7a",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A full e2e run builds its own fixturenet from the tree under test and runs every end-to-end job on that fixturenet, while the shared fixturenet at ~/deployments/armada-fixturenet-e12 keeps running. Each job reaches only the chain of its own deployment.\nWhat holds now? Describe the current, observed state. Audit on integrated d51ae19, searched: stack/compose-jobs/*.yml, stack/scripts/*, env/gates/watchtower/*.ts, and the generated spec of the shared fixturenet. Published host ports: the spec maps geth to 127.0.0.1:8545:8545 and 127.0.0.1:8546:8546, and the beacon to 127.0.0.1:5052:5052 (~/deployments/armada-fixturenet-e12/spec.yml, network.ports). stack/scripts/fixturenet-new:113-116 runs `laconic-so deploy init --map-ports-to-host localhost-same`, which writes that spec. Port 8546 and port 5052 appear in none of the searched files. Host-address uses of port 8545 (127.0.0.1:8545 or localhost:8545): stack/scripts/fixturenet-new:30, stack/scripts/fixturenet-base-snapshot:29, stack/scripts/armada-watchtower-e2e.py:21,38, stack/scripts/armada-watchtower-e2e-job.py:12,30, env/gates/watchtower/helper.ts:8,24, env/gates/watchtower/watch.ts:13,28, and the job files armada-custodian-e2e, armada-custodian-frost, armada-env-verify, armada-nitro-e2e, armada-watchtower-e2e and armada-watchtower-scenario, each of which sets network_mode: host. Service-name uses (armada-fixturenet-geth:8545): docker-compose-armada-env-reconcile.yml:29,39. docker-compose-armada-watchtower-discrimination-e2e.yml and stack/scripts/armada-watchtower-discrimination-e2e-job.py do not use host networking; inside the job's own network namespace they bind 127.0.0.1:8545 to armada-fixturenet-geth:8545 (yml:7-19). The comment at docker-compose-armada-nitro-e2e.yml:4-6 states that lib/sdk/chain-config.ts in the image uses http://localhost:8545 for chain 31337. armada-nitro-deploy and armada-nitro-scenario name armada-nitro-anvil:8545 and belong to the separate armada-nitro anvil stack.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Read the network.ports block of ~/deployments/armada-fixturenet-e12/spec.yml and stack/scripts/fixturenet-new:113-116. 2. Run grep -n -E '(127\\.0\\.0\\.1|localhost|armada-fixturenet-geth):(8545|8546|5052)' stack/compose-jobs/*.yml stack/scripts/* env/gates/watchtower/*.ts. 3. Run grep -l 'network_mode: host' stack/compose-jobs/*.yml.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) stack/scripts/fixturenet-new and the job files under stack/compose-jobs/",
+  "restatement": "Today, armada-nitro's e2e jobs find their chain by one of three different routes: a fixed host port (127.0.0.1:8545) reached through network_mode: host, a compose service name, or a job-local network bridge. The shared fixturenet at ~/deployments/armada-fixturenet-e12 publishes fixed host ports (8545, 8546, 5052) that nothing in the audited files actually reads for 8546 or 5052. The operator has decided this is new behavior to build, as one deliverable: every e2e job must stop using network_mode: host and must instead receive its own deployment's RPC endpoint as configuration, addressed by compose service name (the pattern docker-compose-armada-env-reconcile.yml already uses for RECONCILER_RPC_URL). The armada-poc submodule's hardcoded CLIENT_RPC must become configurable, delivered through a new submodule pin replacing the current pin 532bc064. No deployment may pin a fixed host port; stack/scripts/fixturenet-new must use laconic-so's random port mapping, and any host script that still needs a published port (fixturenet-new, fixturenet-base-snapshot, run-frost-keygen-check.py) must discover it with `docker port`. The end result: a full e2e run builds its own fixturenet from the tree under test and runs every job against it, the shared fixturenet keeps running the whole time undisturbed, and each job reaches only its own deployment's chain. If this isolation fails, the worst outcome is a confusing or wrong test result and a shared fixturenet that must be rebuilt with the existing fixturenet-new/fixturenet-recover scripts; no production system or irreplaceable data is at risk.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "stack/scripts/fixturenet-new must use a laconic-so random port mapping (--map-ports-to-host any-variable-random or localhost-fixed-random) instead of --map-ports-to-host localhost-same, so no deployment pins host ports."
+    },
+    {
+      "id": "c2",
+      "text": "A host script that needs a deployment's published port \u2014 stack/scripts/fixturenet-new:30, stack/scripts/fixturenet-base-snapshot:29, and scripts/run-frost-keygen-check.py:36 \u2014 must find that port with `docker port` instead of hardcoding 127.0.0.1:8545."
+    },
+    {
+      "id": "c3",
+      "text": "No e2e job must set network_mode: host; this removes it from the compose job files that set it today (armada-custodian-e2e, armada-custodian-frost, armada-env-verify, armada-nitro-e2e, armada-watchtower-e2e, armada-watchtower-scenario)."
+    },
+    {
+      "id": "c4",
+      "text": "Each job must receive its chain RPC endpoint as configuration naming its own deployment's compose service, e.g. http://armada-fixturenet-geth:8545, the same pattern docker-compose-armada-env-reconcile.yml already uses for RECONCILER_RPC_URL."
+    },
+    {
+      "id": "c5",
+      "text": "CLIENT_RPC in lib/armada-poc/lib/sdk/chain-config.ts:48 must become configurable instead of fixed to http://localhost:8545, delivered through an updated armada-poc submodule and a new pin in this repo replacing the current pin 532bc064."
+    },
+    {
+      "id": "c6",
+      "text": "A full e2e run must build its own fixturenet from the tree under test and run every e2e job on that fixturenet, while the shared fixturenet at ~/deployments/armada-fixturenet-e12 keeps running throughout the run."
+    },
+    {
+      "id": "c7",
+      "text": "Each job must reach only the chain of its own deployment, and never the chain of the shared fixturenet at ~/deployments/armada-fixturenet-e12 or any other deployment."
+    }
+  ],
+  "goal": "Make every end-to-end job in this repository reach only the chain of its own deployment, with no job pinned to a fixed host port or using host networking, while a full e2e run builds its own fixturenet and the shared fixturenet keeps running untouched.",
+  "acceptance_criteria": [
+    "The file stack/scripts/fixturenet-new no longer tells laconic-so to map ports to the same fixed host port.",
+    "The file stack/scripts/fixturenet-new now tells laconic-so to pick a random host port for each deployment.",
+    "Every one of the three host scripts that needs a deployment's port (fixturenet-new, fixturenet-base-snapshot, run-frost-keygen-check.py) now asks Docker for that port instead of assuming a fixed number.",
+    "None of the three host scripts above still hardcodes the fixed address 127.0.0.1:8545.",
+    "No compose file for an e2e job in stack/compose-jobs still runs the job on the host's own network.",
+    "Every one of the six e2e job compose files now points at its own chain by the compose service name armada-fixturenet-geth on port 8545, the same way the existing env-reconcile job already does.",
+    "The armada-poc chain configuration file no longer has the chain address fixed to http://localhost:8545.",
+    "The armada-poc submodule now points at a commit other than the old pin 532bc064.",
+    "Starting a full e2e run builds a brand-new fixturenet from the current code, runs the e2e jobs on it, and the separate shared fixturenet at ~/deployments/armada-fixturenet-e12 is still running, before and after, without interruption.",
+    "While one e2e job runs on its own freshly built fixturenet, the separate shared fixturenet receives zero new chain requests from that job."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The file stack/scripts/fixturenet-new no longer tells laconic-so to map ports to the same fixed host port."
+    },
+    {
+      "id": "c2",
+      "text": "The file stack/scripts/fixturenet-new now tells laconic-so to pick a random host port for each deployment."
+    },
+    {
+      "id": "c3",
+      "text": "Every one of the three host scripts that needs a deployment's port (fixturenet-new, fixturenet-base-snapshot, run-frost-keygen-check.py) now asks Docker for that port instead of assuming a fixed number."
+    },
+    {
+      "id": "c4",
+      "text": "None of the three host scripts above still hardcodes the fixed address 127.0.0.1:8545."
+    },
+    {
+      "id": "c5",
+      "text": "No compose file for an e2e job in stack/compose-jobs still runs the job on the host's own network."
+    },
+    {
+      "id": "c6",
+      "text": "Every one of the six e2e job compose files now points at its own chain by the compose service name armada-fixturenet-geth on port 8545, the same way the existing env-reconcile job already does."
+    },
+    {
+      "id": "c7",
+      "text": "The armada-poc chain configuration file no longer has the chain address fixed to http://localhost:8545."
+    },
+    {
+      "id": "c8",
+      "text": "The armada-poc submodule now points at a commit other than the old pin 532bc064."
+    },
+    {
+      "id": "c9",
+      "text": "Starting a full e2e run builds a brand-new fixturenet from the current code, runs the e2e jobs on it, and the separate shared fixturenet at ~/deployments/armada-fixturenet-e12 is still running, before and after, without interruption."
+    },
+    {
+      "id": "c10",
+      "text": "While one e2e job runs on its own freshly built fixturenet, the separate shared fixturenet receives zero new chain requests from that job."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep_absent",
+      "description": "The file stack/scripts/fixturenet-new no longer tells laconic-so to map ports to the same fixed host port.",
+      "proves": "Proves clause c1: fixturenet-new stops pinning a fixed host port.",
+      "restatement_clause_id": "c1",
+      "pattern": "localhost-same",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "The file stack/scripts/fixturenet-new now tells laconic-so to pick a random host port for each deployment.",
+      "proves": "Proves clause c1: fixturenet-new uses a random port mapping instead of a fixed one.",
+      "restatement_clause_id": "c1",
+      "pattern": "any-variable-random|localhost-fixed-random",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep",
+      "description": "Every one of the three host scripts that needs a deployment's port (fixturenet-new, fixturenet-base-snapshot, run-frost-keygen-check.py) now asks Docker for that port instead of assuming a fixed number.",
+      "proves": "Proves clause c2: these scripts discover the port with `docker port`.",
+      "restatement_clause_id": "c2",
+      "pattern": "docker port",
+      "files": [
+        "stack/scripts/fixturenet-new",
+        "stack/scripts/fixturenet-base-snapshot",
+        "scripts/run-frost-keygen-check.py"
+      ],
+      "count": {
+        "unit": "files_without_match",
+        "op": "eq",
+        "value": 0
+      },
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep_absent",
+      "description": "None of the three host scripts above still hardcodes the fixed address 127.0.0.1:8545.",
+      "proves": "Proves clause c2: the fixed host port is gone from these scripts.",
+      "restatement_clause_id": "c2",
+      "pattern": "127\\.0\\.0\\.1:8545",
+      "files": [
+        "stack/scripts/fixturenet-new",
+        "stack/scripts/fixturenet-base-snapshot",
+        "scripts/run-frost-keygen-check.py"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep_absent",
+      "description": "No compose file for an e2e job in stack/compose-jobs still runs the job on the host's own network.",
+      "proves": "Proves clause c3: network_mode: host is removed from every job file.",
+      "restatement_clause_id": "c3",
+      "pattern": "network_mode:\\s*host",
+      "files": [
+        "stack/compose-jobs/*.yml"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep",
+      "description": "Every one of the six e2e job compose files now points at its own chain by the compose service name armada-fixturenet-geth on port 8545, the same way the existing env-reconcile job already does.",
+      "proves": "Proves clause c4: each job is configured with its own deployment's service-name RPC address.",
+      "restatement_clause_id": "c4",
+      "pattern": "armada-fixturenet-geth:8545",
+      "files": [
+        "stack/compose-jobs/docker-compose-armada-custodian-e2e.yml",
+        "stack/compose-jobs/docker-compose-armada-custodian-frost.yml",
+        "stack/compose-jobs/docker-compose-armada-env-verify.yml",
+        "stack/compose-jobs/docker-compose-armada-nitro-e2e.yml",
+        "stack/compose-jobs/docker-compose-armada-watchtower-e2e.yml",
+        "stack/compose-jobs/docker-compose-armada-watchtower-scenario.yml"
+      ],
+      "count": {
+        "unit": "files_without_match",
+        "op": "eq",
+        "value": 0
+      },
+      "clause_id": "c6"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The armada-poc chain configuration file no longer has the chain address fixed to http://localhost:8545.",
+      "proves": "Proves clause c5: CLIENT_RPC is no longer a fixed value.",
+      "restatement_clause_id": "c5",
+      "pattern": "http://localhost:8545",
+      "files": [
+        "lib/armada-poc/lib/sdk/chain-config.ts"
+      ],
+      "clause_id": "c7"
+    },
+    {
+      "type": "behavior",
+      "description": "The armada-poc submodule now points at a commit other than the old pin 532bc064.",
+      "proves": "Proves clause c5: this repo carries a new submodule pin for the configurable CLIENT_RPC change.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-armada-poc-pin.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "pin_is_old",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c8"
+    },
+    {
+      "type": "behavior",
+      "description": "Starting a full e2e run builds a brand-new fixturenet from the current code, runs the e2e jobs on it, and the separate shared fixturenet at ~/deployments/armada-fixturenet-e12 is still running, before and after, without interruption.",
+      "proves": "Proves clause c6: a full e2e run builds its own fixturenet and the shared fixturenet keeps running throughout.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-e2e-builds-own-fixturenet.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "shared_running_before",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "own_fixturenet_built",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "shared_running_after",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c9"
+    },
+    {
+      "type": "behavior",
+      "description": "While one e2e job runs on its own freshly built fixturenet, the separate shared fixturenet receives zero new chain requests from that job.",
+      "proves": "Proves clause c7: a job reaches only the chain of its own deployment, never the shared fixturenet's chain.",
+      "restatement_clause_id": "c7",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-job-rpc-isolation.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "shared_request_count_delta",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c10"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check-armada-poc-pin.py",
+    "scripts/check-e2e-builds-own-fixturenet.py",
+    "scripts/check-job-rpc-isolation.py"
+  ]
+}
