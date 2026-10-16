@@ -44,7 +44,7 @@ get_rpc_url() {
     echo "fixturenet-base-snapshot: FAILED: no published 8545 for ${ctr}" >&2
     return 1
   fi
-  echo "http://${line#*->}"
+  echo "http://$(echo "${line#*->}" | tr -d "[:space:]")"
 }
 
 usage() { echo "usage: $0 <deployment-dir>" >&2; exit 2; }

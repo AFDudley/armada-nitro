@@ -75,7 +75,7 @@ resolve_geth_rpc() {
     echo "fixturenet-new: FAILED: no published 8545 for ${ctr}" >&2
     return 1
   fi
-  RPC="http://${line#*->}"
+  RPC="http://$(echo "${line#*->}" | tr -d "[:space:]")"
   echo "fixturenet-new: geth RPC = ${RPC} (docker port)"
   return 0
 }
