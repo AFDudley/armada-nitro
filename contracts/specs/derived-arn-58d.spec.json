@@ -1,0 +1,145 @@
+{
+  "id": "derived-arn-58d",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:23-26 (E16 S4): the watchtower and the e2e gate pay each asset of a finalized channel with its own transfer(assetIndex, ...) call. No payout of theirs depends on transferAllAssets or concludeAndTransferAllAssets, and no script tries one payout path and then falls back to another.\nWhat holds now? Describe the current, observed state. On integrated df56543, script/FixturenetScenario.s.sol: cooperativeClose() (lines 99-114) pays channel 0 with one concludeAndTransferAllAssets call (line 113). settle() (lines 172-206) runs transferAllAssets on a vm.snapshotState() copy, reverts the snapshot, broadcasts transferAllAssets when that run succeeded (line 197), and otherwise calls _settlePerAsset (lines 213-246), which runs each transfer(i, ...) on a snapshot first and broadcasts only the ones that succeeded. earlySettle() (line 164) calls transferAllAssets inside the challenge window and requires it to revert; it pays nothing.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Read script/FixturenetScenario.s.sol:99-114, :160-206 and :213-246 at df56543. 2. Run git grep -n -E 'transferAllAssets|concludeAndTransferAllAssets' -- script/FixturenetScenario.s.sol.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) script/FixturenetScenario.s.sol (armada-nitro-e2e stage 2)",
+  "restatement": "script/FixturenetScenario.s.sol drives stage 2 of the armada-nitro-e2e gate: it closes two Nitro payment channels against the live ArmadaNitroAdjudicator contract. The watchtower and this gate must settle every finalized channel by paying each of its assets with the adjudicator's own transfer(assetIndex, ...) call, one call per asset, never a single call that pays every asset of the channel at once. Today, cooperativeClose() pays channel 0 in one step with concludeAndTransferAllAssets, a single all-assets call, instead of its own per-asset transfer call. settle() first attempts the single all-assets call (transferAllAssets) on a throwaway snapshot of chain state; only when that attempt fails does it undo the snapshot and fall back to the existing per-asset path, _settlePerAsset, which already pays each asset of channel 1 with its own transfer call. This probe-then-fallback structure is itself the defect this request targets: no part of this gate may attempt one payout call and switch to a different payout call depending on whether the first one succeeds. earlySettle(), which deliberately attempts transferAllAssets before the channel's challenge window has elapsed and requires that attempt to revert, pays nothing and is explicitly out of scope. The fix must make cooperativeClose() pay channel 0 through its own transfer(assetIndex, ...) call, the same mechanism _settlePerAsset already uses for channel 1, and must make settle() go straight to the per-asset path with no preceding attempt at transferAllAssets at all.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "cooperativeClose() and settle() in script/FixturenetScenario.s.sol must pay every asset of their finalized channel through its own transfer(assetIndex, ...) call, never one call that pays every asset at once."
+    },
+    {
+      "id": "c2",
+      "text": "No payout in script/FixturenetScenario.s.sol may depend on transferAllAssets or concludeAndTransferAllAssets succeeding."
+    },
+    {
+      "id": "c3",
+      "text": "settle() in script/FixturenetScenario.s.sol must not attempt a transferAllAssets payout and fall back to the per-asset transfer path only when that attempt fails; it must go straight to the per-asset path."
+    }
+  ],
+  "goal": "Make script/FixturenetScenario.s.sol pay every asset of a finalized channel through its own transfer(assetIndex, ...) call, with no payout depending on, or trying and falling back from, an all-assets call.",
+  "acceptance_criteria": [
+    "After a cooperative close and a forced settle are each run to completion against a real local test chain, every token paid out of either channel shows up as its own separate payment, one per asset, and the good asset of the forced channel is fully paid while the untouched (reverting) asset's recorded balance never changes.",
+    "Neither the cooperative close nor the forced settle ever completes its payment by calling the adjudicator's single 'pay the whole channel at once' functions, transferAllAssets or concludeAndTransferAllAssets.",
+    "While the forced settle is running, nothing in its own output ever mentions an attempt to pay the whole channel at once; it goes straight to paying each asset separately, with no earlier attempt that then had to be abandoned."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After a cooperative close and a forced settle are each run to completion against a real local test chain, every token paid out of either channel shows up as its own separate payment, one per asset, and the good asset of the forced channel is fully paid while the untouched (reverting) asset's recorded balance never changes."
+    },
+    {
+      "id": "c2",
+      "text": "Neither the cooperative close nor the forced settle ever completes its payment by calling the adjudicator's single 'pay the whole channel at once' functions, transferAllAssets or concludeAndTransferAllAssets."
+    },
+    {
+      "id": "c3",
+      "text": "While the forced settle is running, nothing in its own output ever mentions an attempt to pay the whole channel at once; it goes straight to paying each asset separately, with no earlier attempt that then had to be abandoned."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "After a cooperative close and a forced settle are each run to completion against a real local test chain, every token paid out of either channel shows up as its own separate payment, one per asset, and the good asset of the forced channel is fully paid while the untouched (reverting) asset's recorded balance never changes.",
+      "proves": "Confirms that cooperativeClose() and settle() each pay every asset of their channel with its own transfer call, as the restatement requires.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-per-asset-no-fallback.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "cooperative_close_is_per_asset_transfer",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "settle_broadcast_is_per_asset_only",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "settle_first_asset_paid",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "settle_second_asset_holdings_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Neither the cooperative close nor the forced settle ever completes its payment by calling the adjudicator's single 'pay the whole channel at once' functions, transferAllAssets or concludeAndTransferAllAssets.",
+      "proves": "Confirms that no payout in the script depends on transferAllAssets or concludeAndTransferAllAssets, as the restatement requires.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-per-asset-no-fallback.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "cooperative_close_used_conclude_all",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "settle_broadcast_is_per_asset_only",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "While the forced settle is running, nothing in its own output ever mentions an attempt to pay the whole channel at once; it goes straight to paying each asset separately, with no earlier attempt that then had to be abandoned.",
+      "proves": "Confirms that settle() does not try transferAllAssets and fall back to the per-asset path, as the restatement requires.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-per-asset-no-fallback.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "settle_mentions_transfer_all_in_trace",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "settle_second_asset_holdings_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-fixturenet-per-asset-no-fallback.py"
+  ]
+}
