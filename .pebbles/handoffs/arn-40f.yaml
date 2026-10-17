@@ -1,0 +1,64 @@
+status: completed
+pebble_id: arn-40f
+summary: >
+  arn-40f: MultiAssetHolder._transferAsset now pays out ERC20 assets via
+  SafeERC20 (line 461: IERC20(asset).safeTransfer(destination, amount)
+  instead of bare transfer), so a token whose transfer returns false reverts
+  the whole payout and value is conserved. Added test/PayoutConservation.t.sol
+  (test_returnsFalse / test_returnsTrue / test_returnsNothing) which drives a
+  finalized channel holding a test token and pays it out to an external
+  destination, asserting the channel-holdings-plus-destination-balance total is
+  invariant. Added the acceptance script
+  scripts/check-adjudicator-payout-conservation.py that runs those tests.
+  Verified end to end: the acceptance script runs the forge tests; c1
+  (--token returns-false) returns {"returns-false": true} exit 0, and c2
+  (--token returns-true --token returns-nothing) returns
+  {"returns-true": true, "returns-nothing": true} exit 0. A red-first
+  discrimination check confirmed the c1 test fails (exit 1, {"returns-false":
+  false}) when the SafeERC20 fix is absent and passes (exit 0) when present,
+  so the gate can say NO.
+cost: "~40k tokens"
+commits:
+  - "a4289225d7abb03e7c44c671d7dbbfd881d374f6"
+verify_transcript:
+  hooks:
+    - name: "acceptance c1 (returns-false)"
+      outcome: passed
+      duration_s: 3.0
+    - name: "acceptance c2 (returns-true, returns-nothing)"
+      outcome: passed
+      duration_s: 3.0
+e2e_gate:
+  spec: contracts/specs/derived-arn-40f.spec.json
+  command: "python3 scripts/check-adjudicator-payout-conservation.py --token returns-false"
+  result: passed
+  ran_at_sha: "a4289225d7abb03e7c44c671d7dbbfd881d374f6"
+  mocks_in_path: false
+discrimination:
+  - mechanism: red_first
+    oracle: scripts/check-adjudicator-payout-conservation.py
+    target: "test_returnsFalse (c1 acceptance test)"
+    perturbation: "git stash the SafeERC20 fix (revert MultiAssetHolder to bare transfer)"
+    took:
+      applied:
+        observable: "src/nitro/MultiAssetHolder.sol _transferAsset"
+        moved:
+          - "IERC20(asset).safeTransfer(destination, amount)"
+          - "IERC20(asset).transfer(destination, amount)"
+      observed:
+        observable: "scripts/check-adjudicator-payout-conservation.py --token returns-false"
+        moved:
+          - '{"returns-false": false} exit 1'
+          - '{"returns-false": true} exit 0'
+    assertions_fired:
+      - assertion: "value not conserved"
+        moved:
+          - "IERC20(asset).transfer(destination, amount)"
+          - "IERC20(asset).safeTransfer(destination, amount)"
+    pinned_at:
+      - test/PayoutConservation.t.sol
+      - scripts/check-adjudicator-payout-conservation.py
+      - src/nitro/MultiAssetHolder.sol
+    exit_code_before: 1
+    exit_code_after: 0
+    reverted: true
