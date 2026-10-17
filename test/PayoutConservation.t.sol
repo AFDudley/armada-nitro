@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {Test} from 'forge-std/Test.sol';
+import {console2} from 'forge-std/console2.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {NitroAdjudicator} from 'src/nitro/NitroAdjudicator.sol';
 
@@ -25,7 +26,7 @@ contract ReturnsFalseToken {
     function mint(address to, uint256 amount) external {
         balanceOf[to] += amount;
     }
-    function transfer(address to, uint256 amount) external returns (bool) {
+    function transfer(address, uint256) external pure returns (bool) {
         return false;
     }
 }
@@ -37,6 +38,7 @@ contract ReturnsTrueToken {
         balanceOf[to] += amount;
     }
     function transfer(address to, uint256 amount) external returns (bool) {
+        balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
         return true;
     }
@@ -49,6 +51,7 @@ contract ReturnsNothingToken {
         balanceOf[to] += amount;
     }
     function transfer(address to, uint256 amount) external {
+        balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
     }
 }
@@ -59,6 +62,12 @@ interface IConservationToken {
     function mint(address to, uint256 amount) external;
 }
 
+/// @dev Exercises MultiAssetHolder._transferAsset through the adjudicator and MEASURES the
+/// signed change of the channel holdings and the destination balance. Each test emits its
+/// measured deltas as console log lines (`<label>_hdelta=`, `<label>_ddelta=`,
+/// `<label>_requested=`) BEFORE any assertion, so the measurement is captured even when the
+/// branch-correct assertion fails on the buggy base tree. scripts/check-adjudicator-payout-
+/// conservation.py reads those lines and builds the `flows` the conservation oracle grades.
 contract PayoutConservationTest is Test {
     FinalizedChannelHarness internal adjudicator;
     bytes32 internal constant CHANNEL = keccak256("payout channel");
@@ -73,19 +82,19 @@ contract PayoutConservationTest is Test {
     /// @dev c1: a token whose transfer reports failure MUST revert the payout as a whole, so value is conserved.
     function test_returnsFalse() public {
         ReturnsFalseToken token = new ReturnsFalseToken();
-        _runConservation(address(token), IConservationToken(address(token)), false);
+        _exercise(address(token), IConservationToken(address(token)), "returnsFalse", false);
     }
 
     /// @dev c2a: a standard token (returns true) pays the full amount to the destination; value is conserved.
     function test_returnsTrue() public {
         ReturnsTrueToken token = new ReturnsTrueToken();
-        _runConservation(address(token), IConservationToken(address(token)), true);
+        _exercise(address(token), IConservationToken(address(token)), "returnsTrue", true);
     }
 
     /// @dev c2b: a USDT-like token (returns no value) pays the full amount to the destination; value is conserved.
     function test_returnsNothing() public {
         ReturnsNothingToken token = new ReturnsNothingToken();
-        _runConservation(address(token), IConservationToken(address(token)), true);
+        _exercise(address(token), IConservationToken(address(token)), "returnsNothing", true);
     }
 
     /// @dev A simple allocation paying `amount` of the asset to an external `to` address.
@@ -99,9 +108,16 @@ contract PayoutConservationTest is Test {
             );
     }
 
-    /// @dev Funds a channel with the token, pays it out to an external destination, and verifies
-    /// conservation: the total of channel holdings plus the destination balance is unchanged.
-    function _runConservation(address token, IConservationToken tok, bool paysOut) internal {
+    /// @dev Funds a channel with the token, attempts to pay it out to an external destination, and
+    /// measures the signed deltas of the channel holdings and the destination balance. The payout
+    /// call is wrapped in try/catch so the measurement and the log lines always run, whether the
+    /// payout succeeds or reverts. The branch-correct assertions follow the log lines.
+    function _exercise(
+        address token,
+        IConservationToken tok,
+        string memory label,
+        bool expectPayout
+    ) internal {
         Outcome.Allocation[] memory allocations = new Outcome.Allocation[](1);
         allocations[0] = _simpleAlloc(DEST, AMOUNT);
         Outcome.SingleAssetExit[] memory outcome = new Outcome.SingleAssetExit[](1);
@@ -115,31 +131,34 @@ contract PayoutConservationTest is Test {
         tok.mint(address(adjudicator), AMOUNT);
         adjudicator.setHoldings(token, CHANNEL, AMOUNT);
 
-        uint256 holdingsBefore = adjudicator.holdings(token, CHANNEL);
-        uint256 destBefore = tok.balanceOf(DEST);
-        uint256 totalBefore = holdingsBefore + destBefore;
+        int256 hBefore = int256(adjudicator.holdings(token, CHANNEL));
+        int256 dBefore = int256(tok.balanceOf(DEST));
 
-        if (paysOut) {
-            adjudicator.transferAllAssets(CHANNEL, outcome, STATE_HASH);
-        } else {
-            // c1: the payout is refused as a whole (the token reports failure).
-            vm.expectRevert("SafeERC20: ERC20 operation did not succeed");
-            adjudicator.transferAllAssets(CHANNEL, outcome, STATE_HASH);
+        bool reverted;
+        try adjudicator.transferAllAssets(CHANNEL, outcome, STATE_HASH) {
+            reverted = false;
+        } catch {
+            reverted = true;
         }
 
-        uint256 holdingsAfter = adjudicator.holdings(token, CHANNEL);
-        uint256 destAfter = tok.balanceOf(DEST);
-        uint256 totalAfter = holdingsAfter + destAfter;
+        int256 hDelta = int256(adjudicator.holdings(token, CHANNEL)) - hBefore;
+        int256 dDelta = int256(tok.balanceOf(DEST)) - dBefore;
 
-        // Conservation law: value in the channel plus the destination balance is invariant.
-        assertEq(totalBefore, totalAfter, "value not conserved");
+        // Measurement — emitted BEFORE the assertions, so the base tree's buggy run still
+        // reports its deltas even though an assertion below reverts the test.
+        console2.log(string.concat(label, "_hdelta=", vm.toString(hDelta)));
+        console2.log(string.concat(label, "_ddelta=", vm.toString(dDelta)));
+        console2.log(string.concat(label, "_requested=", vm.toString(int256(AMOUNT))));
 
-        if (paysOut) {
-            assertEq(destAfter, AMOUNT, "destination did not receive the full amount");
-            assertEq(holdingsAfter, holdingsBefore - AMOUNT, "holdings did not drop by the full amount");
+        // Branch-correct behavior, asserted for the pre-commit forge-test gate.
+        if (expectPayout) {
+            assertFalse(reverted, "payout should succeed");
+            assertEq(dDelta, int256(AMOUNT), "destination did not receive the full amount");
+            assertEq(hDelta, -int256(AMOUNT), "holdings did not drop by the full amount");
         } else {
-            assertEq(destAfter, 0, "destination should receive nothing");
-            assertEq(holdingsAfter, holdingsBefore, "channel holdings should be unchanged");
+            assertTrue(reverted, "payout should be refused as a whole");
+            assertEq(dDelta, int256(0), "destination should receive nothing");
+            assertEq(hDelta, int256(0), "channel holdings should be unchanged");
         }
     }
 }
