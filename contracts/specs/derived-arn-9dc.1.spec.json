@@ -1,0 +1,60 @@
+{
+  "id": "derived-arn-9dc.1",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:27-28 (E16 S6): the adjudicator imports no ERC-4626 interface and calls no exchange rate, and the forge tests check this as a source-level assertion.\nWhat holds now? Describe the current, observed state. On integrated df56543, three checks cover S6. test/SettlementRateFree.t.sol reads the adjudicator artifact's metadata.sources and scans the deployed bytecode for the six ERC-4626 rate selectors. scripts/check-settlement-rate-free.py (oracle of derived-arn-4c3) matches the regex \\b(convertToAssets|convertToShares|previewDeposit|previewMint|previewRedeem|previewWithdraw)\\s*\\( and import lines containing 4626 (lines 35-44). scripts/check-settlement-rate-free-gate.py (oracle of derived-arn-5db) matches the plain substrings ERC4626, IERC4626, convertToAssets, convertToShares and preview (lines 36-42), and skips a file it cannot open (except FileNotFoundError: pass). Both scripts define their own collect_files(), scan_files() and self_test() over src/ArmadaNitroAdjudicator.sol and src/nitro/.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Read scripts/check-settlement-rate-free.py:35-100 and scripts/check-settlement-rate-free-gate.py:36-88 at df56543. 2. Read test/SettlementRateFree.t.sol. 3. Run grep -l check-settlement-rate-free contracts/specs/*.json.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) scripts/check-settlement-rate-free.py, scripts/check-settlement-rate-free-gate.py, test/SettlementRateFree.t.sol\n\nDecomposed child: scripts/check-settlement-rate-free.py and scripts/check-settlement-rate-free-gate.py each define their own collect_files(), scan_files() and self_test(). Both sets of functions scan src/ArmadaNitroAdjudicator.sol and src/nitro/. check-settlement-rate-free.py is the oracle of derived-arn-4c3. check-settlement-rate-free-gate.py is the oracle of derived-arn-5db. Remove the duplication between the two scripts. Make the two scripts share one implementation of collect_files(), scan_files(), and self_test(), instead of each script keeping its own copy. Keep each script's own distinct detection logic unchanged. check-settlement-rate-free.py matches the regex \\b(convertToAssets|convertToShares|previewDeposit|previewMint|previewRedeem|previewWithdraw)\\s*\\( and import lines that contain 4626, at lines 35-44. check-settlement-rate-free-gate.py matches the plain substrings ERC4626, IERC4626, convertToAssets, convertToShares and preview, at lines 36-42.",
+  "restatement": "Test restatement for schema isolation. This call exists only to see the full validation error for one behavior oracle item.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Placeholder clause for isolation test."
+    }
+  ],
+  "goal": "Isolate schema validation error.",
+  "acceptance_criteria": [
+    "Run check-settlement-rate-free.py against the file scripts/fixtures/rate-call-violation.txt, which contains a convertToAssets( call. Confirm the checker reports at least one rate-conversion call and exits with a non-zero code."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Run check-settlement-rate-free.py against the file scripts/fixtures/rate-call-violation.txt, which contains a convertToAssets( call. Confirm the checker reports at least one rate-conversion call and exits with a non-zero code."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Run check-settlement-rate-free.py against the file scripts/fixtures/rate-call-violation.txt, which contains a convertToAssets( call. Confirm the checker reports at least one rate-conversion call and exits with a non-zero code.",
+      "proves": "Proves check-settlement-rate-free.py still flags a rate-conversion call after the refactor.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free.py",
+        "args": [
+          "--scan-file",
+          "scripts/fixtures/rate-call-violation.txt"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "rate_call_count",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c1"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-settlement-rate-free.py"
+  ]
+}

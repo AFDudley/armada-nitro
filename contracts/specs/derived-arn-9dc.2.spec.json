@@ -1,0 +1,124 @@
+{
+  "id": "derived-arn-9dc.2",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:27-28 (E16 S6): the adjudicator imports no ERC-4626 interface and calls no exchange rate, and the forge tests check this as a source-level assertion.\nWhat holds now? Describe the current, observed state. On integrated df56543, three checks cover S6. test/SettlementRateFree.t.sol reads the adjudicator artifact's metadata.sources and scans the deployed bytecode for the six ERC-4626 rate selectors. scripts/check-settlement-rate-free.py (oracle of derived-arn-4c3) matches the regex \\b(convertToAssets|convertToShares|previewDeposit|previewMint|previewRedeem|previewWithdraw)\\s*\\( and import lines containing 4626 (lines 35-44). scripts/check-settlement-rate-free-gate.py (oracle of derived-arn-5db) matches the plain substrings ERC4626, IERC4626, convertToAssets, convertToShares and preview (lines 36-42), and skips a file it cannot open (except FileNotFoundError: pass). Both scripts define their own collect_files(), scan_files() and self_test() over src/ArmadaNitroAdjudicator.sol and src/nitro/.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Read scripts/check-settlement-rate-free.py:35-100 and scripts/check-settlement-rate-free-gate.py:36-88 at df56543. 2. Read test/SettlementRateFree.t.sol. 3. Run grep -l check-settlement-rate-free contracts/specs/*.json.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) scripts/check-settlement-rate-free.py, scripts/check-settlement-rate-free-gate.py, test/SettlementRateFree.t.sol\n\nDecomposed child: scripts/check-settlement-rate-free-gate.py is the oracle of derived-arn-5db. At lines 36-42, the script catches an unopenable file with the exact clause except FileNotFoundError: pass. This silently skips the file. The scan then reports a pass even when it could not check that file. Change the script so it fails loudly when it cannot open a file during the scan. The script must exit with a non-zero status in that case. The script must report which file it could not open and why. The script must not silently skip the file and continue as if the check passed.",
+  "restatement": "scripts/check-settlement-rate-free-gate.py is the monotonicity oracle for derived-arn-5db. It scans the adjudicator contract and every Nitro contract source file for forbidden ERC-4626 exchange-rate names, and the exophial gate reads its exit status and stdout to decide pass or fail. Today, scan_files() silently swallows a FileNotFoundError with `except FileNotFoundError: pass`. A file the script cannot open is skipped without comment, the scan continues, and the script can still report a clean pass, even though it never actually checked that file. The fix removes this silent skip. When the script cannot open a file during the scan, it must stop treating the run as clean: it exits with a non-zero status, and its output names the file it could not open and states why it could not open it, so nobody mistakes an unchecked file for a checked, clean one.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "When the script cannot open a file during the scan, it exits with a non-zero status instead of silently skipping the file and continuing as if the check had passed."
+    },
+    {
+      "id": "c2",
+      "text": "The script reports which file it could not open."
+    },
+    {
+      "id": "c3",
+      "text": "The script reports why it could not open that file."
+    }
+  ],
+  "goal": "Make the settlement-rate-free gate script fail loudly, naming the file and the reason, whenever it cannot open a file during its scan, instead of silently skipping that file and reporting a pass.",
+  "acceptance_criteria": [
+    "When the check is pointed at a scan target that does not exist on disk, running the check ends in a failing result instead of a clean pass.",
+    "When the check cannot open its scan target, its output names the exact file it could not open.",
+    "When the check cannot open its scan target, its output states the reason it could not open that file."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "When the check is pointed at a scan target that does not exist on disk, running the check ends in a failing result instead of a clean pass."
+    },
+    {
+      "id": "c2",
+      "text": "When the check cannot open its scan target, its output names the exact file it could not open."
+    },
+    {
+      "id": "c3",
+      "text": "When the check cannot open its scan target, its output states the reason it could not open that file."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "When the check is pointed at a scan target that does not exist on disk, running the check ends in a failing result instead of a clean pass.",
+      "proves": "Proves the script no longer treats an unopenable file as a clean scan, per restatement clause c1.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free-gate.py",
+        "args": [
+          "--scan-file",
+          "scripts/__oracle_test_missing_file__.sol"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "exit_code",
+          "observe": "exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c1"
+    },
+    {
+      "description": "When the check cannot open its scan target, its output names the exact file it could not open.",
+      "proves": "Proves the script identifies which file it could not open, per restatement clause c2.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free-gate.py",
+        "args": [
+          "--scan-file",
+          "scripts/__oracle_test_missing_file__.sol"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "unreadable_file",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": "scripts/__oracle_test_missing_file__.sol"
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c2"
+    },
+    {
+      "description": "When the check cannot open its scan target, its output states the reason it could not open that file.",
+      "proves": "Proves the script reports why the file could not be opened, per restatement clause c3.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-settlement-rate-free-gate.py",
+        "args": [
+          "--scan-file",
+          "scripts/__oracle_test_missing_file__.sol"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "field": "reason",
+          "observe": "stdout_json",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 30,
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-settlement-rate-free-gate.py"
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "id": "derived-arn-b27",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/E16-adjudicator-hardening.md:41-42: the armada-nitro-e2e gate passes on a fresh fixturenet with the allow-list deployed by the reconciler.\nWhat holds now? Describe the current, observed state. On 2026-10-14, on the fixturenet E12 rebuilt from nothing at integrated d51ae19, `laconic-so deployment --dir ~/deployments/armada-fixturenet-e12 run-job armada-nitro-e2e` (ARMADA_IMAGE_TAG=d51ae19db3102b0b36ebb08492f7ba1353d2ef68) exits 1. Stage 2 runs script/FixturenetScenario.s.sol. Its first phase, setUpHub(), reverts in HubCustodian.execute with InvalidGroupSignature(). _hubExecute (script/FixturenetScenario.s.sol:313-318) signs each execute through FrostTestSigner with HUB_GROUP_SCALAR (stack/compose-jobs/docker-compose-armada-nitro-e2e.yml:68). fixturenet-new runs the armada-frost-keygen job (stack/scripts/fixturenet-new:82-85), and env/targets/fixturenet.json:44 names the custodian's group key file group-pubkey.json. armada-env-verify on the same fixturenet exits 0.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. 1. Run stack/scripts/fixturenet-new armada-fixturenet-e12. 2. Run ARMADA_IMAGE_TAG=$(git rev-parse HEAD) laconic-so deployment --dir ~/deployments/armada-fixturenet-e12 run-job armada-nitro-e2e. 3. Read the forge trace of stage 2: FixturenetScenario::setUpHub() reverts with InvalidGroupSignature(), and the job exits 1.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro-e2e job, stage 2 (script/FixturenetScenario.s.sol)",
+  "restatement": "The armada-nitro-e2e job must pass on a fixturenet that stack/scripts/fixturenet-new builds from nothing. docs/tasks/E16-adjudicator-hardening.md:41-42 states this requirement. The reconciler deploys the allow-list on that same fixturenet.\n\nToday the job fails. On 2026-10-14 an operator rebuilt the fixturenet E12 from nothing at integrated d51ae19. The operator then ran `laconic-so deployment --dir ~/deployments/armada-fixturenet-e12 run-job armada-nitro-e2e` with ARMADA_IMAGE_TAG=d51ae19db3102b0b36ebb08492f7ba1353d2ef68. The job exited 1. Stage 2 runs script/FixturenetScenario.s.sol. Its first phase, setUpHub(), reverts in HubCustodian.execute with InvalidGroupSignature().\n\nThe signing material is the suspect part. _hubExecute (script/FixturenetScenario.s.sol:313-318) signs each execute through FrostTestSigner with HUB_GROUP_SCALAR (stack/compose-jobs/docker-compose-armada-nitro-e2e.yml:68). fixturenet-new runs the armada-frost-keygen job (stack/scripts/fixturenet-new:82-85). env/targets/fixturenet.json:44 names the custodian's group key file group-pubkey.json. So the custodian holds the group key that the keygen job produced, and the scenario signs with a separate scalar. armada-env-verify exits 0 on the same fixturenet, so the reconciler's own deployment is correct.\n\nThe request asks for one change with one fixed outcome. The hub signature that stage 2 produces must verify against the group key the deployed custodian holds. After the change, the armada-nitro-e2e job exits 0 on a fixturenet that stack/scripts/fixturenet-new builds from nothing. setUpHub() completes, and HubCustodian.execute reverts with InvalidGroupSignature() zero times. armada-env-verify keeps exit code 0 on that same fixturenet, so the allow-list the reconciler deployed stays verified. The request does not fix the method. The worker may correct the scenario's default signing material, or make the scenario sign with the real FROST shares. The outcome is what the request fixes.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "On a fixturenet that stack/scripts/fixturenet-new builds from nothing, the armada-nitro-e2e job exits 0."
+    },
+    {
+      "id": "c2",
+      "text": "On that same fixturenet, stage 2 (script/FixturenetScenario.s.sol) completes setUpHub(), and HubCustodian.execute reverts with InvalidGroupSignature() zero times."
+    },
+    {
+      "id": "c3",
+      "text": "On that same fixturenet, armada-env-verify exits 0, so the allow-list the reconciler deployed stays verified."
+    }
+  ],
+  "goal": "Make the hub signature that the armada-nitro-e2e scenario produces verify against the group key the deployed custodian holds, so the job exits 0 on a fixturenet built from nothing.",
+  "acceptance_criteria": [
+    "A person builds the fixturenet from nothing with the repository's fixturenet build script. The person then runs the armada-nitro-e2e job on that fixturenet. The job finishes with exit code 0.",
+    "On that same fixturenet, the hub set-up phase of the scenario finishes. The hub custodian rejects no hub call for a bad group signature: the run reports zero such rejections.",
+    "On that same fixturenet, the environment verification job also finishes with exit code 0. Both jobs are therefore green together on one fixturenet, so the allow-list the reconciler deployed stays correct."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A person builds the fixturenet from nothing with the repository's fixturenet build script. The person then runs the armada-nitro-e2e job on that fixturenet. The job finishes with exit code 0."
+    },
+    {
+      "id": "c2",
+      "text": "On that same fixturenet, the hub set-up phase of the scenario finishes. The hub custodian rejects no hub call for a bad group signature: the run reports zero such rejections."
+    },
+    {
+      "id": "c3",
+      "text": "On that same fixturenet, the environment verification job also finishes with exit code 0. Both jobs are therefore green together on one fixturenet, so the allow-list the reconciler deployed stays correct."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "A person builds the fixturenet from nothing with the repository's fixturenet build script. The person then runs the armada-nitro-e2e job on that fixturenet. The job finishes with exit code 0.",
+      "max_runs": 1,
+      "proves": "Proves the first clause of the restatement: the armada-nitro-e2e job passes on a fixturenet built from nothing, instead of exiting 1.",
+      "restatement_clause_id": "c1",
+      "then": [
+        {
+          "field": "nitro_e2e_exit_code",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "timeout_seconds": 3600,
+      "type": "behavior",
+      "when": {
+        "args": [],
+        "interpreter": "python3",
+        "script": "scripts/run-nitro-e2e-fresh-check.py",
+        "stdin": ""
+      },
+      "clause_id": "c1"
+    },
+    {
+      "description": "On that same fixturenet, the hub set-up phase of the scenario finishes. The hub custodian rejects no hub call for a bad group signature: the run reports zero such rejections.",
+      "max_runs": 1,
+      "proves": "Proves the second clause of the restatement: setUpHub() completes, and HubCustodian.execute no longer reverts with InvalidGroupSignature().",
+      "restatement_clause_id": "c2",
+      "then": [
+        {
+          "field": "invalid_group_signature_revert_count",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "set_up_hub_succeeded",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "timeout_seconds": 3600,
+      "type": "behavior",
+      "when": {
+        "args": [],
+        "interpreter": "python3",
+        "script": "scripts/run-nitro-e2e-fresh-check.py",
+        "stdin": ""
+      },
+      "clause_id": "c2"
+    },
+    {
+      "description": "On that same fixturenet, the environment verification job also finishes with exit code 0. Both jobs are therefore green together on one fixturenet, so the allow-list the reconciler deployed stays correct.",
+      "max_runs": 1,
+      "proves": "Proves the third clause of the restatement: armada-env-verify keeps exit code 0 on the same fresh fixturenet, so the fix does not break the reconciler's deployment.",
+      "restatement_clause_id": "c3",
+      "then": [
+        {
+          "field": "env_verify_exit_code",
+          "observe": "stdout_json",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "timeout_seconds": 3600,
+      "type": "behavior",
+      "when": {
+        "args": [],
+        "interpreter": "python3",
+        "script": "scripts/run-nitro-e2e-fresh-check.py",
+        "stdin": ""
+      },
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/run-nitro-e2e-fresh-check.py"
+  ]
+}

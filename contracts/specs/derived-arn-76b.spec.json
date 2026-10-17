@@ -1,0 +1,83 @@
+{
+  "id": "derived-arn-76b",
+  "original_statement": "What did you do? List the exact steps to reproduce, in order. script/FixturenetScenario.s.sol:111 calls concludeAndTransferAllAssets and :176 calls transferAllAssets. The script does not call MultiAssetHolder.transfer(assetIndex, ...) (src/nitro/MultiAssetHolder.sol:75).\nWhat did you expect to happen? For a finalized two-asset channel whose second token reverts on transfer, settling through the scenario's settlement path pays the first asset and leaves the second asset's holdings unchanged. Checks: behavior: 'python3 scripts/check-per-asset-settlement.py' prints one JSON line {first_asset_paid: true, second_asset_holdings_unchanged: true}.\nWhat actually happened? Include the exact error text or output. The scenario settles only through all-assets calls; when one asset's transfer reverts, the whole call reverts.\nWhich surface or component? (e.g. gateway route, mobile screen, CLI verb) script/FixturenetScenario.s.sol settlement\nWhat environment and version? (OS, app/gateway build or commit, network) armada-nitro main 3a29d0f; solc 0.8.17; forge\nIs it reproducible? (always / intermittently / once) \u2014 and how often. always\nWhat is the impact / severity? Who is blocked and how badly? Design 15 I5 and E16 S4 require each asset of a finalized channel to be payable on its own. E11 puts several assets in one channel.\nWhat activity was underway when this was found? (ODC Activity \u2014 e.g. testing, code review, normal usage, reproduction attempt) design review for E11 multi-asset hub channels\nWhat condition or event exposed the defect? (ODC Trigger \u2014 e.g. a config change, concurrent access, a boundary/edge-case input, an unusual workload) reading the settlement calls",
+  "restatement": "The settlement path used by the Fixturenet scenario script must settle a finalized multi-asset channel one asset at a time, so that a revert on one asset's token transfer does not block payment of another asset in the same channel. Concretely, for a finalized two-asset channel whose second asset's token reverts on transfer, running the scenario's settlement path must still pay out the first asset, and the second asset's recorded holdings must be left unchanged by that same attempt. This closes a gap against design requirements I5 and E16 S4 (each asset of a finalized channel must be payable on its own) and E11 (several assets held in one channel), which the current scenario script does not exercise because it settles only through the all-assets functions.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "For a finalized two-asset channel whose second token reverts on transfer, settling through the scenario's settlement path pays the first asset."
+    },
+    {
+      "id": "c2",
+      "text": "That same settlement leaves the second asset's holdings unchanged."
+    }
+  ],
+  "goal": "Make the scenario's settlement path pay out a working asset in a finalized multi-asset channel even when another asset in that channel reverts on transfer.",
+  "acceptance_criteria": [
+    "After settling a finalized two-asset channel whose second token reverts on transfer, the first asset shows as paid.",
+    "After that same settlement attempt, the second asset's recorded holdings are unchanged from before the attempt."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After settling a finalized two-asset channel whose second token reverts on transfer, the first asset shows as paid."
+    },
+    {
+      "id": "c2",
+      "text": "After that same settlement attempt, the second asset's recorded holdings are unchanged from before the attempt."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "After settling a finalized two-asset channel whose second token reverts on transfer, the first asset shows as paid.",
+      "proves": "Confirms clause c1: the first asset is paid out even though the second asset's transfer reverts.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-per-asset-settlement.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "first_asset_paid",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "After that same settlement attempt, the second asset's recorded holdings are unchanged from before the attempt.",
+      "proves": "Confirms clause c2: the second asset's holdings are left untouched when its transfer reverts.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-per-asset-settlement.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "second_asset_holdings_unchanged",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-per-asset-settlement.py"
+  ]
+}
