@@ -1,0 +1,66 @@
+{
+  "id": "derived-arn-40f",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A payout of an ERC20 asset from the adjudicator moves the tokens to the destination, or the call reverts. The E16 brief (docs/tasks/E16-adjudicator-hardening.md:31) names SafeERC20 for every token call.\nWhat holds now? Describe the current, observed state. src/nitro/MultiAssetHolder.sol:461 calls IERC20(asset).transfer(destination, amount) and does not read the bool that the call returns. In src/*.sol and src/nitro/*.sol, this is the only ERC20 token call that is not a SafeERC20 call (searched for .transfer(, .transferFrom( and safeTransfer). Line 76 of the same file calls safeTransferFrom.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read src/nitro/MultiAssetHolder.sol lines 456-463, the function _transferAsset. The else branch at line 461 calls IERC20(asset).transfer and discards its return value.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) src/nitro/MultiAssetHolder.sol, function _transferAsset, line 461",
+  "restatement": "When the adjudicator pays an ERC20 asset out of a channel to an external destination, the payout must have only two possible results. Either the destination receives the full amount of tokens, or the whole call reverts and the channel holdings stay unchanged. Now, src/nitro/MultiAssetHolder.sol:461 in _transferAsset calls IERC20(asset).transfer(destination, amount) and ignores the returned bool. The adjudicator decrements the channel holdings before this call. Thus a token that returns false moves no tokens, but the call succeeds and the beneficiary loses the entitlement. The E16 brief (docs/tasks/E16-adjudicator-hardening.md:31) requires SafeERC20 for every token call. The fix makes the payout use SafeERC20, so that a false return reverts the payout. The fix also keeps payouts working for a token that returns no value, which SafeERC20 accepts.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A payout of an ERC20 asset from the adjudicator moves the tokens to the destination, or the call reverts: when the token's transfer returns false, the payout call reverts and the channel holdings and the destination balance do not change."
+    },
+    {
+      "id": "c2",
+      "text": "_transferAsset in src/nitro/MultiAssetHolder.sol (line 461) uses SafeERC20 for the ERC20 transfer, as the E16 brief (docs/tasks/E16-adjudicator-hardening.md:31) requires for every token call: a token whose transfer returns true, or returns no value, pays the full amount to the destination, and the channel holdings fall by the same amount."
+    }
+  ],
+  "goal": "An ERC20 payout from the adjudicator moves the tokens to the destination, or the call reverts. The adjudicator never records a payout that did not move the tokens.",
+  "acceptance_criteria": [
+    "A channel holds a test token whose transfer reports failure (returns false) and moves nothing. Someone asks the adjudicator to pay that token out to an outside address. The payout is refused as a whole. Afterwards, the channel still holds the same amount, and the outside address received nothing. The total of channel holdings plus the destination balance is the same before and after.",
+    "The same payout runs twice: once with a standard token that returns true, and once with a token that returns no value (like USDT). In both runs, the outside address receives the full amount, and the channel holdings fall by exactly that amount. The total of channel holdings plus the destination balance is the same before and after."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A channel holds a test token whose transfer reports failure (returns false) and moves nothing. Someone asks the adjudicator to pay that token out to an outside address. The payout is refused as a whole. Afterwards, the channel still holds the same amount, and the outside address received nothing. The total of channel holdings plus the destination balance is the same before and after."
+    },
+    {
+      "id": "c2",
+      "text": "The same payout runs twice: once with a standard token that returns true, and once with a token that returns no value (like USDT). In both runs, the outside address receives the full amount, and the channel holdings fall by exactly that amount. The total of channel holdings plus the destination balance is the same before and after."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "metamorphic",
+      "relation_class": "conservation",
+      "restatement_clause_id": "c1",
+      "description": "A channel holds a test token whose transfer reports failure (returns false) and moves nothing. Someone asks the adjudicator to pay that token out to an outside address. The payout is refused as a whole. Afterwards, the channel still holds the same amount, and the outside address received nothing. The total of channel holdings plus the destination balance is the same before and after.",
+      "proves": "A token that reports failure can no longer make the adjudicator remove funds from the channel without paying them, so value is conserved.",
+      "run": [
+        "python3",
+        "scripts/check-adjudicator-payout-conservation.py",
+        "--token",
+        "returns-false"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "metamorphic",
+      "relation_class": "conservation",
+      "restatement_clause_id": "c2",
+      "description": "The same payout runs twice: once with a standard token that returns true, and once with a token that returns no value (like USDT). In both runs, the outside address receives the full amount, and the channel holdings fall by exactly that amount. The total of channel holdings plus the destination balance is the same before and after.",
+      "proves": "The payout uses the SafeERC20 rules: it accepts a true return and a missing return, and it still pays the full amount for both kinds of token.",
+      "run": [
+        "python3",
+        "scripts/check-adjudicator-payout-conservation.py",
+        "--token",
+        "returns-true",
+        "--token",
+        "returns-nothing"
+      ],
+      "clause_id": "c2"
+    }
+  ],
+  "criticality": "critical",
+  "declared_new_entrypoints": [
+    "scripts/check-adjudicator-payout-conservation.py"
+  ]
+}
