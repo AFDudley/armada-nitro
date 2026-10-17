@@ -1,0 +1,267 @@
+{
+  "id": "derived-arn-026",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. The armada-sdk disclosure checker (ship-armada/armada-sdk#142, src/disclosure/checker.ts) accepts a disclosure package built from a real armada-nitro fixturenet run. Every chain event that the checker reads comes from a real transaction. The run covers one chain of custody. Hop H1: a test EOA shields USDC into the pool. Hops H2 and H4: the wallet spends that note through depositFromNote into a hub channel. Hop H5: the channel concludes with a SHIELD payout to a fresh note of the same wallet. Hop H6: the wallet unshields that note to a second test EOA. A copy of the package with one hop changed fails the checker, and the checker names the failed check.\nWhat holds now? Describe the current, observed state. The disclosure tests in armada-sdk PR #142 use real Groth16 disclosure proofs. Every chain event in those tests is a synthetic fixture that the test computes to match the proofs. No hop is checked against an event from a real transaction. The SDK has no decoder for armada-nitro logs (Deposited, the finalized channel outcome). The armada-nitro-e2e gate already shields USDC and funds two channels with real-proof depositFromNote calls (env/gates/nitro-e2e/prepare.ts, script/FixturenetScenario.s.sol). That gate does not unshield the payout note to an EOA. It does not record the events in a form that the SDK checker reads.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the new capture job on the fixturenet. The job writes one fixture file: for each hop, the transaction hash, the receipt and the decoded events, plus the test-wallet data that the SDK builder needs (keys, note randoms, tree number and leaf index). The job then builds a disclosure package with the armada-sdk builder and runs the armada-sdk checker on it: the checker returns a pass. The job changes one recorded value in a copy (for example the payout npk, the channelId or one nullifier) and runs the checker again: the checker returns a fail with the named check.\nWhat constraints apply? State them in plain prose. Use real proofs, real contracts and real transactions. Do not mock or compute chain events. Use the dev disclosure-circuit artifacts from ship-armada/armada-circuits#3 (build/disclosure/ in armada-circuits: main_disclosure.wasm, final.zkey, vkey.json); they are an unsafe dev setup for tests only. Use throwaway test-wallet keys only. Do not change the pool, the disclosure circuit or the adjudicator. Use armada-sdk from branch selective-disclosure (PR #142) as an external dependency; do not copy its code into armada-nitro. The fixture format is the one that src/disclosure/chain-source.ts in armada-sdk reads. If that format cannot represent an armada-nitro log, record the gap in the handoff and do not invent a format. The waUSDC swap of armada-laconic design page 16 depends on task E11 (armada-assets-e2e); this filing covers the USDC chain only. Design: armada-laconic engineering/16-selective-disclosure.md and ADR-0020.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro fixturenet gate jobs: env/gates/, stack/compose-jobs/, script/. New capture job beside armada-nitro-e2e.",
+  "restatement": "armada-nitro needs a new fixturenet capture job beside armada-nitro-e2e. The job proves that the armada-sdk disclosure checker (ship-armada/armada-sdk PR #142, branch selective-disclosure) accepts a disclosure package whose chain events all come from real transactions. The job runs one USDC chain of custody on the fixturenet with real proofs and real contracts. Hop H1: a test EOA shields USDC into the pool. Hops H2 and H4: the wallet spends that note through depositFromNote into a hub channel. Hop H5: the channel concludes with a SHIELD payout to a fresh note of the same wallet. Hop H6: the wallet unshields that note to a second test EOA. The job writes one fixture file in the format that armada-sdk src/disclosure/chain-source.ts reads. For each hop, the file holds the transaction hash, the receipt and the decoded events. The file also holds the test-wallet data that the SDK builder needs (keys, note randoms, tree number and leaf index). The job then builds a disclosure package with the armada-sdk builder and runs the armada-sdk checker on it, and the checker returns a pass. The job changes one recorded value in a copy (for example the payout npk, the channelId or one nullifier) and runs the checker again; the checker returns a fail with the named check. The job uses the dev disclosure-circuit artifacts from ship-armada/armada-circuits#3 and throwaway test keys only. armada-sdk stays an external dependency; its code is not copied into armada-nitro. The pool, the disclosure circuit and the adjudicator do not change. If the chain-source format cannot represent an armada-nitro log, the worker records the gap in the handoff and does not invent a format. The waUSDC swap is out of scope.",
+  "restatement_clauses": [
+    {
+      "id": "C1",
+      "text": "The capture job, run as a fixturenet gate job beside armada-nitro-e2e, executes hops H1 (test EOA shields USDC into the pool), H2 and H4 (the wallet spends that note through depositFromNote into a hub channel), H5 (the channel concludes with a SHIELD payout to a fresh note of the same wallet) and H6 (the wallet unshields that note to a second test EOA) as real transactions on the armada-nitro fixturenet, each with a mined receipt."
+    },
+    {
+      "id": "C2",
+      "text": "The job writes one fixture file that holds, for each hop, the transaction hash, the receipt and the decoded events, plus the test-wallet data that the SDK builder needs (keys, note randoms, tree number and leaf index), in the format that armada-sdk src/disclosure/chain-source.ts reads."
+    },
+    {
+      "id": "C3",
+      "text": "The job builds a disclosure package from the fixture with the armada-sdk builder and runs the armada-sdk checker on it: the checker returns a pass."
+    },
+    {
+      "id": "C4",
+      "text": "The job changes one recorded value in a copy (for example the payout npk, the channelId or one nullifier) and runs the checker again: the checker returns a fail with the named check."
+    },
+    {
+      "id": "C5",
+      "text": "The job uses armada-sdk from branch selective-disclosure (PR #142) as an external dependency, not code copied into armada-nitro."
+    }
+  ],
+  "goal": "A real fixturenet run produces a disclosure package that the armada-sdk checker accepts, and a one-value tampered copy that the checker rejects with a named check.",
+  "acceptance_criteria": [
+    "Run the capture job on the fixturenet. It reports five recorded hops (H1, H2, H4, H5, H6). Each hop has a real transaction hash with a successful mined receipt from the chain. The payout note belongs to the depositing wallet, and the unshield goes to a second address.",
+    "After the capture run, the armada-sdk chain-source reader loads the written fixture file without error. Every hop in it carries a transaction hash, a receipt and decoded events. The wallet data (keys, note randoms, tree number, leaf index) is present.",
+    "The armada-sdk checker, run on the package built from the real fixture, reports a pass.",
+    "For each tampered copy (payout npk changed, channelId changed, one nullifier changed), the armada-sdk checker reports a fail and names the check that failed.",
+    "The capture run reports that the armada-sdk it loaded came from the selective-disclosure branch of ship-armada/armada-sdk as an installed dependency, not from a source file inside armada-nitro."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Run the capture job on the fixturenet. It reports five recorded hops (H1, H2, H4, H5, H6). Each hop has a real transaction hash with a successful mined receipt from the chain. The payout note belongs to the depositing wallet, and the unshield goes to a second address."
+    },
+    {
+      "id": "c2",
+      "text": "After the capture run, the armada-sdk chain-source reader loads the written fixture file without error. Every hop in it carries a transaction hash, a receipt and decoded events. The wallet data (keys, note randoms, tree number, leaf index) is present."
+    },
+    {
+      "id": "c3",
+      "text": "The armada-sdk checker, run on the package built from the real fixture, reports a pass."
+    },
+    {
+      "id": "c4",
+      "text": "For each tampered copy (payout npk changed, channelId changed, one nullifier changed), the armada-sdk checker reports a fail and names the check that failed."
+    },
+    {
+      "id": "c5",
+      "text": "The capture run reports that the armada-sdk it loaded came from the selective-disclosure branch of ship-armada/armada-sdk as an installed dependency, not from a source file inside armada-nitro."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Run the capture job on the fixturenet. It reports five recorded hops (H1, H2, H4, H5, H6). Each hop has a real transaction hash with a successful mined receipt from the chain. The payout note belongs to the depositing wallet, and the unshield goes to a second address.",
+      "proves": "The chain of custody happened as real transactions on the fixturenet, not as computed events.",
+      "restatement_clause_id": "C1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-capture.py",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hop_count",
+          "op": "eq",
+          "value": 5
+        },
+        {
+          "observe": "stdout_json",
+          "field": "all_hops_have_successful_receipt",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "payout_note_owner_is_depositing_wallet",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "unshield_recipient_differs_from_shield_sender",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "description": "After the capture run, the armada-sdk chain-source reader loads the written fixture file without error. Every hop in it carries a transaction hash, a receipt and decoded events. The wallet data (keys, note randoms, tree number, leaf index) is present.",
+      "proves": "The fixture file holds the per-hop records and wallet data in the format the SDK reads.",
+      "restatement_clause_id": "C2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-capture.py",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "fixture_loaded_by_chain_source",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hops_with_tx_hash_receipt_and_events",
+          "op": "eq",
+          "value": 5
+        },
+        {
+          "observe": "stdout_json",
+          "field": "wallet_data_complete",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "description": "The armada-sdk checker, run on the package built from the real fixture, reports a pass.",
+      "proves": "The SDK checker accepts a disclosure package built from real chain events.",
+      "restatement_clause_id": "C3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-capture.py",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "checker_pass",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "description": "For each tampered copy (payout npk changed, channelId changed, one nullifier changed), the armada-sdk checker reports a fail and names the check that failed.",
+      "proves": "A one-value change to a hop makes the checker fail with a named check.",
+      "restatement_clause_id": "C4",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-capture.py",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "tamper_case_count",
+          "op": "ge",
+          "value": 3
+        },
+        {
+          "observe": "stdout_json",
+          "field": "tamper_cases_passed_checker",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "tamper_cases_without_named_check",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "description": "The capture run reports that the armada-sdk it loaded came from the selective-disclosure branch of ship-armada/armada-sdk as an installed dependency, not from a source file inside armada-nitro.",
+      "proves": "armada-sdk is consumed as an external dependency from the PR #142 branch.",
+      "restatement_clause_id": "C5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-capture.py",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "armada_sdk_source_branch",
+          "op": "eq",
+          "value": "selective-disclosure"
+        },
+        {
+          "observe": "stdout_json",
+          "field": "armada_sdk_loaded_from_repo_source",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-disclosure-capture.py"
+  ]
+}
