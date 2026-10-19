@@ -1,5 +1,9 @@
 # E8 Sepolia target
 
+Status: scheduled last, immediately before production. E8 is a deployment rehearsal on a public network. It runs the
+same code, reconciler and e2e jobs as the fixturenet, which holds every role that Circle, Lido and Aave hold on Sepolia.
+So E8 proves no correctness property that the fixturenet jobs and E16 do not already prove.
+
 Depends on: E7 green on the fixturenet. Prerequisite from the maintainer:
 - a Sepolia deployer key file on kelce at `~/.config/armada-nitro/sepolia-deployer.key`;
 - two test-account key files `~/.config/armada-nitro/sepolia-user{1,2}.key`, funded with Sepolia ETH and Circle

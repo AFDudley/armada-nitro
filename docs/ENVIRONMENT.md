@@ -156,7 +156,7 @@ after the fixturenet is green.
 | E5 | Lido module | E3a |
 | E6 | Armada, armada_nitro, funding modules; manifest complete | E3b (armada needs usdc + cctp) |
 | E7 | Gates: `armada-env-verify`, `armada-nitro-e2e` | E4, E5, E6 |
-| E8 | Sepolia target (deferred) | E7 green on the fixturenet; a funded Sepolia deployer key |
+| E8 | Sepolia target: deployment rehearsal, scheduled last, before production; proves no correctness property beyond the fixturenet jobs and E16 | E7 green on the fixturenet; a funded Sepolia deployer key |
 | E9 | Circuits baked into the image; deployer key from laconic-so deployment config | E7 |
 | E10 | Gate fixes: our own pool e2e (shield/transfer/unshield); challenge window enforced | E9 |
 | E11 | Aave and Lido end to end through channels (`waUSDC`, wstETH, real yield) | E10, E12, E16 |
