@@ -61,4 +61,4 @@ discrimination:
       - src/nitro/MultiAssetHolder.sol
     exit_code_before: 1
     exit_code_after: 0
-    reverted: true
+    reverted: restored_and_verified
