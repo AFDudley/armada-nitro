@@ -4,7 +4,9 @@
 # Never clobbered on re-run (template force=false).
 
 # src/nitro/ is vendored go-nitro (see README): kept byte-identical to upstream.
-exclude: ^src/nitro/
+# docs/references/nitro/sources/ holds retrieved specification copies: kept
+# byte-identical to their checksums in docs/references/nitro/README.md.
+exclude: ^(src/nitro/|docs/references/nitro/sources/)
 
 repos:
   # === Exophial-vendored gates ===
