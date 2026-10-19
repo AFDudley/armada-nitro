@@ -1,0 +1,538 @@
+{
+  "id": "derived-arn-315",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A selective-disclosure chain of custody that runs on the armada-nitro fixturenet as real transactions passes the armada-sdk disclosure checker (draft PR ship-armada/armada-sdk#142; fork AFDudley/armada-sdk, branch selective-disclosure, commit 0aa2ba1). The chain covers hops H1, H2, H4, H5, H6 and H7 of armada-laconic engineering/16-selective-disclosure.md: a test EOA shields USDC, the note funds a hub channel through depositFromNote, the wallet and the hub co-sign channel states, the channel pays a SHIELD payout to a fresh note of the same wallet, and that note is unshielded to a second test EOA. The checker reads these events from the fixturenet and checks each hub signature with isValidSignature on the live HubCustodian. The same package with any one recorded value changed fails the checker, and the checker names the failed check. ADR-0020 clauses D20.1, D20.5 and D20.6 in armada-laconic engineering/09-architecture-decisions.md state these properties.\nWhat holds now? Describe the current, observed state. In armada-sdk at commit 0aa2ba1, the disclosure tests construct every chain event in test code. The hub signature check in the tests uses a stand-in predicate. No test or fixture in armada-sdk or armada-nitro holds an event from a real transaction of a disclosure chain. No recorded run has called isValidSignature on a HubCustodian for a disclosure package. The armada-nitro-e2e gate shields USDC and funds channels with real-proof depositFromNote calls. It does not unshield a payout note to an EOA, and it writes no disclosure package.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. In armada-sdk at commit 0aa2ba1, read src/disclosure/disclosure.test.ts and src/disclosure/attribution.test.ts: every event that the checker reads is an object literal or a value computed in the test, and hubSignatureValid is a function defined in the test. Search armada-sdk and armada-nitro for a disclosure fixture recorded from a chain: none exists. Search armada-nitro env/gates, script and stack/scripts for a call to the armada-sdk disclosure checker: none exists.\nWhat constraints apply? State them in plain prose. Real proofs, real contracts and real transactions on the armada-nitro fixturenet. No mocked or computed chain events. The disclosure-circuit artifacts are the dev artifacts of ship-armada/armada-circuits#3 (build/disclosure/ in an armada-circuits checkout); they are an unsafe setup for tests only. Test-wallet keys only. The pool, the disclosure circuit and the adjudicator stay unchanged. armada-sdk comes from the fork AFDudley/armada-sdk, branch selective-disclosure, commit 0aa2ba1, as an installed dependency, with no copied SDK code. A failed step stops the run with a non-zero exit and names the step, with no retry, and a timeout counts as a failed step. The checks that grade this work read the chain and call the armada-sdk checker directly; they do not read results that the work's own code reports about itself. The channel uses USDC; the waUSDC swap of page 16 depends on E11.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro fixturenet gate jobs: env/gates/, script/, stack/scripts/, stack/compose-jobs/.",
+  "restatement": "The armada-sdk selective-disclosure checker (fork AFDudley/armada-sdk, branch selective-disclosure, commit 0aa2ba1, draft PR ship-armada/armada-sdk#142) has no evidence that it accepts a real chain of custody. Its tests build every chain event in test code, and its hub signature check uses a stand-in predicate. This work adds an armada-nitro fixturenet gate job that runs one selective-disclosure chain as real transactions with real proofs and real contracts. The chain covers hops H1, H2, H4, H5, H6 and H7 of armada-laconic engineering/16-selective-disclosure.md. In H1, a test EOA shields USDC. In H2 and H4, the note funds a hub channel through depositFromNote. In H7, the wallet and the hub co-sign channel states. In H5, the channel pays a SHIELD payout to a fresh note of the same wallet. In H6, that note is unshielded to a second test EOA. The armada-sdk checker reads these events from the fixturenet. It checks each hub signature with isValidSignature on the live HubCustodian, and it passes. A copy of the package with any one recorded value changed fails the checker, and the checker names the failed check. These are the properties of ADR-0020 clauses D20.1, D20.5 and D20.6. A failed step stops the run with a non-zero exit and names the step. The run does not retry, and a timeout is a failed step. armada-sdk is an installed dependency pinned to the fork commit 0aa2ba1, with no SDK code copied into armada-nitro. The disclosure-circuit artifacts are the dev artifacts of ship-armada/armada-circuits#3. Only test-wallet keys are used. The pool, the disclosure circuit and the adjudicator do not change. The channel uses USDC, and the waUSDC swap is out of scope. The grading checks read the chain and call the armada-sdk checker directly. They do not read results that the job reports about itself.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "One run of the gate job on the armada-nitro fixturenet performs hops H1, H2, H4, H5, H6 and H7 as real transactions: a test EOA shields USDC, the note funds a hub channel through depositFromNote, the wallet and the hub co-sign channel states, the channel pays a SHIELD payout to a fresh note of the same wallet, and that note is unshielded to a second test EOA. Every recorded transaction has a receipt with status 1 on the fixturenet, and the events on chain equal the recorded events."
+    },
+    {
+      "id": "c2",
+      "text": "The H6 unshield pays USDC to a second test EOA that is different from the H1 shielding EOA, and the SHIELD payout note of H5 belongs to the same wallet that shielded in H1."
+    },
+    {
+      "id": "c3",
+      "text": "The armada-sdk disclosure checker, reading the events from the fixturenet, passes the package of the real chain."
+    },
+    {
+      "id": "c4",
+      "text": "The checker checks each hub signature with isValidSignature on the live HubCustodian on the fixturenet, and the live HubCustodian accepts each hub signature."
+    },
+    {
+      "id": "c5",
+      "text": "The same package with any one recorded value changed fails the checker, and the checker names the failed check."
+    },
+    {
+      "id": "c6",
+      "text": "A failed step stops the run with a non-zero exit and names the step, with no retry, and a timeout counts as a failed step."
+    },
+    {
+      "id": "c7",
+      "text": "armada-sdk comes from the fork AFDudley/armada-sdk, branch selective-disclosure, commit 0aa2ba1, as an installed dependency, with no copied SDK code."
+    },
+    {
+      "id": "c8",
+      "text": "The pool, the disclosure circuit and the adjudicator stay unchanged."
+    },
+    {
+      "id": "c9",
+      "text": "The job is an armada-nitro fixturenet gate job under env/gates/, script/, stack/scripts/ and stack/compose-jobs/."
+    }
+  ],
+  "goal": "A fixturenet gate job runs one real selective-disclosure chain (H1, H2, H4, H5, H6, H7). The armada-sdk checker accepts the real package, with live HubCustodian isValidSignature checks. It rejects every single-value tampered copy and names the failed check.",
+  "acceptance_criteria": [
+    "After one run of the gate job on the fixturenet, each recorded transaction for hops H1, H2, H4, H5 and H6 is looked up on the fixturenet. Every one succeeded, the events on chain match the recorded events, and co-signed channel states for H7 are present.",
+    "Read from the fixturenet after the run: the USDC balance of the second test EOA rose by the unshielded amount, that EOA differs from the shielding EOA, and the payout note belongs to the same wallet that shielded.",
+    "The armada-sdk disclosure checker is called directly on the package of the real run, with a chain source that reads the fixturenet. It reports a pass with no failed checks.",
+    "During the checker call, each hub signature is checked by a call to isValidSignature on the HubCustodian address deployed on the fixturenet. That address holds contract code, and each call returns the accepted value 0x1626ba7e.",
+    "Copies of the real package are made, each with exactly one recorded value changed, for every recorded value in turn. These include the payout npk, the channelId, one nullifier, one channel-state allocation, one event chain id and one event contract address. The checker rejects every copy and names the failed check each time.",
+    "The gate job is run with an RPC address that nothing listens on, and again with an RPC address that accepts connections but never answers. Each run stops with a non-zero exit within 60 seconds and names the failed step. Each failed step was tried once only.",
+    "The installed armada-sdk package resolves to the AFDudley/armada-sdk fork at commit 0aa2ba1. The disclosure checker that the job loads comes from that installed package. No copy of the SDK disclosure source files is present in the armada-nitro tree.",
+    "Compared with main, the work changes no file of the pool contracts, the disclosure circuit or the adjudicator.",
+    "The fixturenet compose jobs under stack/compose-jobs/ are loaded with docker compose. At least one job runs the selective-disclosure gate job, and its run is the one the other checks inspect."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After one run of the gate job on the fixturenet, each recorded transaction for hops H1, H2, H4, H5 and H6 is looked up on the fixturenet. Every one succeeded, the events on chain match the recorded events, and co-signed channel states for H7 are present."
+    },
+    {
+      "id": "c2",
+      "text": "Read from the fixturenet after the run: the USDC balance of the second test EOA rose by the unshielded amount, that EOA differs from the shielding EOA, and the payout note belongs to the same wallet that shielded."
+    },
+    {
+      "id": "c3",
+      "text": "The armada-sdk disclosure checker is called directly on the package of the real run, with a chain source that reads the fixturenet. It reports a pass with no failed checks."
+    },
+    {
+      "id": "c4",
+      "text": "During the checker call, each hub signature is checked by a call to isValidSignature on the HubCustodian address deployed on the fixturenet. That address holds contract code, and each call returns the accepted value 0x1626ba7e."
+    },
+    {
+      "id": "c5",
+      "text": "Copies of the real package are made, each with exactly one recorded value changed, for every recorded value in turn. These include the payout npk, the channelId, one nullifier, one channel-state allocation, one event chain id and one event contract address. The checker rejects every copy and names the failed check each time."
+    },
+    {
+      "id": "c6",
+      "text": "The gate job is run with an RPC address that nothing listens on, and again with an RPC address that accepts connections but never answers. Each run stops with a non-zero exit within 60 seconds and names the failed step. Each failed step was tried once only."
+    },
+    {
+      "id": "c7",
+      "text": "The installed armada-sdk package resolves to the AFDudley/armada-sdk fork at commit 0aa2ba1. The disclosure checker that the job loads comes from that installed package. No copy of the SDK disclosure source files is present in the armada-nitro tree."
+    },
+    {
+      "id": "c8",
+      "text": "Compared with main, the work changes no file of the pool contracts, the disclosure circuit or the adjudicator."
+    },
+    {
+      "id": "c9",
+      "text": "The fixturenet compose jobs under stack/compose-jobs/ are loaded with docker compose. At least one job runs the selective-disclosure gate job, and its run is the one the other checks inspect."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c1",
+      "description": "After one run of the gate job on the fixturenet, each recorded transaction for hops H1, H2, H4, H5 and H6 is looked up on the fixturenet. Every one succeeded, the events on chain match the recorded events, and co-signed channel states for H7 are present.",
+      "proves": "The chain of custody ran as real transactions on the fixturenet, and the record matches the chain.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "chain"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "job_exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hops_missing",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "receipts_checked",
+          "op": "ge",
+          "value": 4
+        },
+        {
+          "observe": "stdout_json",
+          "field": "receipts_not_status_1",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "event_mismatches",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "cosigned_states",
+          "op": "ge",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c2",
+      "description": "Read from the fixturenet after the run: the USDC balance of the second test EOA rose by the unshielded amount, that EOA differs from the shielding EOA, and the payout note belongs to the same wallet that shielded.",
+      "proves": "The payout goes back to the same wallet and leaves the pool to a separate test EOA, as hops H5 and H6 require.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "payout-path"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "recipient_differs_from_shielder",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "recipient_balance_delta_equals_unshield_amount",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "payout_note_same_wallet",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c3",
+      "description": "The armada-sdk disclosure checker is called directly on the package of the real run, with a chain source that reads the fixturenet. It reports a pass with no failed checks.",
+      "proves": "The armada-sdk checker accepts a real chain of custody, not only events made in test code.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "checker"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "checker_verdict",
+          "op": "eq",
+          "value": "pass"
+        },
+        {
+          "observe": "stdout_json",
+          "field": "failed_checks",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "events_read_from_chain",
+          "op": "ge",
+          "value": 4
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c4",
+      "description": "During the checker call, each hub signature is checked by a call to isValidSignature on the HubCustodian address deployed on the fixturenet. That address holds contract code, and each call returns the accepted value 0x1626ba7e.",
+      "proves": "The hub signature check uses the live HubCustodian, not a stand-in.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "hub-signature"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hub_custodian_has_code",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "is_valid_signature_calls",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hub_signatures_unchecked",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "is_valid_signature_rejections",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c5",
+      "description": "Copies of the real package are made, each with exactly one recorded value changed, for every recorded value in turn. These include the payout npk, the channelId, one nullifier, one channel-state allocation, one event chain id and one event contract address. The checker rejects every copy and names the failed check each time.",
+      "proves": "The checker detects a change to any single recorded value and says which check failed.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "tamper"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "variants_tested",
+          "op": "ge",
+          "value": 6
+        },
+        {
+          "observe": "stdout_json",
+          "field": "recorded_values_untested",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "variants_accepted",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "variants_without_named_check",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c6",
+      "description": "The gate job is run with an RPC address that nothing listens on, and again with an RPC address that accepts connections but never answers. Each run stops with a non-zero exit within 60 seconds and names the failed step. Each failed step was tried once only.",
+      "proves": "A failure or timeout stops the run at once, names the step, and causes no retry.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "fail-fast"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "dead_rpc_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "dead_rpc_seconds",
+          "op": "le",
+          "value": 60
+        },
+        {
+          "observe": "stdout_json",
+          "field": "dead_rpc_step_named",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hung_rpc_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hung_rpc_seconds",
+          "op": "le",
+          "value": 60
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hung_rpc_step_named",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "max_attempts_per_step",
+          "op": "eq",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c7",
+      "description": "The installed armada-sdk package resolves to the AFDudley/armada-sdk fork at commit 0aa2ba1. The disclosure checker that the job loads comes from that installed package. No copy of the SDK disclosure source files is present in the armada-nitro tree.",
+      "proves": "armada-sdk is an installed dependency from the named fork commit, with no copied SDK code.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "sdk-pin"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "sdk_resolved_repo",
+          "op": "eq",
+          "value": "AFDudley/armada-sdk"
+        },
+        {
+          "observe": "stdout_json",
+          "field": "sdk_resolved_commit_prefix",
+          "op": "eq",
+          "value": "0aa2ba1"
+        },
+        {
+          "observe": "stdout_json",
+          "field": "checker_loaded_from_installed_package",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "copied_sdk_files",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c7"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c8",
+      "description": "Compared with main, the work changes no file of the pool contracts, the disclosure circuit or the adjudicator.",
+      "proves": "The pool, the disclosure circuit and the adjudicator stay unchanged.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "unchanged"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "protected_files_changed",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c8"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c9",
+      "description": "The fixturenet compose jobs under stack/compose-jobs/ are loaded with docker compose. At least one job runs the selective-disclosure gate job, and its run is the one the other checks inspect.",
+      "proves": "The chain runs as a fixturenet gate job in the place the request names.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "gate-wiring"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "compose_jobs_running_disclosure_gate",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "observe": "stdout_json",
+          "field": "compose_config_valid",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c9"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-disclosure-acceptance.py"
+  ]
+}

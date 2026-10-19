@@ -1,0 +1,415 @@
+{
+  "id": "derived-arn-e05",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A committed script, stack/scripts/armada-disclosure-capture.py, runs one selective-disclosure chain of custody on the armada-nitro fixturenet as real transactions, and writes the result as files. The worker writes and commits the script; the script, not the worker, performs every step. One run writes two files into a run directory given by --out: fixture.json and report.json. The chain: H1, a test EOA shields USDC into the pool. H2 and H4, the wallet spends that note through depositFromNote into a hub channel. H7, the wallet and the hub co-sign channel states, the hub through its HubCustodian delegate. H5, the channel concludes with a SHIELD payout to a fresh note of the same wallet. H6, the wallet unshields that note to a second test EOA. fixture.json holds, for each hop, the transaction hash, the receipt, the decoded events with the emitting chain id and contract address, the co-signed channel states with every signature and the block at which the hub delegate signed, and the test-wallet data that the armada-sdk builder needs. The script fails at the first error: it exits non-zero, writes report.json with the name of the failed step and the error, and does not retry. A timeout counts as an error.\nWhat holds now? Describe the current, observed state. No script records a real disclosure chain. The armada-sdk disclosure checker (draft PR ship-armada/armada-sdk#142, branch selective-disclosure on the fork AFDudley/armada-sdk, head 0aa2ba1) has tests with synthetic chain events only. Its hub EIP-1271 check has tests with a stand-in predicate only, and no test calls a live HubCustodian. The armada-nitro-e2e gate shields USDC and funds channels with real-proof depositFromNote calls (env/gates/nitro-e2e/prepare.ts, script/FixturenetScenario.s.sol). That gate writes no file that the SDK reads, and it does not unshield the payout note. arn-026 described this work and is closed.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the script once against the running fixturenet with --out <dir>. It exits 0 and writes fixture.json and report.json. The checks then read those files and do not rerun the capture. Check 1, independent of the script: for every transaction hash in fixture.json, cast receipt against the fixturenet RPC returns status 1, and the events in the receipt equal the recorded events. Check 2, independent of the script's checking logic: stack/scripts/armada-disclosure-verify.mjs loads fixture.json, builds the package with the armada-sdk builder, and calls the armada-sdk checker with a chain source that reads the fixturenet RPC, including isValidSignature on the live HubCustodian. It holds no checking logic of its own. It reports a pass. Check 3: the same verify script, on copies of the package with one value changed (the payout npk, the channelId, one nullifier, one channel-state allocation, one event's chain id, one event's contract address), reports a fail and the name of the failed check each time. Check 4, error handling: run the capture with an RPC URL that nothing listens on, then with a missing circuit-artifact directory, then with an armada-sdk path that does not exist. Each run exits non-zero within 60 seconds, and report.json names the failed step.\nWhat constraints apply? State them in plain prose. Real proofs, real contracts and real transactions only. Do not mock or compute chain events. Use the dev disclosure-circuit artifacts from ship-armada/armada-circuits#3 (build/disclosure/ in an armada-circuits checkout: main_disclosure_js/main_disclosure.wasm, final.zkey, vkey.json); they are an unsafe dev setup for tests only. Use throwaway test-wallet keys only. Do not change the pool, the disclosure circuit or the adjudicator. Install armada-sdk from the fork AFDudley/armada-sdk, branch selective-disclosure, pinned to commit 0aa2ba1. Do not copy SDK code into armada-nitro. The fixture format is the one that src/disclosure/chain-source.ts in armada-sdk defines (EventScope, HubDepositRecord, HubFinalizedOutcomeRecord, the hubSignatureValid method); if an armada-nitro log cannot be expressed in it, stop and report the gap. The statement must name the chain, the pool and the adjudicator, and must claim an attribution for the channel. The script reads its RPC URL, artifact path and SDK path from arguments or environment, with the fixturenet defaults. No retry loops; no fallbacks. The waUSDC swap of armada-laconic design page 16 depends on E11 and is out of scope; the channel uses USDC. Design: armada-laconic engineering/16-selective-disclosure.md and ADR-0020 (D20.5 attribution, D20.6 chain scope).\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro: stack/scripts/armada-disclosure-capture.py and stack/scripts/armada-disclosure-verify.mjs, beside the existing fixturenet gate scripts.",
+  "restatement": "The armada-sdk selective-disclosure checker has no test against a real chain. This work adds a committed script, stack/scripts/armada-disclosure-capture.py, that performs one full chain of custody on the running armada-nitro fixturenet as real transactions with real proofs. H1: a throwaway test EOA shields USDC into the pool. H2 and H4: the wallet spends that note through depositFromNote into a hub channel. H7: the wallet and the hub co-sign channel states, the hub through its HubCustodian delegate. H5: the channel concludes with a SHIELD payout to a fresh note of the same wallet. H6: the wallet unshields that note to a second test EOA. One run with --out <dir> writes fixture.json and report.json. fixture.json holds, per hop, the transaction hash, the receipt, the decoded events with emitting chain id and contract address, the co-signed channel states with every signature and the block at which the hub delegate signed, and the test-wallet data the armada-sdk builder needs, in the format that armada-sdk src/disclosure/chain-source.ts defines. The script stops at the first error, exits non-zero, writes report.json with the failed step name and the error, and does not retry; a timeout is an error. A second committed script, stack/scripts/armada-disclosure-verify.mjs, holds no checking logic: it loads fixture.json, builds the package with the armada-sdk builder, and calls the armada-sdk checker with a chain source that reads the fixturenet RPC, including isValidSignature on the live HubCustodian. armada-sdk comes from the fork AFDudley/armada-sdk, branch selective-disclosure, pinned to commit 0aa2ba1, and no SDK code is copied into armada-nitro. The statement names the chain, the pool and the adjudicator, and claims an attribution for the channel. Acceptance: the receipts on chain match the record; the verify script passes on the real package; it fails, naming the failed check, on six single-value tampered copies; and the capture fails within 60 seconds, naming the failed step, for a dead RPC URL, a missing circuit-artifact directory, and a missing armada-sdk path. The pool, the disclosure circuit and the adjudicator do not change. The waUSDC swap is out of scope; the channel uses USDC.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "One run of stack/scripts/armada-disclosure-capture.py against the running fixturenet with --out <dir> exits 0 and writes fixture.json and report.json into <dir>."
+    },
+    {
+      "id": "c2",
+      "text": "fixture.json records hops H1 (shield), H2/H4 (depositFromNote into the hub channel), H7 (co-signed channel states, hub signing through its HubCustodian delegate), H5 (SHIELD payout to a fresh note of the same wallet) and H6 (unshield to a second test EOA); each transaction hop has its transaction hash, receipt, and decoded events with the emitting chain id and contract address; the co-signed states carry every signature and the block at which the hub delegate signed; and the test-wallet data the armada-sdk builder needs is present."
+    },
+    {
+      "id": "c3",
+      "text": "Check 1, independent of the script: for every transaction hash in fixture.json, cast receipt against the fixturenet RPC returns status 1, and the events in the receipt equal the recorded events."
+    },
+    {
+      "id": "c4",
+      "text": "Check 2: stack/scripts/armada-disclosure-verify.mjs loads fixture.json, builds the package with the armada-sdk builder, calls the armada-sdk checker with a chain source that reads the fixturenet RPC including isValidSignature on the live HubCustodian, and reports a pass."
+    },
+    {
+      "id": "c5",
+      "text": "The statement in the built package names the chain, the pool and the adjudicator, and claims an attribution for the channel."
+    },
+    {
+      "id": "c6",
+      "text": "Check 3: the same verify script, on copies of the package with one value changed (the payout npk, the channelId, one nullifier, one channel-state allocation, one event's chain id, one event's contract address), reports a fail and the name of the failed check each time."
+    },
+    {
+      "id": "c7",
+      "text": "Check 4: the capture run with an RPC URL that nothing listens on, then with a missing circuit-artifact directory, then with an armada-sdk path that does not exist, each exits non-zero within 60 seconds, and report.json names the failed step; the script fails at the first error and does not retry."
+    },
+    {
+      "id": "c8",
+      "text": "armada-sdk is installed from the fork AFDudley/armada-sdk, branch selective-disclosure, pinned to commit 0aa2ba1, and the verify script imports the checker and builder from armada-sdk rather than holding its own copy."
+    }
+  ],
+  "goal": "A committed script runs one real selective-disclosure chain of custody on the armada-nitro fixturenet, records it as fixture.json and report.json, and the armada-sdk checker accepts the real record, rejects tampered copies, and the script fails fast on bad inputs.",
+  "acceptance_criteria": [
+    "Running the capture once against the live fixturenet into a fresh folder finishes successfully and leaves both fixture.json and report.json in that folder.",
+    "After one capture run, the recorded file contains every hop (H1, H2/H4, H7, H5, H6), and no hop lacks its transaction hash, receipt, events with chain id and contract address, signatures, hub-delegate signing block, or wallet data.",
+    "For every transaction recorded in the file, asking the fixturenet for its receipt with cast shows success (status 1) and the same events as recorded; no transaction fails or differs.",
+    "The verify script, given the real recorded file, reports a pass, and the hub signature was checked by calling isValidSignature on the live HubCustodian on the fixturenet.",
+    "The statement in the built disclosure package names the chain, the pool and the adjudicator, and states which party the channel is attributed to.",
+    "Six tampered copies of the package are each checked: one with a changed payout npk, channelId, nullifier, channel-state allocation, event chain id, and event contract address. All six are reported as a fail, and each report names the check that failed.",
+    "The capture is run three times with a bad input: an RPC address nothing listens on, a missing circuit-artifact folder, and an armada-sdk path that does not exist. Each run stops with a failure within 60 seconds, and its report.json names the step that failed.",
+    "A package manifest or lock file in the repository pins armada-sdk to the AFDudley/armada-sdk fork at commit 0aa2ba1.",
+    "The verify script loads its checker and builder from the armada-sdk package."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the capture once against the live fixturenet into a fresh folder finishes successfully and leaves both fixture.json and report.json in that folder."
+    },
+    {
+      "id": "c2",
+      "text": "After one capture run, the recorded file contains every hop (H1, H2/H4, H7, H5, H6), and no hop lacks its transaction hash, receipt, events with chain id and contract address, signatures, hub-delegate signing block, or wallet data."
+    },
+    {
+      "id": "c3",
+      "text": "For every transaction recorded in the file, asking the fixturenet for its receipt with cast shows success (status 1) and the same events as recorded; no transaction fails or differs."
+    },
+    {
+      "id": "c4",
+      "text": "The verify script, given the real recorded file, reports a pass, and the hub signature was checked by calling isValidSignature on the live HubCustodian on the fixturenet."
+    },
+    {
+      "id": "c5",
+      "text": "The statement in the built disclosure package names the chain, the pool and the adjudicator, and states which party the channel is attributed to."
+    },
+    {
+      "id": "c6",
+      "text": "Six tampered copies of the package are each checked: one with a changed payout npk, channelId, nullifier, channel-state allocation, event chain id, and event contract address. All six are reported as a fail, and each report names the check that failed."
+    },
+    {
+      "id": "c7",
+      "text": "The capture is run three times with a bad input: an RPC address nothing listens on, a missing circuit-artifact folder, and an armada-sdk path that does not exist. Each run stops with a failure within 60 seconds, and its report.json names the step that failed."
+    },
+    {
+      "id": "c8",
+      "text": "A package manifest or lock file in the repository pins armada-sdk to the AFDudley/armada-sdk fork at commit 0aa2ba1."
+    },
+    {
+      "id": "c9",
+      "text": "The verify script loads its checker and builder from the armada-sdk package."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c1",
+      "description": "Running the capture once against the live fixturenet into a fresh folder finishes successfully and leaves both fixture.json and report.json in that folder.",
+      "proves": "The capture script performs the whole chain in one run and writes both result files.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "capture"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "capture_exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "fixture_json_exists",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "report_json_exists",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c2",
+      "description": "After one capture run, the recorded file contains every hop (H1, H2/H4, H7, H5, H6), and no hop lacks its transaction hash, receipt, events with chain id and contract address, signatures, hub-delegate signing block, or wallet data.",
+      "proves": "The fixture records the full chain of custody with every field the SDK builder and checker need.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "fixture-shape"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "hops_missing",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hop_fields_missing",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "cosigned_states_count",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hub_delegate_sign_block_present",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "wallet_data_present",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c3",
+      "description": "For every transaction recorded in the file, asking the fixturenet for its receipt with cast shows success (status 1) and the same events as recorded; no transaction fails or differs.",
+      "proves": "The recorded chain events are real on-chain events, not invented ones.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "receipts"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "receipts_checked",
+          "op": "ge",
+          "value": 4
+        },
+        {
+          "observe": "stdout_json",
+          "field": "receipts_not_status_1",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "event_mismatches",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c4",
+      "description": "The verify script, given the real recorded file, reports a pass, and the hub signature was checked by calling isValidSignature on the live HubCustodian on the fixturenet.",
+      "proves": "The armada-sdk checker accepts a real disclosure chain, including a live hub EIP-1271 signature check.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "verify-pass"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "verify_exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "verify_verdict",
+          "op": "eq",
+          "value": "pass"
+        },
+        {
+          "observe": "stdout_json",
+          "field": "live_hub_is_valid_signature_calls",
+          "op": "ge",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c5",
+      "description": "The statement in the built disclosure package names the chain, the pool and the adjudicator, and states which party the channel is attributed to.",
+      "proves": "The disclosure statement carries the chain scope and attribution that the design requires.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "statement"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "statement_names_chain",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "statement_names_pool",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "statement_names_adjudicator",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "statement_claims_channel_attribution",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c6",
+      "description": "Six tampered copies of the package are each checked: one with a changed payout npk, channelId, nullifier, channel-state allocation, event chain id, and event contract address. All six are reported as a fail, and each report names the check that failed.",
+      "proves": "The checker detects each single-value tamper on a real package and says which check caught it.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "tamper"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "tampered_copies_checked",
+          "op": "eq",
+          "value": 6
+        },
+        {
+          "observe": "stdout_json",
+          "field": "tampered_copies_failed",
+          "op": "eq",
+          "value": 6
+        },
+        {
+          "observe": "stdout_json",
+          "field": "tampered_copies_with_named_check",
+          "op": "eq",
+          "value": 6
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "restatement_clause_id": "c7",
+      "description": "The capture is run three times with a bad input: an RPC address nothing listens on, a missing circuit-artifact folder, and an armada-sdk path that does not exist. Each run stops with a failure within 60 seconds, and its report.json names the step that failed.",
+      "proves": "The capture fails fast at the first error, without retries, and reports where it failed.",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [
+          "--check",
+          "errors"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "error_runs",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "observe": "stdout_json",
+          "field": "error_runs_nonzero_exit",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "observe": "stdout_json",
+          "field": "error_runs_within_60s",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "observe": "stdout_json",
+          "field": "error_runs_report_names_step",
+          "op": "eq",
+          "value": 3
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c7"
+    },
+    {
+      "type": "grep",
+      "restatement_clause_id": "c8",
+      "description": "A package manifest or lock file in the repository pins armada-sdk to the AFDudley/armada-sdk fork at commit 0aa2ba1.",
+      "proves": "The SDK comes from the named fork at the pinned commit.",
+      "pattern": "AFDudley/armada-sdk[^\"'\\s]*0aa2ba1",
+      "files": [
+        "package.json",
+        "stack/**/package.json",
+        "env/**/package.json",
+        "pnpm-lock.yaml",
+        "package-lock.json"
+      ],
+      "count": {
+        "unit": "files",
+        "op": "ge",
+        "value": 1
+      },
+      "clause_id": "c8"
+    },
+    {
+      "type": "grep",
+      "restatement_clause_id": "c8",
+      "description": "The verify script loads its checker and builder from the armada-sdk package.",
+      "proves": "The verify script uses the SDK's own checking code instead of a local copy.",
+      "pattern": "(from\\s+['\"][^'\"]*armada-sdk|import\\(\\s*['\"][^'\"]*armada-sdk)",
+      "files": [
+        "stack/scripts/armada-disclosure-verify.mjs"
+      ],
+      "clause_id": "c9"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-disclosure-acceptance.py"
+  ]
+}
