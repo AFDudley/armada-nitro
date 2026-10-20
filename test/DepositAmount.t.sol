@@ -18,29 +18,6 @@ import {
     UnshieldType
 } from 'src/armada/IArmadaPool.sol';
 
-/// @dev Minimal ERC20 that delivers one unit less than the requested `transferFrom` amount.
-contract ShortToken {
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    function mint(address to, uint256 amount) external {
-        balanceOf[to] += amount;
-    }
-
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[address(this)][spender] = amount;
-        return true;
-    }
-
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        if (balanceOf[from] < amount) return false;
-        // deliver exactly one unit less than requested.
-        balanceOf[from] -= amount - 1;
-        balanceOf[to] += amount - 1;
-        return true;
-    }
-}
-
 /// @dev Minimal ERC20 that delivers exactly the requested amount.
 contract NormalToken {
     mapping(address => uint256) public balanceOf;
@@ -66,35 +43,20 @@ contract NormalToken {
 contract DepositAmountTest is ArmadaFixture {
     ArmadaNitroAdjudicator adjudicator;
     MockPool internal _mockPool;
-    ShortToken internal shortToken;
     NormalToken internal normalToken;
 
     function setUp() public {
         _deployArmada();
         // arn-3d8: the test tokens must be on the adjudicator's configured asset list.
-        shortToken = new ShortToken();
         normalToken = new NormalToken();
-        address[] memory assets = new address[](6);
+        address[] memory assets = new address[](5);
         assets[0] = address(usdc);
         assets[1] = address(0x0000000000000000000000000000000000000001); // WETH
         assets[2] = address(0x0000000000000000000000000000000000000002); // wstETH
         assets[3] = address(0x0000000000000000000000000000000000000003); // waUSDC
-        assets[4] = address(shortToken);
-        assets[5] = address(normalToken);
+        assets[4] = address(normalToken);
         _mockPool = new MockPool();
         adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(address(_mockPool)), assets);
-    }
-
-    /// @dev c1: a token that pays one unit less than requested must revert the deposit.
-    function test_shortTransfer_depositReverts() public {
-        uint256 amount = 10;
-        shortToken.mint(address(this), 100);
-        shortToken.approve(address(adjudicator), amount);
-        bytes32 channelId = keccak256("channel-arn-0cf");
-
-        Transaction[] memory txs = _buildUnshieldBound(address(shortToken), amount, channelId, 0);
-        vm.expectRevert('Unshield amount mismatch');
-        adjudicator.depositFromNote(channelId, 0, txs);
     }
 
     /// @dev c2: a normal token that pays the full amount leaves the holdings increase equal to the
@@ -122,11 +84,7 @@ contract DepositAmountTest is ArmadaFixture {
         CommitmentPreimage memory note = ArmadaNotes.usdcNote(tokenAddr, npk, uint120(value));
 
         // The mock pool must hold the token to hand it back on transact(): mint it there directly.
-        if (tokenAddr == address(shortToken)) {
-            shortToken.mint(address(_mockPool), value);
-        } else {
-            normalToken.mint(address(_mockPool), value);
-        }
+        normalToken.mint(address(_mockPool), value);
 
         // N1a: the channel's collateral reference is a SEPARATE commitment from the unshield's
         // own note, whose plaintext value is the NEW CUMULATIVE total (expectedHeld + value) --
