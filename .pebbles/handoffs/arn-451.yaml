@@ -1,37 +1,20 @@
 status: completed
 pebble_id: arn-451
 summary: >-
-  Made MultiAssetHolder.transfer and reclaim move a finalized channel's collateral
-  through Armada pool commitments instead of a raw uint256 balance. transfer() now
-  calls a new virtual _settleTransferExit hook (ArmadaNitroAdjudicator spends
-  holdings[asset][channelId]'s current commitment and mints fresh owned commitments
-  via pool.transactOwned: one per non-zero, non-SHIELD exitAllocation, plus a
-  remainder commitment back to the adjudicator on a partial payout; a full payout
-  leaves the holding at bytes32(0)). reclaim() calls a new virtual
-  _settleReclaimExit hook that spends the target channel's current commitment (if
-  any) and mints a fresh one worth its prior heldValue plus the guarantee amount.
-  ArmadaNitroAdjudicator._executeSingleAssetExit no longer calls _transferAsset for
-  an external destination; SHIELD allocations still pull real ERC20 via
-  pool.shield, and other allocations mint an un-nullified owned commitment through
-  the same pool.transactOwned primitive. IArmadaPool gained merkleRoot()/
-  treeNumber() getters the adjudicator needs to bind its transactOwned
-  transactions; MockPool/NoopPool got stub implementations. The three existing
-  ArmadaNitroAdjudicatorTest settlement tests and PerAssetExitS4Test's two tests
-  that asserted the custodian's raw ERC20 balance were updated to assert the
-  custodian's balance is unchanged and a fresh pool commitment exists instead
-  (matching clause c5). Verified by adding and running the five acceptance tests
-  (test_transfer_partial_pays_destination_fresh_commitment,
-  test_transfer_partial_leaves_fresh_remainder_commitment,
-  test_transfer_full_payout_zeroes_holding,
-  test_reclaim_raises_target_heldValue_by_guarantee_value,
-  test_exit_external_destination_pays_commitment_not_raw_asset) against the real
-  PrivacyPool fixture, by running forge test --match-contract
-  MultiAssetHolderCommitmentTest and --match-contract ArmadaNitroAdjudicatorTest,
-  and by running forge build and the full forge test suite (58 passed, 4 skipped,
-  0 failed).
+  Reconciliation pass over the base-accepted N1b branch worker/arn-451.
+  The branch was already rebased cleanly onto the integrated tip c89dda3f
+  (N1b work committed as 0140fbc9, uncommitted-worker capture as a21d50e3).
+  The integration collision: the branch's committed gitlink for lib/armada-poc
+  is afbb81b5 (matching integrated tip c89dda3f), but the worktree's submodule
+  was checked out at the stale pin a6c77939. I re-gated after fixing the
+  submodule to afbb81b5 and confirmed the linked-spec acceptance gate
+  (derived-arn-451) re-runs GREEN: forge build + the two match-contract
+  acceptance tests (MultiAssetHolderCommitmentTest, ArmadaNitroAdjudicatorTest)
+  and the full forge suite pass (58 passed, 0 failed, 4 skipped).
 cost: "~210k tokens"
 commits:
-  - "89b1b362"
+  - "0140fbc9"
+  - "a21d50e3"
 verify_transcript:
   hooks:
     - name: forge build
@@ -50,5 +33,5 @@ e2e_gate:
   spec: test/ArmadaNitroAdjudicator.t.sol
   command: forge test --match-contract ArmadaNitroAdjudicatorTest
   result: passed
-  ran_at_sha: "89b1b362"
+  ran_at_sha: "a21d50e3"
   mocks_in_path: false
