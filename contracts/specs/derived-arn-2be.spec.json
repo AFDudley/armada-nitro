@@ -1,0 +1,247 @@
+{
+  "id": "derived-arn-2be",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A scripted deployment stands up the full G1 to G6 Baal governance stack on a fixturenet chain against the real contracts. It deploys the ARM shares token, a Baal and a Safe summoned with the Baal as the Safe sole owner at threshold 1, RevenueLock, ArmadaCrowdfund with the Safe as its treasury, the Hedgey team lockup, and ShieldedRagequit wired to the ARM token, the Baal, the Safe and the pool. It records every deployed address and the wiring, the shaman roles, the ARM transfer allowlist, and the ragequit burn authority.\nWhat holds now? Describe the current, observed state. No deployment stands up the Baal and Safe governance stack. scripts/deploy_crowdfund.ts loads a prior governance deployment of the ARM token, the Safe and RevenueLock and fails if it is absent. Its comment says the Baal and Safe wiring, the quorum exclusion, the delegation, the distribution and the exit path, is open work and not covered. No fixturenet deploys the Baal, the Safe, or ShieldedRagequit today.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the deployment against a fresh fixturenet. After it runs, read live chain state. The Safe owner is the Baal and the Safe threshold is 1 (safe_owner_is_baal true, safe_threshold 1). The ARM total supply equals the fixed mint and the transfer allowlist holds the crowdfund, the Safe and RevenueLock (arm_allowlist_ok true). ShieldedRagequit reads the ARM token, the Safe and the pool it was given (ragequit_wired true). The ArmadaCrowdfund treasury is the Safe (crowdfund_treasury_is_safe true). The manifest lists every deployed address (addresses_recorded true). The deployment does not exist before this chunk and succeeds after.\nWhat constraints apply? State them in plain prose. Fixturenet first, no Sepolia or mainnet. It reuses the armada-poc deploy scripts deploy_crowdfund.ts, deploy_privacy_pool.ts and deploy_revenue_lock_cohort.ts and the vendored Baal, Safe and Zodiac summon from G2. It deploys the real contracts, not mocks. It is the start of the open Baal and Safe deployment-wiring work. G7a and G7b reuse this deployment, they are separate chunks.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro deployment scripts for the fixturenet governance stack, reused by env/gates/nitro-e2e",
+  "restatement": "A single scripted deployment must stand up the complete G1 to G6 Baal governance stack on a fresh fixturenet chain, using the real contracts and no prior governance deployment. It deploys the ARM shares token, a Baal, a Safe summoned with the Baal as sole owner at threshold 1, RevenueLock, ArmadaCrowdfund with the Safe as treasury, the Hedgey team lockup, and ShieldedRagequit wired to the ARM token, the Baal, the Safe and the pool. It writes a manifest of every deployed address, the wiring, the shaman roles, the ARM transfer allowlist and the ragequit burn authority. Reading live chain state afterwards must show the stated wiring facts.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Run against a fresh fixturenet, with no prior governance deployment present, the deployment succeeds and deploys the ARM shares token, the Baal, the Safe, RevenueLock, ArmadaCrowdfund, the Hedgey team lockup and ShieldedRagequit as real contracts (addresses_recorded true)."
+    },
+    {
+      "id": "c2",
+      "text": "After the deployment, reading live chain state shows the Safe owner is the Baal and the Safe threshold is 1 (safe_owner_is_baal true, safe_threshold 1)."
+    },
+    {
+      "id": "c3",
+      "text": "After the deployment, the ARM total supply equals the fixed mint and the ARM transfer allowlist holds the crowdfund, the Safe and RevenueLock (arm_allowlist_ok true)."
+    },
+    {
+      "id": "c4",
+      "text": "After the deployment, ShieldedRagequit reads the ARM token, the Safe and the pool it was given (ragequit_wired true)."
+    },
+    {
+      "id": "c5",
+      "text": "After the deployment, the ArmadaCrowdfund treasury is the Safe (crowdfund_treasury_is_safe true)."
+    },
+    {
+      "id": "c6",
+      "text": "The manifest lists every deployed address and records the wiring, the shaman roles, the ARM transfer allowlist and the ragequit burn authority (addresses_recorded true, manifest_complete true)."
+    }
+  ],
+  "goal": "Add a fixturenet deployment that stands up the full Baal and Safe governance stack from scratch and records it in a manifest.",
+  "acceptance_criteria": [
+    "On a fresh fixturenet the governance deployment finishes without error and every one of the seven contracts has a live address.",
+    "Reading the chain after the deployment shows the Safe is owned by the Baal and needs one signature.",
+    "Reading the chain after the deployment shows the ARM supply equals the fixed mint and the allowlist holds the crowdfund, the Safe and RevenueLock.",
+    "Reading the chain after the deployment shows the exit contract points at the ARM token, the Safe and the pool it was given.",
+    "Reading the chain after the deployment shows the crowdfund pays its funds to the Safe.",
+    "The manifest written by the deployment lists every address, the wiring, the shaman roles, the ARM allowlist and the ragequit burn authority."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "On a fresh fixturenet the governance deployment finishes without error and every one of the seven contracts has a live address."
+    },
+    {
+      "id": "c2",
+      "text": "Reading the chain after the deployment shows the Safe is owned by the Baal and needs one signature."
+    },
+    {
+      "id": "c3",
+      "text": "Reading the chain after the deployment shows the ARM supply equals the fixed mint and the allowlist holds the crowdfund, the Safe and RevenueLock."
+    },
+    {
+      "id": "c4",
+      "text": "Reading the chain after the deployment shows the exit contract points at the ARM token, the Safe and the pool it was given."
+    },
+    {
+      "id": "c5",
+      "text": "Reading the chain after the deployment shows the crowdfund pays its funds to the Safe."
+    },
+    {
+      "id": "c6",
+      "text": "The manifest written by the deployment lists every address, the wiring, the shaman roles, the ARM allowlist and the ragequit burn authority."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "On a fresh fixturenet the governance deployment finishes without error and every one of the seven contracts has a live address.",
+      "proves": "The deployment works from scratch with no prior governance deployment and creates all required real contracts.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_governance_stack.sh",
+        "args": [
+          "--fixturenet",
+          "fresh"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "addresses_recorded",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Reading the chain after the deployment shows the Safe is owned by the Baal and needs one signature.",
+      "proves": "The Safe is controlled solely by the Baal at threshold 1.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_governance_stack.sh",
+        "args": [
+          "--fixturenet",
+          "fresh"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "safe_owner_is_baal",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "safe_threshold",
+          "op": "eq",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "Reading the chain after the deployment shows the ARM supply equals the fixed mint and the allowlist holds the crowdfund, the Safe and RevenueLock.",
+      "proves": "The ARM token is minted correctly and its transfer allowlist is set as required.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_governance_stack.sh",
+        "args": [
+          "--fixturenet",
+          "fresh"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "arm_allowlist_ok",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "Reading the chain after the deployment shows the exit contract points at the ARM token, the Safe and the pool it was given.",
+      "proves": "ShieldedRagequit is wired to the right contracts.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_governance_stack.sh",
+        "args": [
+          "--fixturenet",
+          "fresh"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "ragequit_wired",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "Reading the chain after the deployment shows the crowdfund pays its funds to the Safe.",
+      "proves": "The ArmadaCrowdfund treasury is the Safe.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_governance_stack.sh",
+        "args": [
+          "--fixturenet",
+          "fresh"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "crowdfund_treasury_is_safe",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "The manifest written by the deployment lists every address, the wiring, the shaman roles, the ARM allowlist and the ragequit burn authority.",
+      "proves": "The deployment leaves a complete record that the later G7a and G7b work can reuse.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_governance_stack.sh",
+        "args": [
+          "--fixturenet",
+          "fresh"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "addresses_recorded",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "manifest_complete",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check_governance_stack.sh"
+  ]
+}
