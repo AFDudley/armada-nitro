@@ -1,0 +1,145 @@
+{
+  "id": "derived-arn-c53",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. stack/scripts/armada-disclosure-acceptance.py and its compose job under stack/compose-jobs/ exist and reuse env/gates/nitro-e2e/prepare.ts wallet and proof code. The acceptance stands up a fresh fixturenet with stack/scripts/fixturenet-new and a run-unique name (TMPDIR set to the repo .scratch), which builds and snapshots the base layer so a later run is warm. The script brings the fixturenet to ready with the pool, the HubCustodian and the adjudicator deployed.\nWhat holds now? Describe the current, observed state. No stack/scripts/armada-disclosure-acceptance.py exists. No selective-disclosure compose job exists under stack/compose-jobs/. No warm base-layer snapshot for the disclosure fixturenet exists.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the compose job. The script prints one JSON line with the fields harness_files_present true, fixturenet_up true (the pool, the HubCustodian and the adjudicator respond on the fixturenet RPC), and snapshot_present true (a base-layer snapshot exists for a later warm run).",
+  "restatement": "The repository must contain an acceptance script, stack/scripts/armada-disclosure-acceptance.py, and a compose job for selective disclosure under stack/compose-jobs/. The script reuses the wallet and proof code in env/gates/nitro-e2e/prepare.ts. It builds a fresh fixturenet with stack/scripts/fixturenet-new, using a run-unique name and TMPDIR set to the repo .scratch. That build snapshots the base layer so a later run is warm. The script brings the fixturenet to ready with the pool, the HubCustodian and the adjudicator deployed. Running the compose job prints one JSON line with harness_files_present true, fixturenet_up true (the pool, the HubCustodian and the adjudicator respond on the fixturenet RPC), and snapshot_present true (a base-layer snapshot exists for a later warm run).",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "stack/scripts/armada-disclosure-acceptance.py exists, and a selective-disclosure compose job under stack/compose-jobs/ runs it."
+    },
+    {
+      "id": "c2",
+      "text": "The script reuses the wallet and proof code in env/gates/nitro-e2e/prepare.ts."
+    },
+    {
+      "id": "c3",
+      "text": "The script stands up a fresh fixturenet with stack/scripts/fixturenet-new, using a run-unique name and TMPDIR set to the repo .scratch, which builds and snapshots the base layer so a later run is warm."
+    },
+    {
+      "id": "c4",
+      "text": "Running the script prints one JSON line with harness_files_present true, fixturenet_up true (the pool, the HubCustodian and the adjudicator respond on the fixturenet RPC), and snapshot_present true (a base-layer snapshot exists for a later warm run)."
+    }
+  ],
+  "goal": "A runnable disclosure acceptance script and compose job that stand up a fixturenet and report success in one JSON line.",
+  "acceptance_criteria": [
+    "The acceptance script file is present in the repository.",
+    "At least one file in the compose jobs folder refers to the acceptance script, so the job runs it.",
+    "The acceptance script names the shared wallet and proof code file it reuses.",
+    "The acceptance script calls the fixturenet-new tool to build a fresh fixturenet.",
+    "Running the acceptance script brings up a fresh fixturenet and prints one JSON line. The line says the harness files are present, the fixturenet is up, and the base-layer snapshot exists."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The acceptance script file is present in the repository."
+    },
+    {
+      "id": "c2",
+      "text": "At least one file in the compose jobs folder refers to the acceptance script, so the job runs it."
+    },
+    {
+      "id": "c3",
+      "text": "The acceptance script names the shared wallet and proof code file it reuses."
+    },
+    {
+      "id": "c4",
+      "text": "The acceptance script calls the fixturenet-new tool to build a fresh fixturenet."
+    },
+    {
+      "id": "c5",
+      "text": "Running the acceptance script brings up a fresh fixturenet and prints one JSON line. The line says the harness files are present, the fixturenet is up, and the base-layer snapshot exists."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "file_exists",
+      "description": "The acceptance script file is present in the repository.",
+      "proves": "The script named in the request exists.",
+      "restatement_clause_id": "c1",
+      "path": "stack/scripts/armada-disclosure-acceptance.py",
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "At least one file in the compose jobs folder refers to the acceptance script, so the job runs it.",
+      "proves": "A compose job for the disclosure acceptance exists and runs the script.",
+      "restatement_clause_id": "c1",
+      "pattern": "armada-disclosure-acceptance",
+      "files": [
+        "stack/compose-jobs/*"
+      ],
+      "count": {
+        "unit": "files",
+        "op": "ge",
+        "value": 1
+      },
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep",
+      "description": "The acceptance script names the shared wallet and proof code file it reuses.",
+      "proves": "The script reuses env/gates/nitro-e2e/prepare.ts.",
+      "restatement_clause_id": "c2",
+      "pattern": "env/gates/nitro-e2e/prepare\\.ts",
+      "files": [
+        "stack/scripts/armada-disclosure-acceptance.py"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep",
+      "description": "The acceptance script calls the fixturenet-new tool to build a fresh fixturenet.",
+      "proves": "The fixturenet is created with stack/scripts/fixturenet-new.",
+      "restatement_clause_id": "c3",
+      "pattern": "fixturenet-new",
+      "files": [
+        "stack/scripts/armada-disclosure-acceptance.py"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the acceptance script brings up a fresh fixturenet and prints one JSON line. The line says the harness files are present, the fixturenet is up, and the base-layer snapshot exists.",
+      "proves": "The fixturenet reaches ready with the pool, the HubCustodian and the adjudicator responding, and a base-layer snapshot exists for a warm later run.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "harness_files_present",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "fixturenet_up",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "snapshot_present",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c5"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-disclosure-acceptance.py"
+  ]
+}
