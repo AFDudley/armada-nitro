@@ -29,11 +29,15 @@ abstract contract ArmadaFixture is Test {
         vm.stopPrank();
     }
 
+    /// @dev `priorHeld` is the channel's held value (for `recipient`'s asset) BEFORE this
+    /// unshield lands -- it becomes the pool-registered cumulative collateral commitment's value
+    /// (see ArmadaNotes.unshield), matching the `expectedHeld` bound into `adaptParams`.
     function _unshield(
         address recipient,
         uint120 value,
         address adaptContract,
-        bytes32 adaptParams
+        bytes32 adaptParams,
+        uint256 priorHeld
     ) internal returns (Transaction[] memory) {
         return
             ArmadaNotes.unshield(
@@ -43,7 +47,8 @@ abstract contract ArmadaFixture is Test {
                 value,
                 adaptContract,
                 adaptParams,
-                bytes32(++nullifierSeed)
+                bytes32(++nullifierSeed),
+                priorHeld
             );
     }
 

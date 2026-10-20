@@ -8,7 +8,7 @@ import {PrivacyPool} from 'armada/privacy-pool/PrivacyPool.sol';
 import {ArmadaNitroAdjudicator, SHIELD_ALLOCATION_TYPE} from 'src/ArmadaNitroAdjudicator.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
-import {CommitmentPreimage} from 'src/armada/IArmadaPool.sol';
+import {CommitmentPreimage, IArmadaPool, Transaction} from 'src/armada/IArmadaPool.sol';
 import {ArmadaNotes} from '../test/helpers/ArmadaNotes.sol';
 import {ChannelStates} from '../test/helpers/ChannelStates.sol';
 import {IHubCustodian} from '../test/helpers/IHubCustodian.sol';
@@ -292,16 +292,35 @@ contract FixturenetScenario is Script {
             }
         }
 
+        // N1a: a channel is funded only through depositFromNote (a shielded note), never a raw
+        // transfer. The hub shields a note of its own USDC (via the custodian's FROST-executed
+        // approve+shield) and unshields it to the adjudicator.
+        bytes32 hubNpk = bytes32(uint256(0x4444) + uint256(uint160(address(c.custodian))));
         _hubExecute(
             c,
             address(c.usdc),
-            abi.encodeWithSignature('approve(address,uint256)', address(c.adjudicator), HUB_FUNDS)
+            abi.encodeWithSignature('approve(address,uint256)', address(c.privacyPool), HUB_FUNDS)
         );
         _hubExecute(
             c,
-            address(c.adjudicator),
-            abi.encodeCall(c.adjudicator.deposit, (address(c.usdc), d.channelId, d.amount, HUB_FUNDS))
+            address(c.privacyPool),
+            abi.encodeCall(
+                IArmadaPool(address(c.privacyPool)).shield,
+                (ArmadaNotes.shieldRequests(address(c.usdc), hubNpk, uint120(HUB_FUNDS)), address(0))
+            )
         );
+        Transaction[] memory hubTxs = ArmadaNotes.unshield(
+            c.privacyPool,
+            address(c.usdc),
+            address(c.adjudicator),
+            uint120(HUB_FUNDS),
+            address(c.adjudicator),
+            c.adjudicator.depositBinding(d.channelId, d.amount),
+            keccak256(abi.encode(d.channelId, 'hub-nullifier')),
+            d.amount
+        );
+        vm.broadcast(c.deployerKey);
+        c.adjudicator.depositFromNote(d.channelId, d.amount, hubTxs);
     }
 
     /// @dev Sign the operation with FROST shares 1 and 2 (`frost-signer sign --format json` via

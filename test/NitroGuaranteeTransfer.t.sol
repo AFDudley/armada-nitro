@@ -15,7 +15,7 @@ contract FinalizedChannelHarness is NitroAdjudicator {
     }
 
     function setHoldings(address asset, bytes32 channelId, uint256 amount) external {
-        holdings[asset][channelId] = amount;
+        holdings[asset][channelId] = bytes32(amount);
     }
 }
 
@@ -64,8 +64,8 @@ contract NitroGuaranteeTransferTest is Test {
         adjudicator.transfer(0, LEDGER, outcomeBytes, STATE_HASH, indices);
 
         assertEq(alice.balance, 5);
-        assertEq(adjudicator.holdings(ETH, LEDGER), 10);
-        assertEq(adjudicator.holdings(ETH, VIRTUAL), 0);
+        assertEq(adjudicator.heldValue(ETH, LEDGER), 10);
+        assertEq(adjudicator.heldValue(ETH, VIRTUAL), 0);
     }
 
     function _finalizeFunded(

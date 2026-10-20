@@ -19,9 +19,11 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
     // *******
 
     /**
-     * holdings[asset][channelId] is the amount of asset held against channel channelId. 0 address implies ETH
+     * holdings[asset][channelId] is the pool commitment reference (bytes32) of the channel's
+     * collateral note; 0 address implies ETH. The held amount is read live through
+     * `heldValue` (the adjudicator's override calls `pool.preimageOf`), never a raw storage read.
      */
-    mapping(address => mapping(bytes32 => uint256)) public holdings;
+    mapping(address => mapping(bytes32 => bytes32)) public holdings;
 
 
     /// @dev > 0 means an adjudicator call on this channel is in progress; a nested call to any
@@ -32,56 +34,18 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
     // External methods
     // **************
 
+
     /**
-     * @notice Deposit ETH or erc20 tokens against a given channelId.
-     * @dev Deposit ETH or erc20 tokens against a given channelId.
-     * @param asset erc20 token address, or zero address to indicate ETH
-     * @param channelId ChannelId to be credited.
-     * @param expectedHeld The number of wei/tokens the depositor believes are _already_ escrowed against the channelId.
-     * @param amount The intended number of wei/tokens to be deposited.
+     * @dev The held amount of the channel collateral note. Returns 0 for an empty commitment;
+     * a set commitment reads the pool's preimage live (the adjudicator's override calls
+     * `pool.preimageOf`), never a cached or passed-in amount. The pool's `uint120` value is
+     * cast to `uint256` with SafeCast.
      */
-    function deposit(
-        address asset,
-        bytes32 channelId,
-        uint256 expectedHeld,
-        uint256 amount
-    ) external payable virtual override {
-        _doDeposit(asset, channelId, expectedHeld, amount);
+    function heldValue(address asset, bytes32 channelId) public view virtual returns (uint256) {
+        // Base (no pool): the stored commitment is the amount (empty commitment -> 0).
+        return uint256(holdings[asset][channelId]);
     }
 
-    /// @dev Core deposit logic, shared with the adjudicator's override (arn-3d8).
-    function _doDeposit(
-        address asset,
-        bytes32 channelId,
-        uint256 expectedHeld,
-        uint256 amount
-    ) internal {
-        require(!_isExternalDestination(channelId), 'Deposit to external destination');
-        // this allows participants to reduce the wait between deposits, while protecting them from losing funds by depositing too early.
-        uint256 held = holdings[asset][channelId];
-        require(held == expectedHeld, 'held != expectedHeld');
-
-        // guard: no nested call may run on this channel while this deposit is in progress.
-        require(holdingsLock[channelId] == 0, 'Re-entered while in progress');
-        holdingsLock[channelId] += 1;
-
-        // require successful deposit before updating holdings (protect against reentrancy)
-        if (asset == address(0)) {
-            require(msg.value == amount, 'Incorrect msg.value for deposit');
-            held += amount;
-            holdingsLock[channelId] -= 1;
-            holdings[asset][channelId] = held;
-        } else {
-            uint256 balanceBefore = IERC20(asset).balanceOf(address(this));
-            IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
-            uint256 received = IERC20(asset).balanceOf(address(this)) - balanceBefore;
-            require(received == amount, 'Deposit amount mismatch');
-            held += received;
-            holdingsLock[channelId] -= 1;
-            holdings[asset][channelId] = held;
-        }
-        emit Deposited(channelId, asset, held);
-    }
 
     /**
      * @notice Transfers as many funds escrowed against `channelId` as can be afforded for a specific destination. Assumes no repeated entries.
@@ -155,7 +119,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
 
         outcome = Outcome.decodeExit(outcomeBytes);
         asset = outcome[assetIndex].asset;
-        initialAssetHoldings = holdings[asset][channelId];
+        initialAssetHoldings = heldValue(asset, channelId);
     }
 
     function compute_transfer_effects_and_interactions(
@@ -227,14 +191,14 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         uint256 totalPayouts
     ) internal {
         // update holdings
-        holdings[asset][channelId] -= totalPayouts;
+        holdings[asset][channelId] = bytes32(uint256(holdings[asset][channelId]) - totalPayouts);
 
         // store fingerprint of modified outcome
         outcome[assetIndex].allocations = newAllocations;
         _updateFingerprint(channelId, stateHash, keccak256(abi.encode(outcome)));
 
         // emit the information needed to compute the new outcome stored in the fingerprint
-        emit AllocationUpdated(channelId, asset, initialHoldings, holdings[asset][channelId]);
+        emit AllocationUpdated(channelId, asset, initialHoldings, heldValue(asset, channelId));
     }
 
     function _apply_transfer_interactions(
@@ -442,7 +406,7 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
             if (_isExternalDestination(destination)) {
                 _transferAsset(asset, _bytes32ToAddress(destination), amount);
             } else {
-                holdings[asset][destination] += amount;
+                holdings[asset][destination] = bytes32(uint256(holdings[asset][destination]) + amount);
             }
         }
     }

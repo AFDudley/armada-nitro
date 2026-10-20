@@ -31,6 +31,12 @@ contract NoopPool is IArmadaPool {
     function shield(ShieldRequest[] calldata, address) external {}
 
     function transact(Transaction[] calldata) external {}
+
+    function preimageOf(bytes32) external pure returns (CommitmentPreimage memory) {
+        return CommitmentPreimage({npk: bytes32(0), token: TokenData({tokenType: TokenType.ERC20, tokenAddress: address(0), tokenSubID: 0}), value: 0});
+    }
+
+    function transactOwned(Transaction[] calldata) external {}
 }
 
 /// @dev Exposes test-only setters so each of the six holdings-mutating entry points can be
@@ -73,19 +79,8 @@ contract ReentryGuardTest is Test, INitroTypes {
         vm.warp(1_000);
     }
 
-    function test_guard_deposit_revertsWhileInProgress() public {
-        bytes32 channelId = keccak256('guard deposit channel');
-        adjudicator.setHoldingsLock(channelId, 1);
-        uint256 hBefore = adjudicator.holdings(ASSET, channelId);
-
-        vm.expectRevert(bytes(GUARD_REVERT));
-        adjudicator.deposit(ASSET, channelId, 0, 1);
-        uint256 hAfter = adjudicator.holdings(ASSET, channelId);
-        console.log("ARN521_C2 deposit", hBefore, hAfter);
-
-        assertEq(adjudicator.holdings(ASSET, channelId), 0);
-    }
-
+    // N1a: the base `deposit` entry point is gone; `test_guard_depositFromNote_revertsWhileInProgress`
+    // below is this guard's sole (and now only possible) funding-path coverage.
     function test_guard_depositFromNote_revertsWhileInProgress() public {
         bytes32 channelId = keccak256('guard depositFromNote channel');
 
@@ -118,13 +113,13 @@ contract ReentryGuardTest is Test, INitroTypes {
         });
 
         adjudicator.setHoldingsLock(channelId, 1);
-        uint256 hBefore = adjudicator.holdings(address(token), channelId);
+        uint256 hBefore = adjudicator.heldValue(address(token), channelId);
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.depositFromNote(channelId, 0, txs);
-        uint256 hAfter = adjudicator.holdings(address(token), channelId);
+        uint256 hAfter = adjudicator.heldValue(address(token), channelId);
         console.log("ARN521_C2 depositFromNote", hBefore, hAfter);
 
-        assertEq(adjudicator.holdings(address(token), channelId), 0);
+        assertEq(adjudicator.heldValue(address(token), channelId), 0);
     }
 
     function test_guard_transfer_revertsWhileInProgress() public {
@@ -146,27 +141,27 @@ contract ReentryGuardTest is Test, INitroTypes {
         bytes32 stateHash = keccak256('guard transfer state');
         adjudicator.finalize(channelId, stateHash, outcomeBytes);
         adjudicator.setHoldingsLock(channelId, 1);
-        uint256 hBefore = adjudicator.holdings(ASSET, channelId);
+        uint256 hBefore = adjudicator.heldValue(ASSET, channelId);
 
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.transfer(0, channelId, outcomeBytes, stateHash, new uint256[](0));
-        uint256 hAfter = adjudicator.holdings(ASSET, channelId);
+        uint256 hAfter = adjudicator.heldValue(ASSET, channelId);
         console.log("ARN521_C2 transfer", hBefore, hAfter);
 
-        assertEq(adjudicator.holdings(ASSET, channelId), 0);
+        assertEq(adjudicator.heldValue(ASSET, channelId), 0);
     }
 
     function test_guard_transferAllAssets_revertsWhileInProgress() public {
         bytes32 channelId = bytes32(uint256(4));
         adjudicator.setHoldingsLock(channelId, 1);
-        uint256 hBefore = adjudicator.holdings(ASSET, channelId);
+        uint256 hBefore = adjudicator.heldValue(ASSET, channelId);
 
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.transferAllAssets(channelId, new Outcome.SingleAssetExit[](0), bytes32(0));
-        uint256 hAfter = adjudicator.holdings(ASSET, channelId);
+        uint256 hAfter = adjudicator.heldValue(ASSET, channelId);
         console.log("ARN521_C2 transferAllAssets", hBefore, hAfter);
 
-        assertEq(adjudicator.holdings(ASSET, channelId), 0);
+        assertEq(adjudicator.heldValue(ASSET, channelId), 0);
     }
 
     function test_guard_concludeAndTransferAllAssets_revertsWhileInProgress() public {
@@ -194,11 +189,11 @@ contract ReentryGuardTest is Test, INitroTypes {
 
         bytes32 channelId = NitroUtils.getChannelId(fixedPart);
         adjudicator.setHoldingsLock(channelId, 1);
-        uint256 hBefore = adjudicator.holdings(ASSET, channelId);
+        uint256 hBefore = adjudicator.heldValue(ASSET, channelId);
 
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.concludeAndTransferAllAssets(fixedPart, candidate);
-        uint256 hAfter =adjudicator.holdings(ASSET, channelId);
+        uint256 hAfter =adjudicator.heldValue(ASSET, channelId);
         console.log("ARN521_C2 concludeAndTransferAllAssets", hBefore, hAfter);
 
         // The whole call reverted atomically: `_conclude`'s effects are rolled back too.
@@ -234,13 +229,13 @@ contract ReentryGuardTest is Test, INitroTypes {
         });
 
         adjudicator.setHoldingsLock(sourceChannelId, 1);
-        uint256 hBefore = adjudicator.holdings(ASSET, sourceChannelId);
+        uint256 hBefore = adjudicator.heldValue(ASSET, sourceChannelId);
         vm.expectRevert(bytes(GUARD_REVERT));
         adjudicator.reclaim(args);
-        uint256 hAfter = adjudicator.holdings(ASSET, sourceChannelId);
+        uint256 hAfter = adjudicator.heldValue(ASSET, sourceChannelId);
         console.log("ARN521_C2 reclaim", hBefore, hAfter);
 
-        assertEq(adjudicator.holdings(ASSET, sourceChannelId), 0);
+        assertEq(adjudicator.heldValue(ASSET, sourceChannelId), 0);
     }
 
     function _reclaimVariablePart() internal pure returns (VariablePart memory) {

@@ -71,12 +71,28 @@ contract CheckSettlePerAssetSetup is Script {
         (bytes32 channelId1, uint64 nonce1, bytes memory calldata1) = _buildDeposit(e, d, uint64(1));
         (bytes32 channelId0, uint64 nonce0, bytes memory calldata0) = _buildDeposit(e, d, uint64(2));
 
-        // Fund channel 1 with the second asset directly (MultiAssetHolder.deposit has no access
-        // control): the outcome's usdc2 allocations total FORCED_USER + FORCED_HUB, matching USDC's
-        // funding below so a successful per-asset transfer would always be able to pay in full.
+        // N1a: a channel is funded only through depositFromNote (a shielded note), never a raw
+        // transfer. Shield a usdc2 note and unshield it to fund channel1: the outcome's usdc2
+        // allocations total FORCED_USER + FORCED_HUB, matching USDC's funding below so a successful
+        // per-asset transfer would always be able to pay in full.
+        bytes32 usdc2Npk = bytes32(uint256(0x2222));
         vm.startBroadcast(e.deployerKey);
-        d.usdc2.approve(address(d.adjudicator), FORCED_USER + FORCED_HUB);
-        d.adjudicator.deposit(address(d.usdc2), channelId1, 0, FORCED_USER + FORCED_HUB);
+        d.usdc2.approve(address(d.privacyPool), FORCED_USER + FORCED_HUB);
+        IArmadaPool(address(d.privacyPool)).shield(
+            ArmadaNotes.shieldRequests(address(d.usdc2), usdc2Npk, uint120(FORCED_USER + FORCED_HUB)),
+            address(0)
+        );
+        Transaction[] memory usdc2Txs = ArmadaNotes.unshield(
+            d.privacyPool,
+            address(d.usdc2),
+            address(d.adjudicator),
+            uint120(FORCED_USER + FORCED_HUB),
+            address(d.adjudicator),
+            d.adjudicator.depositBinding(channelId1, 0),
+            keccak256(abi.encode(channelId1, 'usdc2-nullifier')),
+            0
+        );
+        d.adjudicator.depositFromNote(channelId1, 0, usdc2Txs);
         vm.stopBroadcast();
 
         _writeManifest(e, d);
@@ -155,7 +171,8 @@ contract CheckSettlePerAssetSetup is Script {
             amount,
             address(d.adjudicator),
             d.adjudicator.depositBinding(channelId, 0),
-            keccak256(abi.encode(channelId, 'nullifier'))
+            keccak256(abi.encode(channelId, 'nullifier')),
+            0
         );
         return abi.encodeCall(d.adjudicator.depositFromNote, (channelId, 0, txs));
     }

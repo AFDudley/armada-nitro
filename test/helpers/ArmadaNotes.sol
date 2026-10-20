@@ -140,13 +140,20 @@ library ArmadaNotes {
         uint120 value,
         address adaptContract,
         bytes32 adaptParams,
-        bytes32 nullifier
+        bytes32 nullifier,
+        uint256 priorHeld
     ) internal view returns (Transaction[] memory transactions) {
         CommitmentPreimage memory note = usdcNote(usdc, bytes32(uint256(uint160(recipient))), value);
-        bytes32[] memory nullifiers = new bytes32[](1);
-        nullifiers[0] = nullifier;
-        bytes32[] memory commitments = new bytes32[](1);
-        commitments[0] = commitmentHash(note);
+        // N1a: the channel's collateral reference is a SEPARATE pool-registered commitment whose
+        // plaintext value is the NEW CUMULATIVE total (priorHeld + value), not this unshield's
+        // own (incremental) note -- depositFromNote independently verifies this cumulative
+        // preimage's value against its own measured deposit math before trusting it as the new
+        // `holdings[asset][channelId]` reference.
+        CommitmentPreimage memory cumulative = usdcNote(
+            usdc,
+            bytes32(uint256(uint160(recipient))),
+            uint120(priorHeld + uint256(value))
+        );
 
         transactions = new Transaction[](1);
         transactions[0] = Transaction({
@@ -156,21 +163,59 @@ library ArmadaNotes {
                 c: G1Point(0, 0)
             }),
             merkleRoot: privacyPool.merkleRoot(),
-            nullifiers: nullifiers,
-            commitments: commitments,
-            boundParams: BoundParams({
+            nullifiers: _singleNullifier(nullifier),
+            commitments: _unshieldCommitments(cumulative, note),
+            boundParams: _unshieldBoundParams(privacyPool, adaptContract, adaptParams, cumulative),
+            unshieldPreimage: note
+        });
+    }
+
+    function _singleNullifier(bytes32 nullifier) private pure returns (bytes32[] memory out) {
+        out = new bytes32[](1);
+        out[0] = nullifier;
+    }
+
+    function _unshieldCommitments(
+        CommitmentPreimage memory cumulative,
+        CommitmentPreimage memory note
+    ) private pure returns (bytes32[] memory out) {
+        out = new bytes32[](2);
+        out[0] = commitmentHash(cumulative);
+        out[1] = commitmentHash(note);
+    }
+
+    function _unshieldBoundParams(
+        PrivacyPool privacyPool,
+        address adaptContract,
+        bytes32 adaptParams,
+        CommitmentPreimage memory cumulative
+    ) private view returns (BoundParams memory) {
+        CommitmentCiphertext[] memory ownedCiphertext = new CommitmentCiphertext[](1);
+        ownedCiphertext[0] = CommitmentCiphertext({
+            ciphertext: [bytes32(0), bytes32(0), bytes32(0), bytes32(0)],
+            blindedSenderViewingKey: bytes32(0),
+            blindedReceiverViewingKey: bytes32(0),
+            annotationData: '',
+            memo: ''
+        });
+
+        CommitmentPreimage[] memory publicOutputs = new CommitmentPreimage[](2);
+        publicOutputs[0] = cumulative;
+        // publicOutputs[1] stays the zero preimage: the unshield's own slot, already verified by
+        // the pool's separate unshield-hash check, never tree-inserted or re-registered.
+
+        return
+            BoundParams({
                 treeNumber: uint16(privacyPool.treeNumber()),
                 minGasPrice: 0,
                 unshield: UnshieldType.NORMAL,
                 chainID: uint64(block.chainid),
                 adaptContract: adaptContract,
                 adaptParams: adaptParams,
-                commitmentCiphertext: new CommitmentCiphertext[](0),
+                commitmentCiphertext: ownedCiphertext,
                 ownerField: bytes32(0),
-                publicOutputs: new CommitmentPreimage[](0)
-            }),
-            unshieldPreimage: note
-        });
+                publicOutputs: publicOutputs
+            });
     }
 
     /// @dev Decode one Shield event emitted by `pool`.

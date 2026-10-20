@@ -83,7 +83,7 @@ contract WatchtowerPerAssetPayoutCheckTest is Test {
         // Sanity (arn-5a6 / design 15 I5): the first (good) asset is paid regardless; the second
         // asset is paid too when its token cooperates, and left unpaid (not the whole channel)
         // when it does not -- never an all-or-nothing failure.
-        assertEq(adjudicator.holdings(_usdc(scenario), _channelId(scenario)), 0);
+        assertEq(adjudicator.heldValue(_usdc(scenario), _channelId(scenario)), 0);
     }
 
     function _checkSettleStale(bool secondAssetReverts, string memory label) internal {
@@ -108,7 +108,7 @@ contract WatchtowerPerAssetPayoutCheckTest is Test {
 
         scenario.settleStale(0);
 
-        assertEq(adjudicator.holdings(_usdc(scenario), _channelId(scenario)), 0);
+        assertEq(adjudicator.heldValue(_usdc(scenario), _channelId(scenario)), 0);
     }
 
     /// @dev Deploys a fresh two-asset fixture (script/WatchtowerPerAssetSetup.s.sol's

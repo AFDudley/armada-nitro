@@ -90,4 +90,19 @@ interface IArmadaPool {
     function shield(ShieldRequest[] calldata shieldRequests, address integrator) external;
 
     function transact(Transaction[] calldata transactions) external;
+
+    /**
+     * @dev N1a: the public preimage registry. Reads a note's `token` and `value` from the
+     * commitment alone, with no off-chain index (lab book decision 3 / 11: the creator publishes
+     * the preimage in the creating transaction; the adjudicator verifies it before crediting).
+     * The heldValue view maps this pool's `uint120` value through SafeCast.
+     */
+    function preimageOf(bytes32 commitment) external view returns (CommitmentPreimage memory);
+
+    /**
+     * @dev P2a: spends a note whose `npk` is derived from `msg.sender` with no EdDSA signature;
+     * the pool checks `msg.sender == owner` (lab book decision 2: contract-owned spend authorized
+     * by `msg.sender == owner`). Callable only by the owning contract.
+     */
+    function transactOwned(Transaction[] calldata transactions) external;
 }

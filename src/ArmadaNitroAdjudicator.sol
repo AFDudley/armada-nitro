@@ -6,7 +6,6 @@ import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {NitroAdjudicator} from './nitro/NitroAdjudicator.sol';
-import {IMultiAssetHolder} from './nitro/interfaces/IMultiAssetHolder.sol';
 import {MultiAssetHolder} from './nitro/MultiAssetHolder.sol';
 import {
     IArmadaPool,
@@ -47,6 +46,20 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         return configuredAssets[asset];
     }
 
+    /**
+     * @dev N1a: the held amount of the channel collateral note. Empty commitment -> 0; a set
+     * commitment reads the pool's preimage live through `preimageOf` (never a cached or passed-in
+     * amount). The pool's `uint120` value is cast to `uint256` with SafeCast.
+     */
+    function heldValue(address asset, bytes32 channelId) public view virtual override returns (uint256) {
+        bytes32 commitment = holdings[asset][channelId];
+        if (uint256(commitment) == 0) {
+            return 0;
+        }
+        CommitmentPreimage memory preimage = pool.preimageOf(commitment);
+        return SafeCast.toUint256(int256(uint256(preimage.value)));
+    }
+
     constructor(IArmadaPool pool_, address[] memory assets_) {
         pool = pool_;
         for (uint256 i = 0; i < assets_.length; i++) {
@@ -64,19 +77,6 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         return keccak256(abi.encode(channelId, expectedHeld));
     }
 
-    /**
-     * @notice Fund a channel with a configured token.
-     * @dev The token must be on the hub's list; all other arguments pass through unchanged.
-     */
-    function deposit(
-        address asset,
-        bytes32 channelId,
-        uint256 expectedHeld,
-        uint256 amount
-    ) external payable override (IMultiAssetHolder, MultiAssetHolder) {
-        require(isAsset(asset), 'Asset not configured');
-        _doDeposit(asset, channelId, expectedHeld, amount);
-    }
 
     /**
      * @notice Fund `channelId` from a shielded note.
@@ -110,7 +110,7 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
 
         address asset = note.token.tokenAddress;
         require(isAsset(asset), 'Asset not configured');
-        uint256 held = holdings[asset][channelId];
+        uint256 held = heldValue(asset, channelId);
         require(held == expectedHeld, 'held != expectedHeld');
 
         // guard: no nested call may run on this channel while this deposit is in progress.
@@ -123,7 +123,22 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
 
         holdingsLock[channelId] -= 1;
         held += received;
-        holdings[asset][channelId] = held;
+
+        // N1a: the channel collateral is a pool commitment reference (bytes32), not a raw
+        // balance. `commitments[0]` is a SEPARATE, pool-verified commitment (distinct from the
+        // unshield's own hash at the last index) whose plaintext the caller must publish as
+        // `publicOutputs[0]`; the pool's own `_recordPreimages` only ever registers a preimage it
+        // has itself hash-matched to that commitment (TransactModule._validatePublicOutputs), so
+        // the adjudicator here only has to check the VALUE the pool let through is the one this
+        // deposit actually produced -- never a cached or caller-asserted amount.
+        require(transaction.commitments.length >= 1, 'Missing collateral commitment');
+        require(transaction.boundParams.publicOutputs.length >= 1, 'Missing collateral preimage');
+        CommitmentPreimage calldata collateral = transaction.boundParams.publicOutputs[0];
+        require(collateral.npk == _addressToBytes32(address(this)), 'Collateral not adjudicator-owned');
+        require(collateral.token.tokenType == TokenType.ERC20, 'Collateral not ERC20');
+        require(collateral.token.tokenAddress == asset, 'Collateral wrong asset');
+        require(uint256(collateral.value) == held, 'Collateral value mismatch');
+        holdings[asset][channelId] = transaction.commitments[0];
         emit Deposited(channelId, asset, held);
     }
 
@@ -167,7 +182,7 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
             } else if (_isExternalDestination(allocation.destination)) {
                 _transferAsset(asset, _bytes32ToAddress(allocation.destination), allocation.amount);
             } else {
-                holdings[asset][allocation.destination] += allocation.amount;
+                holdings[asset][allocation.destination] = bytes32(uint256(holdings[asset][allocation.destination]) + allocation.amount);
             }
         }
 

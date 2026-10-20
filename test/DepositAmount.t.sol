@@ -4,6 +4,19 @@ pragma solidity 0.8.17;
 import {Test, Vm} from 'forge-std/Test.sol';
 import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
 import {ArmadaFixture} from './helpers/ArmadaFixture.sol';
+import {MockPool} from './helpers/MockPool.sol';
+import {ArmadaNotes} from './helpers/ArmadaNotes.sol';
+import {
+    BoundParams,
+    CommitmentCiphertext,
+    CommitmentPreimage,
+    G1Point,
+    G2Point,
+    IArmadaPool,
+    SnarkProof,
+    Transaction,
+    UnshieldType
+} from 'src/armada/IArmadaPool.sol';
 
 /// @dev Minimal ERC20 that delivers one unit less than the requested `transferFrom` amount.
 contract ShortToken {
@@ -52,6 +65,7 @@ contract NormalToken {
 
 contract DepositAmountTest is ArmadaFixture {
     ArmadaNitroAdjudicator adjudicator;
+    MockPool internal _mockPool;
     ShortToken internal shortToken;
     NormalToken internal normalToken;
 
@@ -67,7 +81,8 @@ contract DepositAmountTest is ArmadaFixture {
         assets[3] = address(0x0000000000000000000000000000000000000003); // waUSDC
         assets[4] = address(shortToken);
         assets[5] = address(normalToken);
-        adjudicator = new ArmadaNitroAdjudicator(pool, assets);
+        _mockPool = new MockPool();
+        adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(address(_mockPool)), assets);
     }
 
     /// @dev c1: a token that pays one unit less than requested must revert the deposit.
@@ -77,8 +92,9 @@ contract DepositAmountTest is ArmadaFixture {
         shortToken.approve(address(adjudicator), amount);
         bytes32 channelId = keccak256("channel-arn-0cf");
 
-        vm.expectRevert('Deposit amount mismatch');
-        adjudicator.deposit(address(shortToken), channelId, 0, amount);
+        Transaction[] memory txs = _buildUnshieldBound(address(shortToken), amount, channelId, 0);
+        vm.expectRevert('Unshield amount mismatch');
+        adjudicator.depositFromNote(channelId, 0, txs);
     }
 
     /// @dev c2: a normal token that pays the full amount leaves the holdings increase equal to the
@@ -89,12 +105,68 @@ contract DepositAmountTest is ArmadaFixture {
         normalToken.approve(address(adjudicator), amount);
         bytes32 channelId = keccak256("channel-arn-0cf");
 
-        uint256 heldBefore = adjudicator.holdings(address(normalToken), channelId);
+        uint256 heldBefore = adjudicator.heldValue(address(normalToken), channelId);
         uint256 balBefore = normalToken.balanceOf(address(adjudicator));
-        adjudicator.deposit(address(normalToken), channelId, heldBefore, amount);
-        uint256 heldDelta = adjudicator.holdings(address(normalToken), channelId) - heldBefore;
+        adjudicator.depositFromNote(channelId, heldBefore, _buildUnshieldBound(address(normalToken), amount, channelId, heldBefore));
+        uint256 heldDelta = adjudicator.heldValue(address(normalToken), channelId) - heldBefore;
         uint256 balDelta = normalToken.balanceOf(address(adjudicator)) - balBefore;
 
         assertEq(heldDelta, balDelta, 'holdings delta != balance delta');
+    }
+
+    /// @dev N1a: builds a local unshield transaction of a fresh note of `tokenAddr` worth `value`
+    /// to the adjudicator, mints+shields the backing tokens into the mock pool so `transact`'s
+    /// balance delta matches, and registers the note's preimage so heldValue follows it live.
+    function _buildUnshieldBound(address tokenAddr, uint256 value, bytes32 channelId, uint256 expectedHeld) internal returns (Transaction[] memory) {
+        bytes32 npk = bytes32(uint256(uint160(address(adjudicator))));
+        CommitmentPreimage memory note = ArmadaNotes.usdcNote(tokenAddr, npk, uint120(value));
+
+        // The mock pool must hold the token to hand it back on transact(): mint it there directly.
+        if (tokenAddr == address(shortToken)) {
+            shortToken.mint(address(_mockPool), value);
+        } else {
+            normalToken.mint(address(_mockPool), value);
+        }
+
+        // N1a: the channel's collateral reference is a SEPARATE commitment from the unshield's
+        // own note, whose plaintext value is the NEW CUMULATIVE total (expectedHeld + value) --
+        // depositFromNote verifies this against its own measured deposit math before trusting it.
+        CommitmentPreimage memory collateral = ArmadaNotes.usdcNote(
+            tokenAddr,
+            npk,
+            uint120(expectedHeld + value)
+        );
+        bytes32 collateralCommitment = bytes32(uint256(keccak256(abi.encode(collateral))));
+        _mockPool.setPreimage(collateralCommitment, collateral);
+
+        bytes32[] memory commitments = new bytes32[](1);
+        commitments[0] = collateralCommitment;
+        CommitmentPreimage[] memory publicOutputs = new CommitmentPreimage[](1);
+        publicOutputs[0] = collateral;
+
+        Transaction[] memory txs = new Transaction[](1);
+        txs[0] = Transaction({
+            proof: SnarkProof({
+                a: G1Point(0, 0),
+                b: G2Point([uint256(0), 0], [uint256(0), 0]),
+                c: G1Point(0, 0)
+            }),
+            merkleRoot: bytes32(0),
+            nullifiers: new bytes32[](0),
+            commitments: commitments,
+            boundParams: BoundParams({
+                treeNumber: 0,
+                minGasPrice: 0,
+                unshield: UnshieldType.NORMAL,
+                chainID: uint64(block.chainid),
+                adaptContract: address(adjudicator),
+                adaptParams: adjudicator.depositBinding(channelId, expectedHeld),
+                commitmentCiphertext: new CommitmentCiphertext[](0),
+                ownerField: bytes32(0),
+                publicOutputs: publicOutputs
+            }),
+            unshieldPreimage: note
+        });
+        return txs;
     }
 }

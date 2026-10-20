@@ -32,29 +32,8 @@ contract AdjudicatorAssetListTest is ArmadaFixture {
         adjudicator = new ArmadaNitroAdjudicator(pool, assets);
     }
 
-    // c1: deposit entry point
-    function test_deposit_metamorphic_listedCreditsUnlistedReverts() public {
-        bytes32 channelId = keccak256('arn-3d8-c1');
-        uint256 amount = 100e6;
-
-        // Listed token (USDC): mint to user, user approves, user deposits.
-        usdc.mint(user, amount);
-        vm.prank(user);
-        usdc.approve(address(adjudicator), amount);
-        vm.prank(user);
-        adjudicator.deposit(address(usdc), channelId, 0, amount);
-        assertEq(adjudicator.holdings(address(usdc), channelId), amount);
-
-        // Unlisted token: identical inputs (same channel, expectedHeld=0, same amount) — reverts.
-        unlisted.mint(user, amount);
-        vm.prank(user);
-        unlisted.approve(address(adjudicator), amount);
-        vm.prank(user);
-        vm.expectRevert('Asset not configured');
-        adjudicator.deposit(address(unlisted), channelId, 0, amount);
-    }
-
-    // c2: depositFromNote entry point
+    // c2: depositFromNote entry point (N1a: the base `deposit` entry point is gone -- a channel
+    // is funded only through depositFromNote, which carries a proof)
     function test_depositFromNote_metamorphic_listedCreditsUnlistedReverts() public {
         bytes32 channelId = keccak256('arn-3d8-c2');
         uint256 value = 100e6;
@@ -65,7 +44,7 @@ contract AdjudicatorAssetListTest is ArmadaFixture {
         Transaction[] memory txs = _unshieldFor(address(usdc), value, channelId, npk);
         vm.prank(broadcaster);
         adjudicator.depositFromNote(channelId, 0, txs);
-        assertEq(adjudicator.holdings(address(usdc), channelId), value);
+        assertEq(adjudicator.heldValue(address(usdc), channelId), value);
 
         // Unlisted: identical inputs, only the note's token status differs — reverts.
         _shieldWith(address(unlisted), user, npk, value);
@@ -96,7 +75,8 @@ contract AdjudicatorAssetListTest is ArmadaFixture {
             uint120(value),
             address(adjudicator),
             adjudicator.depositBinding(channelId, 0),
-            keccak256(abi.encode(npk, value, ++nullifierSeed))
+            keccak256(abi.encode(npk, value, ++nullifierSeed)),
+            0
         );
     }
 }

@@ -184,21 +184,41 @@ contract LocalScenario is Script {
             USER_FUNDS,
             address(c.adjudicator),
             c.adjudicator.depositBinding(channelId, 0),
-            keccak256(abi.encode(channelId, 'nullifier'))
+            keccak256(abi.encode(channelId, 'nullifier')),
+            0
         );
         vm.broadcast(c.deployerKey);
         c.adjudicator.depositFromNote(channelId, 0, txs);
 
+        // N1a: a channel is funded only through depositFromNote (a shielded note), never a raw
+        // transfer. The hub shields a note of its own USDC (via the custodian's FROST-executed
+        // approve+shield) and unshields it to the adjudicator.
+        bytes32 hubNpk = bytes32(uint256(0x4444) + uint256(uint160(address(c.custodian))));
         _hubExecute(
             c,
             address(c.usdc),
-            abi.encodeWithSignature('approve(address,uint256)', address(c.adjudicator), HUB_FUNDS)
+            abi.encodeWithSignature('approve(address,uint256)', address(c.privacyPool), HUB_FUNDS)
         );
         _hubExecute(
             c,
-            address(c.adjudicator),
-            abi.encodeCall(c.adjudicator.deposit, (address(c.usdc), channelId, USER_FUNDS, HUB_FUNDS))
+            address(c.privacyPool),
+            abi.encodeCall(
+                IArmadaPool(address(c.privacyPool)).shield,
+                (ArmadaNotes.shieldRequests(address(c.usdc), hubNpk, HUB_FUNDS), address(0))
+            )
         );
+        Transaction[] memory hubTxs = ArmadaNotes.unshield(
+            c.privacyPool,
+            address(c.usdc),
+            address(c.adjudicator),
+            HUB_FUNDS,
+            address(c.adjudicator),
+            c.adjudicator.depositBinding(channelId, USER_FUNDS),
+            keccak256(abi.encode(channelId, 'hub-nullifier')),
+            USER_FUNDS
+        );
+        vm.broadcast(c.deployerKey);
+        c.adjudicator.depositFromNote(channelId, USER_FUNDS, hubTxs);
     }
 
     /// @dev Sign with the group key off the broadcast (the signer exists only in simulation).

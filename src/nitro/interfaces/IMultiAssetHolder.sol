@@ -7,20 +7,6 @@ import {INitroTypes} from './INitroTypes.sol';
  * @dev The IMultiAssetHolder interface calls for functions that allow assets to be transferred from one channel to other channel and/or external destinations, as well as for guarantees to be claimed.
  */
 interface IMultiAssetHolder {
-    /**
-     * @notice Deposit ETH or erc20 assets against a given destination.
-     * @dev Deposit ETH or erc20 assets against a given destination.
-     * @param asset erc20 token address, or zero address to indicate ETH
-     * @param destination ChannelId to be credited.
-     * @param expectedHeld The number of wei the depositor believes are _already_ escrowed against the channelId.
-     * @param amount The intended number of wei to be deposited.
-     */
-    function deposit(
-        address asset,
-        bytes32 destination,
-        uint256 expectedHeld,
-        uint256 amount
-    ) external payable;
 
     /**
      * @notice Transfers as many funds escrowed against `channelId` as can be afforded for a specific destination. Assumes no repeated entries.

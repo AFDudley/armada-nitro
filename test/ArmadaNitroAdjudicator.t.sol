@@ -82,7 +82,7 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
 
         _depositFromNote(channelId, 0, USER_FUNDS);
 
-        assertEq(adjudicator.holdings(address(usdc), channelId), USER_FUNDS);
+        assertEq(adjudicator.heldValue(address(usdc), channelId), USER_FUNDS);
         assertEq(usdc.balanceOf(address(adjudicator)), USER_FUNDS);
     }
 
@@ -94,7 +94,8 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
             address(adjudicator),
             USER_FUNDS,
             address(adjudicator),
-            adjudicator.depositBinding(channelId, 0)
+            adjudicator.depositBinding(channelId, 0),
+            0
         );
 
         vm.prank(broadcaster);
@@ -112,7 +113,8 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
             address(adjudicator),
             USER_FUNDS,
             address(adjudicator),
-            adjudicator.depositBinding(channelId, 0)
+            adjudicator.depositBinding(channelId, 0),
+            0
         );
         vm.prank(broadcaster);
         vm.expectRevert('held != expectedHeld');
@@ -126,7 +128,8 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
             address(adjudicator),
             USER_FUNDS,
             address(adjudicator),
-            adjudicator.depositBinding(channelId, 0)
+            adjudicator.depositBinding(channelId, 0),
+            0
         );
 
         vm.prank(broadcaster);
@@ -146,7 +149,7 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
 
         _assertShieldedToUser(vm.getRecordedLogs(), 130e6);
         assertEq(usdc.balanceOf(address(custodian)), 70e6);
-        assertEq(adjudicator.holdings(address(usdc), _channelId(fixedPart)), 0);
+        assertEq(adjudicator.heldValue(address(usdc), _channelId(fixedPart)), 0);
     }
 
     function test_forceClose_userExitsToNoteWhenHubStopsResponding() public {
@@ -280,18 +283,32 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         return NitroUtils.getChannelId(fixedPart);
     }
 
-    /// @dev User funds from a shielded note; the hub funds from custodian inventory.
+    /// @dev User funds from a shielded note; the hub funds from custodian inventory, also via a
+    /// shielded note (N1a: a channel is funded only through depositFromNote, never a raw transfer).
     function _fundChannel(bytes32 channelId) internal {
         _shield(user, USER_DEPOSIT_NPK, USER_FUNDS);
         _depositFromNote(channelId, 0, USER_FUNDS);
 
+        bytes32 hubNpk = bytes32(uint256(0x4444) + uint256(uint160(address(custodian))));
         usdc.mint(address(custodian), HUB_FUNDS);
-        _hubExecute(address(usdc), abi.encodeWithSignature('approve(address,uint256)', address(adjudicator), HUB_FUNDS));
+        _hubExecute(address(usdc), abi.encodeWithSignature('approve(address,uint256)', address(pool), HUB_FUNDS));
         _hubExecute(
-            address(adjudicator),
-            abi.encodeCall(adjudicator.deposit, (address(usdc), channelId, USER_FUNDS, HUB_FUNDS))
+            address(pool),
+            abi.encodeCall(
+                pool.shield,
+                (ArmadaNotes.shieldRequests(address(usdc), hubNpk, HUB_FUNDS), address(0))
+            )
         );
-        assertEq(adjudicator.holdings(address(usdc), channelId), USER_FUNDS + HUB_FUNDS);
+        Transaction[] memory hubTxs = _unshield(
+            address(adjudicator),
+            HUB_FUNDS,
+            address(adjudicator),
+            adjudicator.depositBinding(channelId, USER_FUNDS),
+            USER_FUNDS
+        );
+        vm.prank(broadcaster);
+        adjudicator.depositFromNote(channelId, USER_FUNDS, hubTxs);
+        assertEq(adjudicator.heldValue(address(usdc), channelId), USER_FUNDS + HUB_FUNDS);
     }
 
     function _depositFromNote(bytes32 channelId, uint256 expectedHeld, uint120 value) internal {
@@ -299,7 +316,8 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
             address(adjudicator),
             value,
             address(adjudicator),
-            adjudicator.depositBinding(channelId, expectedHeld)
+            adjudicator.depositBinding(channelId, expectedHeld),
+            expectedHeld
         );
         vm.prank(broadcaster);
         adjudicator.depositFromNote(channelId, expectedHeld, txs);

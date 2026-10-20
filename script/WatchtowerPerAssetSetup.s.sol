@@ -143,19 +143,34 @@ contract WatchtowerPerAssetSetup is Script {
             uint120(cfg.total),
             address(d.adjudicator),
             d.adjudicator.depositBinding(channelId, 0),
-            keccak256(abi.encode(channelId, 'usdc'))
+            keccak256(abi.encode(channelId, 'usdc')),
+            0
         );
         depositCalldata = abi.encodeCall(d.adjudicator.depositFromNote, (channelId, 0, txs));
     }
 
-    /// @dev Funded directly through the plain `deposit` entrypoint (no note/proof involved -- it
-    /// is not part of what this check exercises), before flipping the revert switch, so funding
-    /// itself never depends on the switch.
+    /// @dev N1a: funded through `depositFromNote` (a shielded note, no raw transfer path exists
+    /// anymore) before flipping the revert switch, so funding itself never depends on the switch.
     function _fundSecondAsset(Cfg memory cfg, Deployed memory d, bytes32 channelId) internal {
+        bytes32 npk = bytes32(uint256(0x5555));
         vm.startBroadcast(cfg.deployerKey);
         d.secondAsset.mint(vm.addr(cfg.deployerKey), cfg.secondAssetAmount);
-        d.secondAsset.approve(address(d.adjudicator), cfg.secondAssetAmount);
-        d.adjudicator.deposit(address(d.secondAsset), channelId, 0, cfg.secondAssetAmount);
+        d.secondAsset.approve(address(d.privacyPool), cfg.secondAssetAmount);
+        IArmadaPool(address(d.privacyPool)).shield(
+            ArmadaNotes.shieldRequests(address(d.secondAsset), npk, uint120(cfg.secondAssetAmount)),
+            address(0)
+        );
+        Transaction[] memory txs = ArmadaNotes.unshield(
+            d.privacyPool,
+            address(d.secondAsset),
+            address(d.adjudicator),
+            uint120(cfg.secondAssetAmount),
+            address(d.adjudicator),
+            d.adjudicator.depositBinding(channelId, 0),
+            keccak256(abi.encode(channelId, 'second-asset')),
+            0
+        );
+        d.adjudicator.depositFromNote(channelId, 0, txs);
         d.secondAsset.setRejectTransfers(cfg.secondAssetReverts);
         vm.stopBroadcast();
     }

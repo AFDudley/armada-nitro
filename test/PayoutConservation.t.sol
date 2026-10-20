@@ -16,7 +16,7 @@ contract FinalizedChannelHarness is NitroAdjudicator {
     }
 
     function setHoldings(address asset, bytes32 channelId, uint256 amount) external {
-        holdings[asset][channelId] = amount;
+        holdings[asset][channelId] = bytes32(amount);
     }
 }
 
@@ -131,7 +131,7 @@ contract PayoutConservationTest is Test {
         tok.mint(address(adjudicator), AMOUNT);
         adjudicator.setHoldings(token, CHANNEL, AMOUNT);
 
-        int256 hBefore = int256(adjudicator.holdings(token, CHANNEL));
+        int256 hBefore = int256(adjudicator.heldValue(token, CHANNEL));
         int256 dBefore = int256(tok.balanceOf(DEST));
 
         bool reverted;
@@ -141,7 +141,7 @@ contract PayoutConservationTest is Test {
             reverted = true;
         }
 
-        int256 hDelta = int256(adjudicator.holdings(token, CHANNEL)) - hBefore;
+        int256 hDelta = int256(adjudicator.heldValue(token, CHANNEL)) - hBefore;
         int256 dDelta = int256(tok.balanceOf(DEST)) - dBefore;
 
         // Measurement — emitted BEFORE the assertions, so the base tree's buggy run still

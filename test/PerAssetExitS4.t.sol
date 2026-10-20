@@ -18,6 +18,22 @@ import {IArmadaPool, CommitmentPreimage, ShieldCiphertext, Transaction} from 'sr
 /// second token (RevertingTransferToken) always reverts on transfer, the single-asset exit
 /// `transfer(assetIndex)` still pays out the other (good) asset, while `transferAllAssets`
 /// reverts as a whole (no partial payout).
+/// @dev N1a: RevertingTransferToken can be shielded (shield() pulls via transferFrom) but never
+/// unshielded (unshield pays out via transfer(), which this token always reverts). This
+/// test-only setter credits the channel with a commitment the pool has itself registered via a
+/// real shield() call -- the same "pool-verified commitment reference" shape depositFromNote
+/// credits -- without routing through the broken unshield.
+contract PerAssetExitAdjudicatorHarness is ArmadaNitroAdjudicator {
+    constructor(
+        IArmadaPool pool_,
+        address[] memory assets_
+    ) ArmadaNitroAdjudicator(pool_, assets_) {}
+
+    function testSetHolding(address asset, bytes32 channelId, bytes32 commitment) external {
+        holdings[asset][channelId] = commitment;
+    }
+}
+
 contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
     uint256 internal constant USER_KEY = 0xA11CE;
     uint256 internal constant DELEGATE_KEY = 0xDE1E6A7E;
@@ -32,7 +48,7 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
     bytes32 internal constant USER_PAYOUT_NPK = bytes32(uint256(0x2222));
     bytes32 internal constant USER2_PAYOUT_NPK = bytes32(uint256(0x3333));
 
-    ArmadaNitroAdjudicator internal adjudicator;
+    PerAssetExitAdjudicatorHarness internal adjudicator;
     ConsensusApp internal consensusApp;
     IHubCustodian internal custodian;
     IFrostTestSigner internal frost;
@@ -49,7 +65,7 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         address[] memory assets = new address[](2);
         assets[0] = address(usdc);
         assets[1] = address(revToken);
-        adjudicator = new ArmadaNitroAdjudicator(pool, assets);
+        adjudicator = new PerAssetExitAdjudicatorHarness(pool, assets);
 
         consensusApp = new ConsensusApp();
         user = vm.addr(USER_KEY);
@@ -90,8 +106,8 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         adjudicator.transfer(0, channelId, outcomeBytes, stateHash, new uint256[](0));
 
         // The other asset (USDC) is fully paid out; the reverting asset is untouched.
-        assertEq(adjudicator.holdings(address(usdc), channelId), 0);
-        assertEq(adjudicator.holdings(address(revToken), channelId), HUB_FUNDS);
+        assertEq(adjudicator.heldValue(address(usdc), channelId), 0);
+        assertEq(adjudicator.heldValue(address(revToken), channelId), HUB_FUNDS);
 
         // The USDC payment really reached the custodian's wallet (arn-2e6, clause c1).
         uint256 custodianBalAfter = usdc.balanceOf(address(custodian));
@@ -121,8 +137,8 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         adjudicator.transferAllAssets(channelId, state.outcome, stateHash);
 
         // No partial payout: both assets' holdings are unchanged.
-        assertEq(adjudicator.holdings(address(usdc), channelId), USER_FUNDS + HUB_FUNDS);
-        assertEq(adjudicator.holdings(address(revToken), channelId), HUB_FUNDS);
+        assertEq(adjudicator.heldValue(address(usdc), channelId), USER_FUNDS + HUB_FUNDS);
+        assertEq(adjudicator.heldValue(address(revToken), channelId), HUB_FUNDS);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -150,18 +166,38 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         // USDC: user note + hub custodian.
         _shield(user, USER_DEPOSIT_NPK, USER_FUNDS);
         _depositFromNote(channelId, 0, USER_FUNDS);
+        bytes32 hubNpk = bytes32(uint256(0x4444) + uint256(uint160(address(custodian))));
         usdc.mint(address(custodian), HUB_FUNDS);
-        _hubExecute(address(usdc), abi.encodeWithSignature('approve(address,uint256)', address(adjudicator), HUB_FUNDS));
+        _hubExecute(address(usdc), abi.encodeWithSignature('approve(address,uint256)', address(pool), HUB_FUNDS));
         _hubExecute(
-            address(adjudicator),
-            abi.encodeCall(adjudicator.deposit, (address(usdc), channelId, USER_FUNDS, HUB_FUNDS))
+            address(pool),
+            abi.encodeCall(
+                pool.shield,
+                (ArmadaNotes.shieldRequests(address(usdc), hubNpk, HUB_FUNDS), address(0))
+            )
         );
-        assertEq(adjudicator.holdings(address(usdc), channelId), USER_FUNDS + HUB_FUNDS);
+        Transaction[] memory hubTxs = _unshield(
+            address(adjudicator),
+            HUB_FUNDS,
+            address(adjudicator),
+            adjudicator.depositBinding(channelId, USER_FUNDS),
+            USER_FUNDS
+        );
+        vm.prank(broadcaster);
+        adjudicator.depositFromNote(channelId, USER_FUNDS, hubTxs);
+        assertEq(adjudicator.heldValue(address(usdc), channelId), USER_FUNDS + HUB_FUNDS);
 
         // RevertingTransferToken: the test contract holds HUB_FUNDS from the constructor mint.
-        revToken.approve(address(adjudicator), HUB_FUNDS);
-        adjudicator.deposit(address(revToken), channelId, 0, HUB_FUNDS);
-        assertEq(adjudicator.holdings(address(revToken), channelId), HUB_FUNDS);
+        // It can never be unshielded (transfer() always reverts), so it is shielded directly and
+        // the channel is credited with the pool-registered commitment (see the harness above).
+        bytes32 revNpk = bytes32(uint256(0x6666));
+        revToken.approve(address(pool), HUB_FUNDS);
+        vm.recordLogs();
+        pool.shield(ArmadaNotes.shieldRequests(address(revToken), revNpk, HUB_FUNDS), address(0));
+        (CommitmentPreimage[] memory revNotes, ) = _shieldedNotes(vm.getRecordedLogs());
+        bytes32 revCommitment = ArmadaNotes.commitmentHash(revNotes[0]);
+        adjudicator.testSetHolding(address(revToken), channelId, revCommitment);
+        assertEq(adjudicator.heldValue(address(revToken), channelId), HUB_FUNDS);
     }
 
     /// @dev Builds the two-asset state: USDC (asset 0, the good asset) + RevertingTransferToken
@@ -217,7 +253,8 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
             address(adjudicator),
             value,
             address(adjudicator),
-            adjudicator.depositBinding(channelId, expectedHeld)
+            adjudicator.depositBinding(channelId, expectedHeld),
+            expectedHeld
         );
         vm.prank(broadcaster);
         adjudicator.depositFromNote(channelId, expectedHeld, txs);

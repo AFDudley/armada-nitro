@@ -68,7 +68,7 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
             Outcome.SingleAssetExit memory assetOutcome = outcome[assetIndex];
             Outcome.Allocation[] memory allocations = assetOutcome.allocations;
             address asset = outcome[assetIndex].asset;
-            initialHoldings[assetIndex] = holdings[asset][channelId];
+            initialHoldings[assetIndex] = heldValue(asset, channelId);
             (
                 Outcome.Allocation[] memory newAllocations,
                 bool allocatesOnlyZeros,
@@ -92,12 +92,12 @@ contract NitroAdjudicator is INitroAdjudicator, ForceMove, MultiAssetHolder {
         // effects
         for (uint256 assetIndex = 0; assetIndex < outcome.length; assetIndex++) {
             address asset = outcome[assetIndex].asset;
-            holdings[asset][channelId] -= totalPayouts[assetIndex];
+            holdings[asset][channelId] = bytes32(uint256(holdings[asset][channelId]) - totalPayouts[assetIndex]);
             emit AllocationUpdated(
                 channelId,
                 asset,
                 initialHoldings[assetIndex],
-                holdings[asset][channelId]
+                heldValue(asset, channelId)
             );
         }
 
