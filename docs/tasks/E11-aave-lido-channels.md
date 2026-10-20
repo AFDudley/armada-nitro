@@ -57,3 +57,31 @@ Discrimination, in scratch copies (revert after); paste each failure line:
 
 ## Out of scope
 Liquidations, borrow games in channels (out of scope per the design), Lido withdrawals, Sepolia.
+
+## As built (arn-ced: first chunk -- scenario 1 + scenario 4 + discrimination (a))
+Delivered: the `armada-assets-e2e` gate job (`stack/compose-jobs/armada-assets-e2e.yml`,
+`env/gates/armada-assets-e2e/{scenarios.ts,run.sh}`, `script/AssetsScenario.s.sol`). Scenario 1
+(Aave yield) and scenario 4 (redeem) only, plus discrimination (a) (the borrow removed). Scenario
+2 (`waUSDC` as a channel asset), scenario 3 (wstETH as a channel asset), and discriminations (b)
+and (c) are out of scope for this chunk -- a later chunk extends the same job and discrimination
+run. Lido's oracle was not touched: no members, no reports, no price injection.
+
+- The hub is `testAccounts[2]` (anvil account 3, the same account `armada-nitro-e2e`'s
+  `DELEGATE_KEY` default signs with); the second account that supplies + borrows is
+  `testAccounts[3]` (anvil account 4) -- both are funded with 1,000 USDC by the funding module, so
+  no extra funding step was needed for this chunk.
+- `script/AssetsScenario.s.sol`'s `aaveDeposit`/`aaveSupplyBorrow`/`aaveRedeem` are three separate
+  `forge script --sig` calls (mirrors `FixturenetScenario.s.sol`'s phase-per-call pattern); the
+  job's shell reads the yield evidence (`waUSDC.convertToAssets(1e6)`, the Aave pool's
+  `getReserveData(usdc).liquidityIndex`) and the redeem's USDC balance change with `cast` between
+  calls, not through the script -- `getReserveData` has no standalone liquidity-index getter in
+  Aave v3 (unlike v2), so this gate reads the full `ReserveDataLegacy` tuple the same way
+  `env/reconciler/modules/aave.py`'s `_reserve_data` already does (second line of the pretty-printed
+  tuple).
+- `env/gates/armada-assets-e2e/scenarios.ts` reuses `env/gates/nitro-e2e/prepare.ts`'s wallet and
+  proof code by importing it directly (the job copies both files into the same relative layout
+  this import expects) rather than re-implementing the shield/proof stage.
+- `stack/compose-jobs/docker-compose-armada-assets-e2e.yml` is a symlink to
+  `armada-assets-e2e.yml` (not a second copy): laconic-so's job runner only resolves
+  `docker-compose-<job>.yml`, but every other reference to this job's compose file in this repo and
+  task is the bare `<job>.yml` name.

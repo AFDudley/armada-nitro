@@ -1,0 +1,168 @@
+services:
+  armada-assets-e2e:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    # Mirrors docker-compose-armada-nitro-e2e.yml: the job runs on the deployment's own docker
+    # network (no host networking) and reaches geth by the compose service name
+    # (armada-fixturenet-geth:8545, arn-e7a c3/c4). Every `$NAME` in the command block that the
+    # container's shell should read at runtime is written `$$NAME` (docker compose's escape for a
+    # literal `$`), so it is read from the container's real environment (set once, with defaults,
+    # by the `environment:` section) -- docker compose interpolates any *unescaped* `$NAME`/
+    # `${NAME}` in this file against the *host*'s environment at parse time, which would otherwise
+    # silently blank a variable this container's own shell was meant to read at runtime.
+    #
+    # E11 (docs/tasks/E11-aave-lido-channels.md) scenarios 1 (Aave yield) and 4 (redeem).
+    #
+    # The job is scoped by ASSETS_E2E_SCENARIO (1, 4, or all) and ASSETS_E2E_NO_BORROW (the
+    # discrimination-a flag). After the on-chain steps, the job reads the yield indicators with
+    # cast (waUSDC.convertToAssets(1e6) and the Aave pool's USDC liquidityIndex, before and after
+    # the yield window) and the redeem's USDC balance change, prints one evidence line per
+    # scenario, and ends with a final JSON line carrying the spec's measurements.
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Gates spend test-account USDC (shields, channel deposits); top the accounts back up to
+        # the funding target first (funding.py mints only the shortfall).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (docs/tasks/E9-operability.md); the job verifies them
+        # rather than downloading -- see docker-compose-armada-nitro-e2e.yml for the same step.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # ---- stage 1: this gate's own scenario script (env/gates/armada-assets-e2e/scenarios.ts),
+        # which reuses env/gates/nitro-e2e/prepare.ts's wallet + proof code (arn-ced c2).
+        mkdir -p /src/armada-poc/scripts/gates/armada-assets-e2e/nitro-e2e
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts \
+            /src/armada-poc/scripts/gates/armada-assets-e2e/nitro-e2e/prepare.ts
+        cp /src/armada-nitro/env/gates/armada-assets-e2e/scenarios.ts \
+            /src/armada-poc/scripts/gates/armada-assets-e2e/scenarios.ts
+        (
+          cd /src/armada-poc
+          MANIFEST_PATH="$$MANIFEST_PATH" \
+          DEPOSITS_OUTPUT="$$DEPOSITS_PATH" \
+          CHALLENGE_DURATION="$$CHALLENGE_DURATION" \
+          HUB_RPC="$$HUB_RPC" DEPLOY_ENV=local CCTP_MODE=real \
+            npx hardhat run scripts/gates/armada-assets-e2e/scenarios.ts --network hub
+        )
+
+        # ---- stage 2: script/AssetsScenario.s.sol -- the Aave on-chain steps.
+        export KEYS_DIR=/env
+
+        # Read the Aave + USDC + hub addresses from the manifest.
+        POOL=$(python3 -c "import json,sys; m=json.load(open('/env/manifest.json')); sys.stdout.write(m['aave']['pool'])")
+        WAUSDC=$(python3 -c "import json,sys; m=json.load(open('/env/manifest.json')); sys.stdout.write(m['assets']['waUSDC'])")
+        USDC=$(python3 -c "import json,sys; m=json.load(open('/env/manifest.json')); sys.stdout.write(m['armada']['usdc'])")
+        HUB=$(python3 -c "import json,sys; m=json.load(open('/env/manifest.json')); sys.stdout.write(m['testAccounts'][2]['address'])")
+
+        run_script() {
+          forge script script/AssetsScenario.s.sol --sig "$$1" --rpc-url "$$HUB_RPC" --ffi --broadcast
+        }
+
+        # Read the container's env vars (set in the environment: section).
+        SCENARIO="$$ASSETS_E2E_SCENARIO"
+        NO_BORROW="$$ASSETS_E2E_NO_BORROW"
+
+        # Defaults so the JSON emission never reads an unset variable.
+        scenario_line_count=0
+        CONVERT_BEFORE=""; CONVERT_AFTER=""
+        LIQ_BEFORE=""; LIQ_AFTER=""
+        USDC_BEFORE=""; USDC_AFTER=""
+        CONVERT_INCREASED=0; LIQ_INCREASED=0; ELAPSED_SECONDS=0
+        YIELD_CHECK_PASSED=0; REDEEM_GAIN=0; REDEEM_GAIN_GE_PRINCIPAL=0
+        BORROW_RAN=0
+
+        # Scenario 1 (Aave yield): the hub custodian deposits USDC into waUSDC (ERC-4626 deposit);
+        # a second account supplies USDC to the Aave pool and borrows USDC at LTV 75% to raise
+        # utilization; real blocks advance at least 60 seconds; then the yield indicators
+        # (convertToAssets(1e6) and the pool's USDC liquidityIndex) must have increased, both read
+        # with cast.
+        case "$$SCENARIO" in
+          1|all)
+            scenario_line_count=$((scenario_line_count + 1))
+            # c3: the hub custodian deposits USDC into waUSDC (ERC-4626 deposit).
+            run_script 'aaveDeposit()'
+
+            # c3: the second account supplies + borrows (LTV 75%); the discrimination-a flag
+            # (NO_BORROW=1) removes the borrow, so the yield-increased check must fail.
+            if [ "$$NO_BORROW" != "1" ]; then
+              run_script 'aaveSupplyBorrow()'
+              BORROW_RAN=1
+            else
+              echo "armada-assets-e2e: no-borrow (discrimination a) -- skipping Aave supply+borrow"
+            fi
+
+            # Read the yield indicators BEFORE the yield window (the borrow just raised utilization).
+            CONVERT_BEFORE=$(cast call "$$WAUSDC" "convertToAssets(uint256)" 1000000 --rpc-url "$$HUB_RPC")
+            LIQ_BEFORE=$(cast call "$$POOL" 'getReserveData(address)((uint256),uint128,uint128,uint128,uint128,uint128,uint40,uint16,address,address,address,address,uint128,uint128,uint128)' "$$USDC" --rpc-url "$$HUB_RPC" | sed -n '2p' | awk '{print $1}')
+
+            # Real blocks advance at least 60 seconds: the Aave pool accrues yield while time passes.
+            echo "armada-assets-e2e: advancing >= 60s of real blocks (Aave yield window)"
+            E_START=$(date +%s)
+            sleep $$((ASSETS_E2E_WAIT))
+            E_END=$(date +%s)
+            ELAPSED_SECONDS=$(( E_END - E_START ))
+
+            # Read the yield indicators AFTER the window.
+            CONVERT_AFTER=$(cast call "$$WAUSDC" "convertToAssets(uint256)" 1000000 --rpc-url "$$HUB_RPC")
+            LIQ_AFTER=$(cast call "$$POOL" 'getReserveData(address)((uint256),uint128,uint128,uint128,uint128,uint128,uint40,uint16,address,address,address,address,uint128,uint128,uint128)' "$$USDC" --rpc-url "$$HUB_RPC" | sed -n '2p' | awk '{print $1}')
+
+            # c3: both indicators must have increased (the borrow raised utilization, so the pool
+            # accrues yield). The discrimination-a run (no borrow) makes this check fail.
+            CONVERT_INCREASED=$(awk -v a="$$CONVERT_AFTER" -v b="$$CONVERT_BEFORE" 'BEGIN{print (a+0 > b+0) ? 1 : 0}')
+            LIQ_INCREASED=$(awk -v a="$$LIQ_AFTER" -v b="$$LIQ_BEFORE" 'BEGIN{print (a+0 > b+0) ? 1 : 0}')
+            YIELD_CHECK_PASSED=$(awk -v c="$$CONVERT_INCREASED" -v l="$$LIQ_INCREASED" 'BEGIN{print (c+0==1 && l+0==1) ? 1 : 0}')
+
+            # c7: one evidence line for scenario 1, with the before/after values.
+            echo "armada-assets-e2e [scenario 1] Aave yield: waUSDC.convertToAssets(1e6) before=$$CONVERT_BEFORE after=$$CONVERT_AFTER (increased=$$CONVERT_INCREASED); pool USDC liquidityIndex before=$$LIQ_BEFORE after=$$LIQ_AFTER (increased=$$LIQ_INCREASED); elapsed_seconds=$$ELAPSED_SECONDS; borrow_ltv_percent=75; borrow_ran=$$BORROW_RAN"
+            ;;
+        esac
+
+        # Scenario 4 (redeem): the hub redeems its waUSDC for USDC (ERC-4626 redeem); the hub's
+        # USDC balance change must be at least the principal it deposited in scenario 1
+        # (1000 USDC = 1000000000 wei).
+        case "$$SCENARIO" in
+          4|all)
+            scenario_line_count=$((scenario_line_count + 1))
+            # c4: the hub redeems its waUSDC. The script deposits the principal first if the hub
+            # holds no waUSDC (standalone scenario 4 on a fresh fixturenet), then redeems all of
+            # the hub's shares.
+            USDC_BEFORE=$(cast call "$$USDC" "balanceOf(address)" "$$HUB" --rpc-url "$$HUB_RPC")
+            run_script 'aaveRedeem()'
+            USDC_AFTER=$(cast call "$$USDC" "balanceOf(address)" "$$HUB" --rpc-url "$$HUB_RPC")
+            REDEEM_GAIN=$(awk -v a="$$USDC_AFTER" -v b="$$USDC_BEFORE" 'BEGIN{print a-b}')
+            REDEEM_GAIN_GE_PRINCIPAL=$(awk -v g="$$REDEEM_GAIN" 'BEGIN{print (g+0 >= 1000000000) ? 1 : 0}')
+            # c7: one evidence line for scenario 4, with the USDC balance change.
+            echo "armada-assets-e2e [scenario 4] redeem: hub USDC before=$$USDC_BEFORE after=$$USDC_AFTER, redeem_gain=$$REDEEM_GAIN (>=1000000000 (1000 USDC principal) = $$REDEEM_GAIN_GE_PRINCIPAL)"
+            ;;
+        esac
+
+        # ---- final JSON line: the spec's stdout_json source (the run.sh output the behavioral
+        # tests parse). The job emits lowercase JSON booleans (true/false) from the 1/0 flags.
+        SCENARIO1_HAS_BEFORE_AFTER=$(awk -v c1="$$CONVERT_BEFORE" -v c2="$$CONVERT_AFTER" -v l1="$$LIQ_BEFORE" -v l2="$$LIQ_AFTER" 'BEGIN{print (c1!="" && c2!="" && l1!="" && l2!="") ? 1 : 0}')
+        SCENARIO4_HAS_BALANCE_CHANGE=$(awk -v u1="$$USDC_BEFORE" -v u2="$$USDC_AFTER" 'BEGIN{print (u1!="" && u2!="") ? 1 : 0}')
+
+        # A 1/0 flag is emitted as a lowercase JSON boolean.
+        b2json() { if [ "$$1" = "1" ]; then echo "true"; else echo "false"; fi }
+
+        JSON_LINE=$(printf '{"convert_to_assets_increased": %s, "liquidity_index_increased": %s, "elapsed_seconds": %s, "borrow_ltv_percent": 75, "borrow_ran": %s, "yield_check_passed": %s, "redeem_usdc_gain_ge_principal": %s, "scenario_line_count": %s, "scenario1_has_before_after": %s, "scenario4_has_balance_change": %s}' \
+          "$(b2json "$$CONVERT_INCREASED")" "$(b2json "$$LIQ_INCREASED")" "$$ELAPSED_SECONDS" \
+          "$(b2json "$$BORROW_RAN")" "$(b2json "$$YIELD_CHECK_PASSED")" "$(b2json "$$REDEEM_GAIN_GE_PRINCIPAL")" \
+          "$$scenario_line_count" "$(b2json "$$SCENARIO1_HAS_BEFORE_AFTER")" "$(b2json "$$SCENARIO4_HAS_BALANCE_CHANGE")")
+        echo "$$JSON_LINE"
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/assets-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      ASSETS_E2E_SCENARIO: ${ASSETS_E2E_SCENARIO:-1}
+      ASSETS_E2E_NO_BORROW: ${ASSETS_E2E_NO_BORROW:-}
+      ASSETS_E2E_WAIT: ${ASSETS_E2E_WAIT:-75}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
