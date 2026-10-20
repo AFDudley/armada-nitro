@@ -1,0 +1,228 @@
+{
+  "id": "derived-arn-2fd",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. stack/scripts/armada-disclosure-acceptance.py runs the selective-disclosure chain of custody end to end on a fresh per-run fixturenet. It creates the fixturenet with stack/scripts/fixturenet-new and a run-unique name (TMPDIR set to the repo .scratch), then runs hops H1-H7 of docs/tasks/16-selective-disclosure.md as real transactions: H1 a test EOA shields USDC; H2 and H4 the note funds a hub channel through depositFromNote; H7 the wallet and the hub co-sign channel states; H5 the channel pays a SHIELD payout to a fresh note of the same wallet; H6 that note is unshielded to a second test EOA. It records every transaction and event into a disclosure package file, then tears the fixturenet down. A docker-compose job under stack/compose-jobs/ runs this script.\nWhat holds now? Describe the current, observed state. No stack/scripts/armada-disclosure-acceptance.py exists. No selective-disclosure compose job exists under stack/compose-jobs/. The hops are not run anywhere as one end-to-end chain.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the selective-disclosure compose job. The script prints one JSON line with the fields hops_ok (true when H1, H2, H4, H5, H6 and H7 each succeeded on the fixturenet), eoa2_usdc_delta (a positive integer, the USDC the second EOA gained), eoa_distinct (true when the second EOA differs from the shielding EOA), payout_note_owned (true when the payout note npk derives from the shielding wallet masterPublicKey), and package_path (the written disclosure package). The same run creates the fixturenet and then tears it down.\nWhat constraints apply? State them in plain prose. The run changes no pool contract, no disclosure circuit and no adjudicator contract. The fixturenet name is unique per run. The script does not depend on a pre-existing shared fixturenet.",
+  "restatement": "The repo must have one end-to-end acceptance script, stack/scripts/armada-disclosure-acceptance.py, and a docker-compose job under stack/compose-jobs/ that runs it. The script creates its own fresh fixturenet with stack/scripts/fixturenet-new, using a run-unique name and TMPDIR set to the repo .scratch. It runs hops H1, H2, H4, H5, H6 and H7 of docs/tasks/16-selective-disclosure.md as real transactions. It records every transaction and event in a disclosure package file, tears the fixturenet down, and prints one JSON line with hops_ok, eoa2_usdc_delta, eoa_distinct, payout_note_owned and package_path. It changes no pool contract, no disclosure circuit and no adjudicator contract, and it does not rely on a shared fixturenet.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The file stack/scripts/armada-disclosure-acceptance.py exists."
+    },
+    {
+      "id": "c2",
+      "text": "A docker-compose job under stack/compose-jobs/ runs stack/scripts/armada-disclosure-acceptance.py."
+    },
+    {
+      "id": "c3",
+      "text": "A run prints one JSON line with hops_ok true (H1, H2, H4, H5, H6 and H7 each succeeded on the fixturenet), eoa2_usdc_delta a positive integer (the USDC the second EOA gained), eoa_distinct true (the second EOA differs from the shielding EOA), payout_note_owned true (the payout note npk derives from the shielding wallet masterPublicKey), and package_path naming the written disclosure package."
+    },
+    {
+      "id": "c4",
+      "text": "The script creates its fixturenet with stack/scripts/fixturenet-new under a run-unique name with TMPDIR set to the repo .scratch, and does not depend on a pre-existing shared fixturenet."
+    },
+    {
+      "id": "c5",
+      "text": "The same run tears the fixturenet down, so no fixturenet from the run remains after it ends."
+    },
+    {
+      "id": "c6",
+      "text": "The run changes no pool contract, no disclosure circuit and no adjudicator contract."
+    }
+  ],
+  "goal": "One command runs the whole selective-disclosure chain of custody on a throwaway fixturenet and reports a verifiable result.",
+  "acceptance_criteria": [
+    "The acceptance script file is present in the repo.",
+    "A job file in the compose-jobs folder names the acceptance script as the thing it runs.",
+    "Running the script on a fresh fixturenet ends with success and prints one summary line: all hops succeeded, the second account gained a positive amount of USDC, the two accounts differ, the payout note belongs to the shielding wallet, and the package file path is given.",
+    "The script builds its own fixturenet with the fixturenet-new tool, using a name that is unique to each run and a temporary folder inside the repo .scratch.",
+    "After a full run, no fixturenet created by the run is left running or stored.",
+    "After the change, no pool contract, disclosure circuit or adjudicator contract file differs from the main branch."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The acceptance script file is present in the repo."
+    },
+    {
+      "id": "c2",
+      "text": "A job file in the compose-jobs folder names the acceptance script as the thing it runs."
+    },
+    {
+      "id": "c3",
+      "text": "Running the script on a fresh fixturenet ends with success and prints one summary line: all hops succeeded, the second account gained a positive amount of USDC, the two accounts differ, the payout note belongs to the shielding wallet, and the package file path is given."
+    },
+    {
+      "id": "c4",
+      "text": "The script builds its own fixturenet with the fixturenet-new tool, using a name that is unique to each run and a temporary folder inside the repo .scratch."
+    },
+    {
+      "id": "c5",
+      "text": "After a full run, no fixturenet created by the run is left running or stored."
+    },
+    {
+      "id": "c6",
+      "text": "After the change, no pool contract, disclosure circuit or adjudicator contract file differs from the main branch."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "The acceptance script file is present in the repo.",
+      "proves": "The script named in the request exists.",
+      "restatement_clause_id": "c1",
+      "type": "file_exists",
+      "path": "stack/scripts/armada-disclosure-acceptance.py",
+      "clause_id": "c1"
+    },
+    {
+      "description": "A job file in the compose-jobs folder names the acceptance script as the thing it runs.",
+      "proves": "A compose job that runs the selective-disclosure script exists.",
+      "restatement_clause_id": "c2",
+      "type": "grep",
+      "pattern": "armada-disclosure-acceptance",
+      "files": [
+        "stack/compose-jobs/*"
+      ],
+      "count": {
+        "unit": "files",
+        "op": "ge",
+        "value": 1
+      },
+      "clause_id": "c2"
+    },
+    {
+      "description": "Running the script on a fresh fixturenet ends with success and prints one summary line: all hops succeeded, the second account gained a positive amount of USDC, the two accounts differ, the payout note belongs to the shielding wallet, and the package file path is given.",
+      "proves": "The full chain of custody works end to end and reports the five required values.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hops_ok",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "eoa2_usdc_delta",
+          "op": "gt",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "eoa_distinct",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "payout_note_owned",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "package_path",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c3"
+    },
+    {
+      "description": "The script builds its own fixturenet with the fixturenet-new tool, using a name that is unique to each run and a temporary folder inside the repo .scratch.",
+      "proves": "The run starts from a fresh fixturenet of its own and uses no shared one.",
+      "restatement_clause_id": "c4",
+      "type": "grep",
+      "pattern": "fixturenet-new",
+      "files": [
+        "stack/scripts/armada-disclosure-acceptance.py"
+      ],
+      "additional_patterns": [
+        "\\.scratch",
+        "TMPDIR"
+      ],
+      "count": {
+        "unit": "patterns",
+        "op": "eq",
+        "value": 3
+      },
+      "clause_id": "c4"
+    },
+    {
+      "description": "After a full run, no fixturenet created by the run is left running or stored.",
+      "proves": "The run tears down the fixturenet it created.",
+      "restatement_clause_id": "c5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/check-disclosure-teardown.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "leftover_fixturenets",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c5"
+    },
+    {
+      "description": "After the change, no pool contract, disclosure circuit or adjudicator contract file differs from the main branch.",
+      "proves": "The work leaves the protocol contracts and circuits unchanged.",
+      "restatement_clause_id": "c6",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/check-no-protocol-changes.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "changed_protocol_files",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c6"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-disclosure-acceptance.py",
+    "stack/scripts/check-disclosure-teardown.py",
+    "stack/scripts/check-no-protocol-changes.py"
+  ]
+}
