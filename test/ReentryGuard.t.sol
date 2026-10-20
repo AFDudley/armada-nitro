@@ -106,7 +106,9 @@ contract ReentryGuardTest is Test, INitroTypes {
                 chainID: uint64(block.chainid),
                 adaptContract: address(adjudicator),
                 adaptParams: adjudicator.depositBinding(channelId, 0),
-                commitmentCiphertext: new CommitmentCiphertext[](0)
+                commitmentCiphertext: new CommitmentCiphertext[](0),
+                ownerField: bytes32(0),
+                publicOutputs: new CommitmentPreimage[](0)
             }),
             unshieldPreimage: CommitmentPreimage({
                 npk: bytes32(uint256(uint160(address(adjudicator)))),

@@ -165,7 +165,9 @@ library ArmadaNotes {
                 chainID: uint64(block.chainid),
                 adaptContract: adaptContract,
                 adaptParams: adaptParams,
-                commitmentCiphertext: new CommitmentCiphertext[](0)
+                commitmentCiphertext: new CommitmentCiphertext[](0),
+                ownerField: bytes32(0),
+                publicOutputs: new CommitmentPreimage[](0)
             }),
             unshieldPreimage: note
         });

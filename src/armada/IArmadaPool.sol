@@ -55,6 +55,10 @@ struct BoundParams {
     address adaptContract;
     bytes32 adaptParams;
     CommitmentCiphertext[] commitmentCiphertext;
+    // P2a: the circuit's public owner input, zero for a non-owned transaction.
+    bytes32 ownerField;
+    // P2a: plaintext preimages for contract-owned outputs; zero-length when none.
+    CommitmentPreimage[] publicOutputs;
 }
 
 struct G1Point {
