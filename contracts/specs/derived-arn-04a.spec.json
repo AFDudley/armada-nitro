@@ -1,0 +1,369 @@
+{
+  "id": "derived-arn-04a",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. MultiAssetHolder.holdings maps (asset, channelId) to a bytes32 pool commitment reference, not a uint256 balance. A heldValue(asset, channelId) view returns 0 for an empty commitment, else pool.preimageOf(commitment).value. Every reader of the old amount uses heldValue. The base deposit entry point is removed from the adjudicator and IMultiAssetHolder (a channel is funded only through depositFromNote, which carries a proof). forge build and the whole forge test suite pass. See docs/tasks/N1a-multiassetholder-commitment-storage.md.\nWhat holds now? Describe the current, observed state. MultiAssetHolder.holdings maps (asset, channelId) to a uint256 raw balance, and ArmadaNitroAdjudicator exposes deposit, a raw ERC-20 transfer in. The channel collateral is a token balance held by the adjudicator, not a pool note.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. A test prints one JSON line. heldValue_empty=0: an unset (asset, channelId) returns 0. heldValue_set equals the preimage value: a (asset, channelId) whose commitment a mock preimageOf maps to a fixed CommitmentPreimage returns that preimage's value. deposit_selector_present=false: a low-level call to the old IMultiAssetHolder.deposit 4-byte selector on ArmadaNitroAdjudicator reaches a missing function, not a revert. forge build exits 0. The full forge test suite reports failed=0.\nWhat constraints apply? State them in plain prose. heldValue always reads through pool.preimageOf, never a cached or passed-in amount. No code path sets holdings to a commitment the adjudicator did not verify (that is N1b/N2a). heldValue's 0-for-empty branch is not a real 0-value note. Add preimageOf and transactOwned to src/armada/IArmadaPool.sol. Keep SafeCast for the pool uint120 values and an event for every holdings change. The call-site and test updates preserve existing behavior and add no new behavior.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro src/nitro/MultiAssetHolder.sol, src/ArmadaNitroAdjudicator.sol, src/armada/IArmadaPool.sol, src/nitro/interfaces/IMultiAssetHolder.sol, test/MultiAssetHolderCommitment.t.sol, and the tests and fixtures that read holdings.",
+  "restatement": "The channel collateral record changes from a raw token balance to a reference to a pool note. MultiAssetHolder.holdings maps (asset, channelId) to a bytes32 pool commitment. A heldValue(asset, channelId) view returns 0 for an empty commitment, else pool.preimageOf(commitment).value, always read live from the pool. Every reader of the old amount uses heldValue. The base deposit entry point is removed from the adjudicator and IMultiAssetHolder, so a channel is funded only through depositFromNote. IArmadaPool gains preimageOf and transactOwned. SafeCast stays for pool uint120 values and every holdings change still emits an event. Existing behavior is preserved. forge build and the whole forge test suite pass.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "MultiAssetHolder.holdings maps (asset, channelId) to a bytes32 pool commitment reference, not a uint256 balance."
+    },
+    {
+      "id": "c2",
+      "text": "heldValue(asset, channelId) returns 0 for an unset (asset, channelId) whose commitment is empty."
+    },
+    {
+      "id": "c3",
+      "text": "heldValue(asset, channelId) for a set commitment returns pool.preimageOf(commitment).value, read live from the pool and never from a cached or passed-in amount."
+    },
+    {
+      "id": "c4",
+      "text": "Every reader of the old amount uses heldValue, and heldValue is declared in MultiAssetHolder."
+    },
+    {
+      "id": "c5",
+      "text": "The base deposit entry point is removed from ArmadaNitroAdjudicator and IMultiAssetHolder: deposit_selector_present=false, a low-level call to the old IMultiAssetHolder.deposit 4-byte selector reaches a missing function, not a revert."
+    },
+    {
+      "id": "c6",
+      "text": "src/armada/IArmadaPool.sol declares preimageOf and transactOwned."
+    },
+    {
+      "id": "c7",
+      "text": "SafeCast is kept for the pool uint120 values and an event is emitted for every holdings change."
+    },
+    {
+      "id": "c8",
+      "text": "forge build exits 0 and the full forge test suite reports failed=0."
+    }
+  ],
+  "goal": "MultiAssetHolder stores pool commitment references, exposes heldValue, drops the base deposit function, and the full forge build and test suite stay green.",
+  "acceptance_criteria": [
+    "The compiled storage layout of the holder shows the holdings value type as bytes32, not uint256.",
+    "An unset (asset, channelId) reports a held value of 0.",
+    "With a mock pool mapping a commitment to a fixed preimage value, the held value equals that value, and it follows the mock when the mock value changes.",
+    "The adjudicator ABI lists a heldValue view function, and the old raw-balance read of holdings is gone from the source.",
+    "Calling the old deposit function selector on the adjudicator reaches a missing function, not a revert from deposit logic.",
+    "The pool interface ABI lists both preimageOf and transactOwned.",
+    "The holder source still uses SafeCast, and a holdings change emits an event when observed in a test.",
+    "The project builds, and the whole test suite finishes with no failed tests."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The compiled storage layout of the holder shows the holdings value type as bytes32, not uint256."
+    },
+    {
+      "id": "c2",
+      "text": "An unset (asset, channelId) reports a held value of 0."
+    },
+    {
+      "id": "c3",
+      "text": "With a mock pool mapping a commitment to a fixed preimage value, the held value equals that value, and it follows the mock when the mock value changes."
+    },
+    {
+      "id": "c4",
+      "text": "The adjudicator ABI lists a heldValue view function, and the old raw-balance read of holdings is gone from the source."
+    },
+    {
+      "id": "c5",
+      "text": "Calling the old deposit function selector on the adjudicator reaches a missing function, not a revert from deposit logic."
+    },
+    {
+      "id": "c6",
+      "text": "The pool interface ABI lists both preimageOf and transactOwned."
+    },
+    {
+      "id": "c7",
+      "text": "The holder source still uses SafeCast, and a holdings change emits an event when observed in a test."
+    },
+    {
+      "id": "c8",
+      "text": "The project builds, and the whole test suite finishes with no failed tests."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "The compiled storage layout of the holder shows the holdings value type as bytes32, not uint256.",
+      "proves": "Holdings stores a commitment reference, not a raw balance.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/n1a_observe.sh",
+        "args": [
+          "holdings-type"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "holdings_value_type",
+          "op": "eq",
+          "value": "bytes32"
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "An unset (asset, channelId) reports a held value of 0.",
+      "proves": "heldValue returns 0 for an empty commitment.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/n1a_observe.sh",
+        "args": [
+          "held-value-empty"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "heldValue_empty",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "With a mock pool mapping a commitment to a fixed preimage value, the held value equals that value, and it follows the mock when the mock value changes.",
+      "proves": "heldValue reads the amount live through pool.preimageOf.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/n1a_observe.sh",
+        "args": [
+          "held-value-set"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "heldValue_set_matches_preimage",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "heldValue_follows_pool_change",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "The adjudicator ABI lists a heldValue view function, and the old raw-balance read of holdings is gone from the source.",
+      "proves": "The heldValue accessor exists and readers no longer use the old amount.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/n1a_observe.sh",
+        "args": [
+          "held-value-readers"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "heldValue_in_abi",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "raw_holdings_amount_readers",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "Calling the old deposit function selector on the adjudicator reaches a missing function, not a revert from deposit logic.",
+      "proves": "The base deposit entry point is gone from the adjudicator.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/n1a_observe.sh",
+        "args": [
+          "deposit-selector"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "deposit_selector_present",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "The pool interface ABI lists both preimageOf and transactOwned.",
+      "proves": "IArmadaPool gained the two required functions.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/n1a_observe.sh",
+        "args": [
+          "pool-interface"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "has_preimageOf",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "has_transactOwned",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "The holder source still uses SafeCast, and a holdings change emits an event when observed in a test.",
+      "proves": "SafeCast and holdings-change events are retained.",
+      "restatement_clause_id": "c7",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/n1a_observe.sh",
+        "args": [
+          "safecast-and-events"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "uses_safecast",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "holdings_change_emits_event",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c7"
+    },
+    {
+      "type": "behavior",
+      "description": "The project builds, and the whole test suite finishes with no failed tests.",
+      "proves": "The refactor and the call-site updates keep the build and every test green.",
+      "restatement_clause_id": "c8",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/n1a_observe.sh",
+        "args": [
+          "full-suite"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "build_exit",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "failed",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c8"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/n1a_observe.sh"
+  ]
+}
