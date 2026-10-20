@@ -1,0 +1,117 @@
+{
+  "id": "derived-arn-451",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. In src/nitro/MultiAssetHolder.sol, transfer and reclaim move a finalized channel's collateral by spending the old pool commitment and minting new ones through pool.transactOwned, not by decrementing a uint256 and calling raw-asset interactions. A transfer of part of a channel's collateral pays the named destination a fresh owned commitment of the paid amount, and leaves holdings[asset][channelId] pointing at a fresh commitment of the remainder. A transfer that pays out the whole collateral in one asset sets holdings[asset][channelId] to bytes32(0). reclaim moves a guarantee's value into the target channel's commitment, read by heldValue.\nWhat holds now? Describe the current, observed state. transfer's interaction step calls _executeSingleAssetExit, which moves raw assets and wrote uint256 holdings before N1a. reclaim writes its holdings directly. ArmadaNitroAdjudicator._executeSingleAssetExit still calls _transferAsset for an external destination.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. forge test --match-contract MultiAssetHolderCommitmentTest and forge test --match-contract ArmadaNitroAdjudicatorTest both finish with no failed tests. In the partial-transfer test the named destination holds a fresh commitment of the paid amount, and holdings[asset][channelId] holds a fresh commitment of the remainder. In the full-payout test holdings[asset][channelId] equals bytes32(0). In the reclaim test heldValue of the target channel rose by the guarantee value. forge build and the whole forge test suite finish with no failed tests.",
+  "restatement": "In src/nitro/MultiAssetHolder.sol, transfer and reclaim must move a finalized channel's collateral by spending the old pool commitment and minting new ones through pool.transactOwned. They must not decrement a uint256 and call raw-asset interactions. A partial transfer pays the named destination a fresh owned commitment of the paid amount and leaves holdings[asset][channelId] pointing at a fresh commitment of the remainder. A transfer that pays out the whole collateral in one asset sets holdings[asset][channelId] to bytes32(0). reclaim moves a guarantee's value into the target channel's commitment, read by heldValue. ArmadaNitroAdjudicator._executeSingleAssetExit no longer calls _transferAsset for an external destination. forge build and the whole forge test suite finish with no failed tests.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A partial transfer of a channel's collateral pays the named destination a fresh owned commitment of the paid amount, minted through pool.transactOwned."
+    },
+    {
+      "id": "c2",
+      "text": "After a partial transfer, holdings[asset][channelId] points at a fresh commitment of the remainder."
+    },
+    {
+      "id": "c3",
+      "text": "A transfer that pays out the whole collateral in one asset sets holdings[asset][channelId] to bytes32(0)."
+    },
+    {
+      "id": "c4",
+      "text": "reclaim moves a guarantee's value into the target channel's commitment: heldValue of the target channel rises by the guarantee value."
+    },
+    {
+      "id": "c5",
+      "text": "transfer and reclaim spend the old pool commitment and mint new ones through pool.transactOwned, and ArmadaNitroAdjudicator._executeSingleAssetExit no longer calls _transferAsset for an external destination; no raw-asset movement happens on these paths."
+    },
+    {
+      "id": "c6",
+      "text": "forge test --match-contract MultiAssetHolderCommitmentTest and forge test --match-contract ArmadaNitroAdjudicatorTest finish with no failed tests, and forge build and the whole forge test suite finish with no failed tests."
+    }
+  ],
+  "goal": "Make finalized-channel collateral move through pool commitments in transfer and reclaim, with no plain-number holdings and no raw-asset payout.",
+  "acceptance_criteria": [
+    "After a partial transfer, the named destination holds a new commitment worth exactly the paid amount.",
+    "After a partial transfer, the channel's holding points at a new commitment worth exactly the remainder.",
+    "After a transfer that pays out all of the collateral in one asset, the channel's holding for that asset is the zero value.",
+    "After a reclaim, the target channel's held value is larger by exactly the guarantee value.",
+    "Paying out to an external destination through the adjudicator moves value as pool commitments and sends no raw asset directly.",
+    "The commitment-based collateral tests and the adjudicator tests all pass together."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After a partial transfer, the named destination holds a new commitment worth exactly the paid amount."
+    },
+    {
+      "id": "c2",
+      "text": "After a partial transfer, the channel's holding points at a new commitment worth exactly the remainder."
+    },
+    {
+      "id": "c3",
+      "text": "After a transfer that pays out all of the collateral in one asset, the channel's holding for that asset is the zero value."
+    },
+    {
+      "id": "c4",
+      "text": "After a reclaim, the target channel's held value is larger by exactly the guarantee value."
+    },
+    {
+      "id": "c5",
+      "text": "Paying out to an external destination through the adjudicator moves value as pool commitments and sends no raw asset directly."
+    },
+    {
+      "id": "c6",
+      "text": "The commitment-based collateral tests and the adjudicator tests all pass together."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "After a partial transfer, the named destination holds a new commitment worth exactly the paid amount.",
+      "proves": "A partial transfer pays the destination a fresh owned commitment of the paid amount.",
+      "restatement_clause_id": "c1",
+      "test": "test_transfer_partial_pays_destination_fresh_commitment",
+      "clause_id": "c1"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "After a partial transfer, the channel's holding points at a new commitment worth exactly the remainder.",
+      "proves": "The channel keeps a fresh commitment of the remainder after a partial transfer.",
+      "restatement_clause_id": "c2",
+      "test": "test_transfer_partial_leaves_fresh_remainder_commitment",
+      "clause_id": "c2"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "After a transfer that pays out all of the collateral in one asset, the channel's holding for that asset is the zero value.",
+      "proves": "A full payout clears the holding to bytes32(0).",
+      "restatement_clause_id": "c3",
+      "test": "test_transfer_full_payout_zeroes_holding",
+      "clause_id": "c3"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "After a reclaim, the target channel's held value is larger by exactly the guarantee value.",
+      "proves": "reclaim moves the guarantee value into the target channel's commitment.",
+      "restatement_clause_id": "c4",
+      "test": "test_reclaim_raises_target_heldValue_by_guarantee_value",
+      "clause_id": "c4"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "Paying out to an external destination through the adjudicator moves value as pool commitments and sends no raw asset directly.",
+      "proves": "The external-destination exit path no longer uses raw-asset transfer and goes through pool commitments.",
+      "restatement_clause_id": "c5",
+      "test": "test_exit_external_destination_pays_commitment_not_raw_asset",
+      "clause_id": "c5"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "The commitment-based collateral tests and the adjudicator tests all pass together.",
+      "proves": "The suite for the changed contracts has no failed tests.",
+      "restatement_clause_id": "c6",
+      "test": "test",
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "critical"
+}
