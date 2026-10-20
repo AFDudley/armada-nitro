@@ -10,8 +10,13 @@ Repo: `armada-nitro`. Branch: `integrated` (work in a `task/N2b` branch cut from
 
 ## P2 interface this chunk assumes
 
-Chunk P2 (armada-poc, not yet briefed) must add this surface. State these as the contract P2 must
-meet. If the real P2 interface differs, stop and report the difference instead of guessing.
+Chunk P2 is pinned at armada-poc a6c77939. The pool already ships this fee surface:
+PrivacyPoolStorage declares `bytes32 public feeRecipient` and `mapping(address => uint256) public
+cumulativeFees`, so PrivacyPool exposes `feeRecipient()` and `cumulativeFees(address)`;
+TransactModule counts an output paid to `feeRecipient` into `cumulativeFees` in the same call. This
+chunk's only pool-interface task is to add those two view signatures to armada-nitro's
+`src/armada/IArmadaPool.sol`. Confirm each assumption below against the pinned pool. If it differs,
+stop and report the difference instead of guessing.
 
 1. `function cumulativeFees(address asset) external view returns (uint256);` A per-asset running
    total of fees the pool has recognized, read by G4's RevenueLock rewrite (governance lab book
