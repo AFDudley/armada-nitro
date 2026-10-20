@@ -1,0 +1,263 @@
+{
+  "id": "derived-arn-ced",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A new gate job armada-assets-e2e, with its own compose job under stack/compose-jobs/ and its own scripts, reuses env/gates/nitro-e2e/prepare.ts wallet and proof code. On a fresh fixturenet it runs scenario 1 and scenario 4 of docs/tasks/E11-aave-lido-channels.md. Scenario 1 (Aave yield): the hub custodian deposits USDC into waUSDC by ERC-4626 deposit; a second account supplies USDC to the Aave pool and borrows USDC at LTV 75 percent to raise utilization; real blocks advance at least 60 seconds; then waUSDC.convertToAssets(1e6) has increased and the Aave pool USDC liquidityIndex has increased, both read with cast. Scenario 4 (redeem): the hub redeems its waUSDC for USDC by ERC-4626 redeem and receives at least the principal it deposited in scenario 1, measured by the USDC balance change.\nWhat holds now? Describe the current, observed state. No armada-assets-e2e gate job exists. No such compose job exists under stack/compose-jobs/. The Aave yield and redeem paths are not exercised through a gate job.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. On a fresh fixturenet, run-job armada-assets-e2e prints one line per scenario with its on-chain evidence. The scenario 1 line shows waUSDC convertToAssets(1e6) after is greater than before and the USDC liquidityIndex after is greater than before. The scenario 4 line shows the hub USDC balance rose by at least the scenario 1 principal. A discrimination run of scenario 1 with the borrow removed shows the yield-increased check fails.\nWhat constraints apply? State them in plain prose. This chunk delivers scenario 1, scenario 4, and discrimination (a). Scenario 2, scenario 3, and discrimination (b) and (c) are out of scope for this chunk. Lido's oracle stays unconfigured: no members, no reports, no price injection.",
+  "restatement": "Add a new gate job named armada-assets-e2e. It has its own compose job under stack/compose-jobs/ and its own scripts. It reuses the wallet and proof code in env/gates/nitro-e2e/prepare.ts. On a fresh fixturenet it runs scenario 1 (Aave yield) and scenario 4 (redeem) of docs/tasks/E11-aave-lido-channels.md. In scenario 1 the hub custodian deposits USDC into waUSDC by ERC-4626 deposit. A second account supplies USDC to the Aave pool and borrows USDC at LTV 75 percent to raise utilization. Real blocks advance at least 60 seconds. Then waUSDC.convertToAssets(1e6) and the Aave pool USDC liquidityIndex have both increased, both read with cast. In scenario 4 the hub redeems its waUSDC for USDC by ERC-4626 redeem. The hub USDC balance rises by at least the principal deposited in scenario 1. Running run-job armada-assets-e2e prints one line per scenario with its on-chain evidence. A run of scenario 1 with the borrow removed makes the yield-increased check fail (discrimination a). Scenarios 2 and 3 and discriminations b and c are out of scope. Lido's oracle stays unconfigured: no members, no reports, no price injection.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A gate job named armada-assets-e2e exists, with its own compose job under stack/compose-jobs/ and its own scripts."
+    },
+    {
+      "id": "c2",
+      "text": "The job reuses the wallet and proof code in env/gates/nitro-e2e/prepare.ts."
+    },
+    {
+      "id": "c3",
+      "text": "Scenario 1: the hub custodian deposits USDC into waUSDC by ERC-4626 deposit. A second account supplies USDC to the Aave pool and borrows USDC at LTV 75 percent. Real blocks advance at least 60 seconds. Then waUSDC.convertToAssets(1e6) has increased and the Aave pool USDC liquidityIndex has increased, both read with cast."
+    },
+    {
+      "id": "c4",
+      "text": "Scenario 4: the hub redeems its waUSDC for USDC by ERC-4626 redeem and the hub USDC balance rises by at least the principal it deposited in scenario 1."
+    },
+    {
+      "id": "c5",
+      "text": "Discrimination (a): a run of scenario 1 with the borrow removed makes the yield-increased check fail."
+    },
+    {
+      "id": "c6",
+      "text": "Scenario 2, scenario 3, and discriminations (b) and (c) are not in this job. Lido's oracle stays unconfigured: no members, no reports, no price injection."
+    },
+    {
+      "id": "c7",
+      "text": "On a fresh fixturenet, run-job armada-assets-e2e prints one line per scenario with its on-chain evidence: for scenario 1 the before and after values of convertToAssets(1e6) and liquidityIndex, and for scenario 4 the hub USDC balance change."
+    }
+  ],
+  "goal": "A new armada-assets-e2e gate job proves Aave yield accrual and redemption on a fresh fixturenet, with on-chain evidence and a discrimination run.",
+  "acceptance_criteria": [
+    "The compose job file for armada-assets-e2e is present under stack/compose-jobs/.",
+    "The gate's own scenario script imports the wallet and proof code from env/gates/nitro-e2e/prepare.ts.",
+    "Running scenario 1 on a fresh fixturenet reports that the share price and the Aave liquidity index both went up after the borrow and 60 seconds of real blocks.",
+    "After scenario 1, redeeming the hub's waUSDC returns at least the USDC principal it deposited.",
+    "Running scenario 1 with the borrow removed shows the yield-increased check failing.",
+    "The gate's scripts contain no Lido oracle member, report, or price-injection calls.",
+    "A full run of the job on a fresh fixturenet prints exactly one evidence line for scenario 1 and one for scenario 4, with the before and after values."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The compose job file for armada-assets-e2e is present under stack/compose-jobs/."
+    },
+    {
+      "id": "c2",
+      "text": "The gate's own scenario script imports the wallet and proof code from env/gates/nitro-e2e/prepare.ts."
+    },
+    {
+      "id": "c3",
+      "text": "Running scenario 1 on a fresh fixturenet reports that the share price and the Aave liquidity index both went up after the borrow and 60 seconds of real blocks."
+    },
+    {
+      "id": "c4",
+      "text": "After scenario 1, redeeming the hub's waUSDC returns at least the USDC principal it deposited."
+    },
+    {
+      "id": "c5",
+      "text": "Running scenario 1 with the borrow removed shows the yield-increased check failing."
+    },
+    {
+      "id": "c6",
+      "text": "The gate's scripts contain no Lido oracle member, report, or price-injection calls."
+    },
+    {
+      "id": "c7",
+      "text": "A full run of the job on a fresh fixturenet prints exactly one evidence line for scenario 1 and one for scenario 4, with the before and after values."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "file_exists",
+      "description": "The compose job file for armada-assets-e2e is present under stack/compose-jobs/.",
+      "proves": "The gate job has its own compose job.",
+      "restatement_clause_id": "c1",
+      "path": "stack/compose-jobs/armada-assets-e2e.yml",
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "The gate's own scenario script imports the wallet and proof code from env/gates/nitro-e2e/prepare.ts.",
+      "proves": "The new job reuses the existing wallet and proof code instead of copying it.",
+      "restatement_clause_id": "c2",
+      "pattern": "nitro-e2e/prepare",
+      "files": [
+        "env/gates/armada-assets-e2e/scenarios.ts"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "Running scenario 1 on a fresh fixturenet reports that the share price and the Aave liquidity index both went up after the borrow and 60 seconds of real blocks.",
+      "proves": "Aave yield accrues and is visible on-chain through waUSDC and the pool index.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/armada-assets-e2e/run.sh",
+        "args": [
+          "--scenario",
+          "1"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "convert_to_assets_increased",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "liquidity_index_increased",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "elapsed_seconds",
+          "op": "ge",
+          "value": 60
+        },
+        {
+          "observe": "stdout_json",
+          "field": "borrow_ltv_percent",
+          "op": "eq",
+          "value": 75
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "After scenario 1, redeeming the hub's waUSDC returns at least the USDC principal it deposited.",
+      "proves": "The hub gets its principal back or more through ERC-4626 redeem.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/armada-assets-e2e/run.sh",
+        "args": [
+          "--scenario",
+          "4"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "redeem_usdc_gain_ge_principal",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "Running scenario 1 with the borrow removed shows the yield-increased check failing.",
+      "proves": "The yield check can tell a borrowed pool from an idle pool, so it is not always green.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/armada-assets-e2e/run.sh",
+        "args": [
+          "--scenario",
+          "1",
+          "--no-borrow"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "yield_check_passed",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The gate's scripts contain no Lido oracle member, report, or price-injection calls.",
+      "proves": "Lido's oracle stays unconfigured in this job.",
+      "restatement_clause_id": "c6",
+      "pattern": "(addOracleMember|submitReportData|setBeaconReport|submitReport)",
+      "files": [
+        "env/gates/armada-assets-e2e/scenarios.ts",
+        "env/gates/armada-assets-e2e/run.sh"
+      ],
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "A full run of the job on a fresh fixturenet prints exactly one evidence line for scenario 1 and one for scenario 4, with the before and after values.",
+      "proves": "The job reports on-chain evidence for each scenario in scope.",
+      "restatement_clause_id": "c7",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/armada-assets-e2e/run.sh",
+        "args": [
+          "--all"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario_line_count",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario1_has_before_after",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario4_has_balance_change",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c7"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "env/gates/armada-assets-e2e/run.sh"
+  ]
+}
