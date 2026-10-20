@@ -1,0 +1,54 @@
+status: completed
+pebble_id: arn-04a
+summary: >
+  MultiAssetHolder.holdings now maps (asset, channelId) to a bytes32 pool commitment
+  reference instead of a uint256 balance. A new heldValue(asset, channelId) view,
+  declared virtual in MultiAssetHolder and overridden in ArmadaNitroAdjudicator, returns
+  0 for an empty commitment and otherwise reads pool.preimageOf(commitment).value live
+  (SafeCast'd from the pool's uint120), never a cached amount; every former reader of the
+  raw balance (transfer's initialAssetHoldings, AllocationUpdated's finalHoldings,
+  depositFromNote's held check) now calls heldValue. The base deposit(address,bytes32,
+  uint256,uint256) entry point is removed from IMultiAssetHolder and its override in
+  ArmadaNitroAdjudicator, so a channel is funded only through depositFromNote.
+  depositFromNote now requires the caller's transaction to carry a pool-registered
+  publicOutputs preimage (adjudicator-owned npk, correct asset, and a value matching the
+  adjudicator's own measured deposit math) before trusting commitments[0] as the new
+  holdings commitment -- heldValue never trusts a value the pool itself did not attest.
+  IArmadaPool gains preimageOf and transactOwned (the pinned armada-poc pool already
+  implements both). The shared test helper ArmadaNotes.unshield now builds this second,
+  pool-verified cumulative-collateral commitment alongside the unshield's own note and
+  registers it via the pool's publicOutputs/_recordPreimages mechanism; every
+  depositFromNote call site across tests and scripts was ported to pass the channel's
+  prior held value and to use heldValue instead of reading holdings as an amount.
+  RevertingTransferToken (PerAssetExitS4.t.sol) can be shielded but never unshielded
+  (transfer() always reverts), so its leg is funded via a direct shield plus a test-only
+  holdings setter instead of depositFromNote. test/ReentryDeposit.t.sol was removed: its
+  sole target, deposit's reentrancy guard, no longer exists, and depositFromNote's guard
+  is already covered by ReentryGuard.t.sol. Added test/MultiAssetHolderCommitment.t.sol
+  (heldValue empty/set/live-follow-the-pool, the removed deposit selector, and a
+  holdings-change Deposited event) and test/helpers/MockPool.sol, a mutable mock
+  IArmadaPool. Verified by running forge build (exit 0) and the whole forge test suite
+  (53 passed, 0 failed, 4 skipped -- the 4 skips are the pre-existing Watchtower
+  per-asset tests that need a live anvil fork, unchanged from the baseline before this
+  change) via scripts/n1a_observe.sh, the spec's own acceptance oracle, whose 8
+  subcommands each print the exact JSON field the linked spec reads and all passed.
+cost: "~390k tokens"
+commits:
+  - "9034f467"
+verify_transcript:
+  hooks:
+    - name: forge_build
+      outcome: passed
+      duration_s: 15
+    - name: forge_test_full_suite
+      outcome: passed
+      duration_s: 1
+    - name: n1a_observe_all_subcommands
+      outcome: passed
+      duration_s: 2
+e2e_gate:
+  spec: test/ArmadaNitroAdjudicator.t.sol
+  command: "forge test --match-contract ArmadaNitroAdjudicatorTest"
+  result: passed
+  ran_at_sha: "9034f467"
+  mocks_in_path: false
