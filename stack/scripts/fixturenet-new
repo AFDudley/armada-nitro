@@ -24,6 +24,36 @@ REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
 # shellcheck source=stack/scripts/fixturenet-base-common.sh
 source "${SCRIPT_DIR}/fixturenet-base-common.sh"
 
+# fixturenet-new --teardown <name>: the counterpart to `fixturenet-new <name>` (arn-2fd c5).
+# Stops the deployment, deletes its docker volumes, unmounts the RAM disk this script mounted
+# over data/ (needs the same privilege as the `sudo mount` that created it), and removes the
+# deployment directory and spec file -- so nothing from that run is left running or stored.
+# A sibling mode of this file rather than a new script: stack/scripts/ forbids `sudo` outside
+# fixturenet-new/fixturenet-recover/fixturenet-base-snapshot/fixturenet-base-common.sh/base-key.py
+# (gate-no-host-deployment-access), so a disposable fixturenet's teardown belongs here, not in the
+# acceptance script that calls it.
+if [ "${1:-}" = "--teardown" ]; then
+  [ $# -eq 2 ] || { echo "usage: $0 --teardown <name>" >&2; exit 2; }
+  TEARDOWN_NAME="$2"
+  TEARDOWN_DEP="${HOME}/deployments/${TEARDOWN_NAME}"
+  TEARDOWN_SPEC="${TEARDOWN_DEP}-spec.yml"
+  TEARDOWN_LACONIC="${LACONIC_SO:-$(command -v laconic-so || true)}"
+  if [ -z "$TEARDOWN_LACONIC" ]; then
+    echo "fixturenet-new: laconic-so not found on PATH; set LACONIC_SO or add it to PATH" >&2
+    exit 1
+  fi
+  if [ -e "$TEARDOWN_DEP" ]; then
+    "$TEARDOWN_LACONIC" deployment --dir "$TEARDOWN_DEP" stop --delete-volumes || true
+    if [ "$(stat -f -c %T "${TEARDOWN_DEP}/data" 2>/dev/null || true)" = tmpfs ]; then
+      sudo umount "${TEARDOWN_DEP}/data" || true
+    fi
+    sudo rm -rf "$TEARDOWN_DEP"
+  fi
+  rm -f "$TEARDOWN_SPEC"
+  echo "fixturenet-new: torn down ${TEARDOWN_NAME}"
+  exit 0
+fi
+
 # Resolve laconic-so from LACONIC_SO, else the PATH copy. The exophial oracle
 # grading env exposes it through EXOPHIAL_ORACLE_TOOLCHAIN_BINARIES, and a
 # hermetic HOME has no ${HOME}/bin, so this never hardcodes ${HOME}/bin. ~/bin
@@ -54,7 +84,7 @@ for kind in env foundry; do
   fi
 done
 
-usage() { echo "usage: $0 <name>" >&2; exit 2; }
+usage() { echo "usage: $0 <name> | $0 --teardown <name>" >&2; exit 2; }
 [ $# -eq 1 ] || usage
 NAME="$1"
 DEP="${HOME}/deployments/${NAME}"

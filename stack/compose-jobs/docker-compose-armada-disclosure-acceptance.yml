@@ -1,0 +1,48 @@
+# armada-disclosure-acceptance (arn-2fd): runs the selective-disclosure chain of custody
+# (docs/tasks/16-selective-disclosure.md, hops H1, H2, H4, H5, H6, H7) as real transactions
+# inside the job, against this fixturenet. stack/scripts/armada-disclosure-acceptance.py (run on
+# the host) creates a fresh fixturenet, runs this job, reads the written disclosure package, and
+# tears the fixturenet down.
+#
+# Runs entirely inside the job:
+#   1. Funds the test accounts (reconciler) and ensures the circuits are fetched.
+#   2. stack/scripts/armada-disclosure-acceptance-job.py: H1 shield + H2/H4 real-proof deposit
+#      build (env/gates/disclosure/prepare.ts), H4/H7/H5 fund + co-sign + conclude
+#      (script/DisclosureScenario.s.sol), H5 check + H6 unshield (env/gates/disclosure/finish.ts).
+#   3. Writes /env/disclosure/package.json and prints one JSON line to stdout:
+#        {"hops_ok": bool, "eoa2_usdc_delta": int, "eoa_distinct": bool, "payout_note_owned": bool}
+#
+# All state/keys come from the mounted armada_env volume at /env; the job reaches the deployment
+# only through geth RPC at the compose service name (armada-fixturenet-geth:8545, arn-e7a c4).
+services:
+  armada-disclosure-acceptance:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Fund the test accounts (reconciler mints only the shortfall).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (docs/tasks/E9-operability.md); verify rather than
+        # download -- see docker-compose-armada-nitro-e2e.yml for the same step.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        exec python3 /src/armada-nitro/stack/scripts/armada-disclosure-acceptance-job.py
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DISCLOSURE_DIR: ${DISCLOSURE_DIR:-/env/disclosure}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      DELEGATE_KEY: ${DELEGATE_KEY:-0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a}
+      FROST_SHARES_DIR: ${FROST_SHARES_DIR:-/env}
+      FROST_SIGNER: ${FROST_SIGNER:-frost-signer}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
