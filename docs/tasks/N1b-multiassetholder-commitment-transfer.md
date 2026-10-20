@@ -55,8 +55,8 @@ decrementing a `uint256` and calling `_executeSingleAssetExit`'s raw-asset inter
 - `reclaim` moves a guarantee's value into the target channel's commitment, read by `heldValue`
   (fails before S3, passes after).
 
-Plus: the existing `forge test` suite compiles and passes end to end (N1a left it non-compiling;
-this chunk restores it).
+Plus: the existing `forge test` suite compiles and passes end to end. N1a leaves the suite green,
+so this chunk keeps it green: `forge build` and `forge test` pass before and after this chunk.
 
 ## Husband review
 Audit-critical. Check:
