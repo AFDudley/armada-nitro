@@ -8,7 +8,9 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 # 1. Build the project. Fails the script on any compile error.
-forge build
+#    Forge's build/test output is steered to stderr so that the script's
+#    stdout carries ONLY the JSON summary the c6 gate reads.
+forge build 1>&2
 
 # 2. Run the full suite, writing structured results to a file.
 json_file="$(mktemp)"
@@ -16,7 +18,7 @@ json_file="$(mktemp)"
 trap 'rm -f "$json_file"' EXIT
 
 # 2b. Run the suite.
-forge test --json-file "$json_file"
+forge test --json-file "$json_file" 1>&2
 
 # 3. Summarize: report the number of failed tests as JSON on stdout.
 #    "failed" counts only tests whose status is "Failed" (skipped is not a failure).
