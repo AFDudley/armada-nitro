@@ -129,18 +129,33 @@ Notes:
   finalized checkpoint is real by the time it dials lighthouse over p2p. See
   the compose file's comment on this service for the full root-cause
   citation.
-- **nimbus-eth1 is not wired into the base-layer snapshot cache.** The cache
-  (below) restores `geth_data` with its full history on a warm `fixturenet-new`
-  restore, but `nimbus_el_data` and `nimbus_cl_data` are not part of that tar,
-  so a warm-restored fixturenet would start nimbus-eth1 at genesis block 0
-  while geth resumes at a non-zero head -- the two execution clients would
-  disagree until nimbus-eth1 catches up to the restored head via its own
-  genesis replay, which it does not currently do (no devp2p peering with geth,
-  see `armada-fixturenet-nimbus-el`'s compose comment). A deployment that
-  changes this compose file always gets a cold build (its base-layer cache key
-  includes this file's content, see "Cache key" below), so this gap does not
-  affect a deployment made right after this change; it would affect a later,
-  unrelated warm-restored deployment that reused such a cache.
+- **nimbus-eth1 reaches geth with a fixed devp2p node id, not discovery.**
+  nimbus-eth2's checkpoint sync (above) starts nimbus-eth1 from a live
+  engine-API payload near lighthouse's current head, not genesis; without a
+  peer, nimbus-eth1 has no way to fetch the blocks between its own empty
+  chain and that payload's parent (the engine API only advances a head
+  pointer, it is not a block-transport channel) and gets stuck logging "New
+  payload with unknown parent, syncing" forever. `armada-fixturenet-geth`'s
+  command seeds a fixed devp2p node key (`--nodekeyhex`) the same way
+  `armada-fixturenet-beacon` seeds a fixed libp2p key for nimbus-eth2;
+  `armada-fixturenet-nimbus-el`'s `--static-peers` dials the resulting
+  enode directly (this devnet has no devp2p bootnodes, so without a known
+  enode neither side finds the other). This also closes the snapshot-cache
+  gap below: nimbus-eth1 can now devp2p-sync from geth's full history
+  independent of nimbus-eth2's checkpoint sync.
+- **nimbus-eth1/nimbus-eth2 are not wired into the base-layer snapshot
+  cache.** The cache (below) restores `geth_data` with its full history on
+  a warm `fixturenet-new` restore, but `nimbus_el_data` and `nimbus_cl_data`
+  are not part of that tar, so a warm-restored fixturenet starts the pair
+  at genesis while geth/lighthouse resume at a non-zero head. Both now
+  catch up independently (nimbus-eth2 via `trustedNodeSync` against
+  lighthouse, nimbus-eth1 via devp2p against geth, both above), so this is
+  a slower start on a warm restore, not a stuck pair. A deployment that
+  changes this compose file always gets a cold build (its base-layer cache
+  key includes this file's content, see "Cache key" below), so this gap
+  does not affect a deployment made right after this change; it would
+  affect a later, unrelated warm-restored deployment that reused such a
+  cache.
 
 ### Environment reconciler
 
