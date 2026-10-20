@@ -1,0 +1,302 @@
+{
+  "id": "derived-arn-4d9",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. armada-nitro's lib/armada-poc submodule points at armada-poc integrated (5d076c4eb9f27dd931d6c0b392b92cd850cb66d5), which carries the M8 privacy pool and its Snark Groth16 library at contracts/privacy-pool/types/SnarkTypes.sol. forge build, forge test and the pre-commit gate all pass with that pin.\nWhat holds now? Describe the current, observed state. lib/armada-poc points at 2db1d33, the tip of fork/arn-e7a-client-rpc. That branch forked from armada-poc main before the M8 pool work. At 2db1d33, contracts/privacy-pool/types/SnarkTypes.sol and PoolTypes.sol do not exist. The only verifier there is VerifierModule.verify(Transaction), which is onlyDelegatecall and pool-storage-bound. A channel app cannot reuse a standalone Groth16 checker.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run git ls-tree HEAD lib/armada-poc: the gitlink equals 5d076c4eb9f27dd931d6c0b392b92cd850cb66d5, not 2db1d33. Run git -C lib/armada-poc cat-file -e HEAD:contracts/privacy-pool/types/SnarkTypes.sol: it exits 0. Run forge build: it exits 0. Run forge test: the summary reports 0 failed. Run pre-commit run --all-files: the forge-test hook prints Passed.\nWhat constraints apply? State them in plain prose. Do not change src/nitro (vendored go-nitro, excluded from every hook). Edit the armada-nitro files that import the pool only as far as the pin bump needs: test/helpers/ArmadaFixture.sol, test/helpers/ArmadaNotes.sol, test/ArmadaNitroAdjudicator.t.sol, and the scripts under script/. Preserve the behavior the existing e2e jobs check. Do not add a second Groth16 verifier; reuse the M8 pool Snark library.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro lib/armada-poc submodule pin, and the files that import armada/privacy-pool and armada/cctp.",
+  "restatement": "The armada-nitro repository must pin its lib/armada-poc submodule to armada-poc integrated commit 5d076c4eb9f27dd931d6c0b392b92cd850cb66d5, not 2db1d33. That commit carries the M8 privacy pool and its Snark Groth16 library at contracts/privacy-pool/types/SnarkTypes.sol, so a channel app can reuse a standalone Groth16 checker. After the bump, forge build, forge test and the pre-commit gate must all pass. Only the files that import the pool may change, and only as far as the bump needs. These are test/helpers/ArmadaFixture.sol, test/helpers/ArmadaNotes.sol, test/ArmadaNitroAdjudicator.t.sol and the scripts under script/. The vendored src/nitro stays untouched. No second Groth16 verifier is added.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "git ls-tree HEAD lib/armada-poc shows the gitlink equal to 5d076c4eb9f27dd931d6c0b392b92cd850cb66d5, not 2db1d33."
+    },
+    {
+      "id": "c2",
+      "text": "git -C lib/armada-poc cat-file -e HEAD:contracts/privacy-pool/types/SnarkTypes.sol exits 0."
+    },
+    {
+      "id": "c3",
+      "text": "forge build exits 0."
+    },
+    {
+      "id": "c4",
+      "text": "forge test exits 0 and its summary reports 0 failed."
+    },
+    {
+      "id": "c5",
+      "text": "pre-commit run --all-files passes, and the forge-test hook prints Passed."
+    },
+    {
+      "id": "c6",
+      "text": "src/nitro (vendored go-nitro) has no changes."
+    },
+    {
+      "id": "c7",
+      "text": "No second Groth16 verifier is added. The M8 pool Snark library is reused."
+    }
+  ],
+  "goal": "Bump the lib/armada-poc pin to 5d076c4eb9f27dd931d6c0b392b92cd850cb66d5 and keep the build, tests and pre-commit gate green.",
+  "acceptance_criteria": [
+    "The recorded submodule version for lib/armada-poc is exactly 5d076c4eb9f27dd931d6c0b392b92cd850cb66d5.",
+    "The pinned armada-poc checkout contains the Snark library file SnarkTypes.sol under the privacy-pool types folder.",
+    "The full contract build finishes with no errors after the pin change.",
+    "The full contract test run finishes and reports zero failed tests.",
+    "The pre-commit run over all files succeeds and the forge-test hook reports Passed.",
+    "No file under src/nitro differs from the main branch.",
+    "The count of Groth16 verifier contracts or verifyProof functions defined in armada-nitro's own tests, helpers and scripts is zero."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The recorded submodule version for lib/armada-poc is exactly 5d076c4eb9f27dd931d6c0b392b92cd850cb66d5."
+    },
+    {
+      "id": "c2",
+      "text": "The pinned armada-poc checkout contains the Snark library file SnarkTypes.sol under the privacy-pool types folder."
+    },
+    {
+      "id": "c3",
+      "text": "The full contract build finishes with no errors after the pin change."
+    },
+    {
+      "id": "c4",
+      "text": "The full contract test run finishes and reports zero failed tests."
+    },
+    {
+      "id": "c5",
+      "text": "The pre-commit run over all files succeeds and the forge-test hook reports Passed."
+    },
+    {
+      "id": "c6",
+      "text": "No file under src/nitro differs from the main branch."
+    },
+    {
+      "id": "c7",
+      "text": "The count of Groth16 verifier contracts or verifyProof functions defined in armada-nitro's own tests, helpers and scripts is zero."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "The recorded submodule version for lib/armada-poc is exactly 5d076c4eb9f27dd931d6c0b392b92cd850cb66d5.",
+      "proves": "The pin points at the commit that carries the M8 privacy pool.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_pin.py",
+        "args": [
+          "gitlink",
+          "lib/armada-poc"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "gitlink_sha",
+          "op": "eq",
+          "value": "5d076c4eb9f27dd931d6c0b392b92cd850cb66d5"
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "The pinned armada-poc checkout contains the Snark library file SnarkTypes.sol under the privacy-pool types folder.",
+      "proves": "The pool's Groth16 library is available to reuse at the pinned version.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_pin.py",
+        "args": [
+          "snark-file",
+          "lib/armada-poc"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "cat_file_exit",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "The full contract build finishes with no errors after the pin change.",
+      "proves": "The updated imports compile against the new armada-poc version.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_pin.py",
+        "args": [
+          "forge-build"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "forge_build_exit",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "The full contract test run finishes and reports zero failed tests.",
+      "proves": "Existing behavior is preserved under the new armada-poc version.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_pin.py",
+        "args": [
+          "forge-test"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "failed_count",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "The pre-commit run over all files succeeds and the forge-test hook reports Passed.",
+      "proves": "The commit gate is green with the new pin.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_pin.py",
+        "args": [
+          "pre-commit"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "forge_test_hook_passed",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "No file under src/nitro differs from the main branch.",
+      "proves": "The vendored go-nitro code was left untouched.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_pin.py",
+        "args": [
+          "nitro-untouched",
+          "main"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "changed_files",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "The count of Groth16 verifier contracts or verifyProof functions defined in armada-nitro's own tests, helpers and scripts is zero.",
+      "proves": "The change adds no second Groth16 verifier and reuses the M8 pool library.",
+      "restatement_clause_id": "c7",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_pin.py",
+        "args": [
+          "no-second-verifier"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "verifier_definitions",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c7"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check_pin.py"
+  ]
+}
