@@ -1,0 +1,33 @@
+services:
+  armada-assets-e2e:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    # Reuses the shared wallet and proof code: env/gates/nitro-e2e/prepare.ts is copied
+    # into the env image's toolchain and run, rather than re-implementing the wallet
+    # (createWallet) and Groth16 proof (prover) code.
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        # The assets gate stage runs the shared wallet + proof code. Copy the gate script
+        # into the toolchain (so its relative lib/sdk imports resolve) and run it.
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        (
+          cd /src/armada-poc
+          MANIFEST_PATH="$$MANIFEST_PATH" \
+          DEPOSITS_OUTPUT="$$DEPOSITS_PATH" \
+          CHALLENGE_DURATION="$$CHALLENGE_DURATION" \
+          HUB_RPC="$$HUB_RPC" DEPLOY_ENV=local CCTP_MODE=real \
+            npx hardhat run scripts/gates/prepare.ts
+        )
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/nitro-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
