@@ -1,0 +1,157 @@
+{
+  "id": "derived-arn-61e",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. In src/ArmadaNitroAdjudicator.sol, depositFromNote funds a channel by spending the depositor's note into a fresh contract-owned note at the adjudicator, inside the pool, instead of unshielding ERC-20 to the adjudicator's raw balance. The deposited value never leaves the pool. The transaction's single output is a contract-owned commitment whose preimage npk derives from address(this), whose token is on isAsset, and whose value is amount. After pool.transact returns, the adjudicator requires pool.preimageOf(newCommitment).value == amount, then sets holdings[asset][channelId] = newCommitment. The IERC20 balanceOf before-and-after read is removed. The reentrancy guard and the held == expectedHeld check stay, reading held via heldValue.\nWhat holds now? Describe the current, observed state. depositFromNote uses UnshieldType.NORMAL, checks note npk == address(this), and reads IERC20(asset).balanceOf before and after. It unshields ERC-20 out to the adjudicator's raw balance.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. forge test --match-contract ArmadaNitroAdjudicatorTest finishes with no failed tests. A depositFromNote with a correctly bound contract-owned output credits holdings[asset][channelId] to the new commitment, and heldValue reads back amount. A depositFromNote whose output preimage value does not match amount reverts. A depositFromNote whose output npk is not the adjudicator's derived owner reverts. forge build and the whole forge test suite finish with no failed tests.",
+  "restatement": "In src/ArmadaNitroAdjudicator.sol, depositFromNote must fund a channel by spending the depositor's note into one fresh output note owned by the adjudicator, inside the privacy pool. The value never leaves the pool. The output note's npk derives from address(this), its token is on isAsset, and its value is amount. After pool.transact returns, the adjudicator requires pool.preimageOf(newCommitment).value == amount and then sets holdings[asset][channelId] = newCommitment. The IERC20 balanceOf before-and-after read is removed. The reentrancy guard and the held == expectedHeld check stay, and read held via heldValue. The ArmadaNitroAdjudicatorTest suite, forge build and the whole forge test suite finish with no failed tests.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A depositFromNote with a correctly bound contract-owned output credits holdings[asset][channelId] to the new commitment, and heldValue reads back amount."
+    },
+    {
+      "id": "c2",
+      "text": "A depositFromNote whose output preimage value does not match amount reverts (pool.preimageOf(newCommitment).value == amount is required)."
+    },
+    {
+      "id": "c3",
+      "text": "A depositFromNote whose output npk is not the adjudicator's derived owner (derived from address(this)) reverts."
+    },
+    {
+      "id": "c4",
+      "text": "The deposit never unshields ERC-20 to the adjudicator's raw balance: the IERC20 balanceOf before-and-after read is removed and the adjudicator's raw token balance is unchanged by a deposit."
+    },
+    {
+      "id": "c5",
+      "text": "The reentrancy guard and the held == expectedHeld check stay, reading held via heldValue."
+    },
+    {
+      "id": "c6",
+      "text": "forge test --match-contract ArmadaNitroAdjudicatorTest, forge build and the whole forge test suite finish with no failed tests."
+    }
+  ],
+  "goal": "depositFromNote funds a channel by moving value into a new contract-owned note inside the pool, with no ERC-20 leaving the pool.",
+  "acceptance_criteria": [
+    "A deposit with a correctly bound contract-owned output records the new note as the channel's holding, and the held amount reads back as the deposited amount.",
+    "A deposit whose output note carries a different value than the stated amount is rejected.",
+    "A deposit whose output note is not owned by the adjudicator is rejected.",
+    "After a deposit, the adjudicator's own token balance is the same as before, so the value stayed inside the pool.",
+    "A re-entrant deposit is rejected, and a deposit with a wrong expected holding amount is rejected.",
+    "The full build and the whole test suite finish with no failed tests."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A deposit with a correctly bound contract-owned output records the new note as the channel's holding, and the held amount reads back as the deposited amount."
+    },
+    {
+      "id": "c2",
+      "text": "A deposit whose output note carries a different value than the stated amount is rejected."
+    },
+    {
+      "id": "c3",
+      "text": "A deposit whose output note is not owned by the adjudicator is rejected."
+    },
+    {
+      "id": "c4",
+      "text": "After a deposit, the adjudicator's own token balance is the same as before, so the value stayed inside the pool."
+    },
+    {
+      "id": "c5",
+      "text": "A re-entrant deposit is rejected, and a deposit with a wrong expected holding amount is rejected."
+    },
+    {
+      "id": "c6",
+      "text": "The full build and the whole test suite finish with no failed tests."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A deposit with a correctly bound contract-owned output records the new note as the channel's holding, and the held amount reads back as the deposited amount.",
+      "proves": "A correct deposit credits holdings[asset][channelId] to the new commitment and heldValue equals amount.",
+      "restatement_clause_id": "c1",
+      "test": "test_depositFromNote_creditsHoldingsToNewCommitment",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A deposit whose output note carries a different value than the stated amount is rejected.",
+      "proves": "A mismatched output value makes depositFromNote revert.",
+      "restatement_clause_id": "c2",
+      "test": "test_depositFromNote_revertsOnValueMismatch",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A deposit whose output note is not owned by the adjudicator is rejected.",
+      "proves": "A wrong output owner makes depositFromNote revert.",
+      "restatement_clause_id": "c3",
+      "test": "test_depositFromNote_revertsOnWrongOwner",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "After a deposit, the adjudicator's own token balance is the same as before, so the value stayed inside the pool.",
+      "proves": "No ERC-20 is unshielded to the adjudicator's raw balance.",
+      "restatement_clause_id": "c4",
+      "test": "test_depositFromNote_noRawTokenBalanceChange",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A re-entrant deposit is rejected, and a deposit with a wrong expected holding amount is rejected.",
+      "proves": "The reentrancy guard and the held == expectedHeld check still work.",
+      "restatement_clause_id": "c5",
+      "test": "test_depositFromNote_guardsReentrancyAndExpectedHeld",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "The full build and the whole test suite finish with no failed tests.",
+      "proves": "The change breaks no existing test and the project builds.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/run-forge-suite.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "failed",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/run-forge-suite.sh"
+  ]
+}
