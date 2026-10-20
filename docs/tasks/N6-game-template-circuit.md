@@ -20,7 +20,9 @@ S4 changes `armada-nitro`.
 Read, in `armada-circuits`: `src/operations/Transact.circom` (Poseidon
 commitment and 120-bit range-check conventions), `src/main/main_1x1.circom`
 (entry-point pattern), `scripts/compile.sh`, `scripts/setup-dev.sh`. Read, in
-`armada-nitro`: `src/nitro/apps/ZkForceMoveApp.sol` and
+`armada-nitro`: `src/apps/ZkForceMoveApp.sol` (new Armada apps live under
+`src/apps/`, not `src/nitro/`, which is vendored go-nitro excluded from every
+pre-commit hook) and
 `test/ZkForceMoveApp.t.sol` (both land in N4; if missing in your worktree,
 stop and report — N6 depends on N4), `src/nitro/interfaces/INitroTypes.sol`.
 
@@ -167,7 +169,7 @@ the template is proven by a real instance, not left abstract.
 ## Deliver (armada-nitro)
 
 - **S4 · Integration with N4.** New file
-  `src/nitro/apps/MatchingPenniesForceMoveApp.sol`:
+  `src/apps/MatchingPenniesForceMoveApp.sol`:
   - `contract MatchingPenniesForceMoveApp is ZkForceMoveApp`, same
     constructor shape as N4 (a `VerifyingKey`, converted from
     `armada-circuits`'s `build/matching-pennies/vkey.json` using the G1/G2

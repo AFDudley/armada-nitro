@@ -4,6 +4,9 @@ Chunk N4 · Family F2 · Points 7 · Route 5090
 Depends on: —
 
 Repo: `armada-nitro`. Branch: `integrated`. Work in a new worktree from `origin/integrated`.
+New Armada code must not go under `src/nitro/`: that tree is vendored go-nitro,
+kept byte-identical to upstream, and `.pre-commit-config.yaml` excludes it from
+every hook. New contracts go under `src/apps/`, beside `src/ArmadaNitroAdjudicator.sol`.
 
 Read `src/nitro/interfaces/IForceMoveApp.sol`, `src/nitro/interfaces/INitroTypes.sol`,
 `src/nitro/examples/HashLockedSwap.sol` (the appData decode pattern and the
@@ -24,7 +27,7 @@ real proof, not a stub.
 
 ## Deliver
 
-- **S1 · `ZkForceMoveApp` contract.** New file `src/nitro/apps/ZkForceMoveApp.sol`.
+- **S1 · `ZkForceMoveApp` contract.** New file `src/apps/ZkForceMoveApp.sol`.
   - `contract ZkForceMoveApp is IForceMoveApp`. Constructor takes a `VerifyingKey
     memory` and stores it in an immutable-shaped private field (the struct holds a
     dynamic array `ic`, so store it in storage, not as `immutable`; mark the

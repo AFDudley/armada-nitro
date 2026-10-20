@@ -18,7 +18,9 @@ commitment and range-check conventions), `src/lib/merkle.circom`,
 `src/main/main_1x1.circom` (the entry-point pattern), `scripts/compile.sh`,
 `scripts/setup-dev.sh` (the dev Powers-of-Tau and per-circuit zkey pipeline),
 `docs/DIFFERENTIAL_TEST_VECTORS.md`. Read, in `armada-nitro`:
-`src/nitro/apps/ZkForceMoveApp.sol` and `test/ZkForceMoveApp.t.sol` (both land
+`src/apps/ZkForceMoveApp.sol` (new Armada apps live under `src/apps/`, not
+`src/nitro/`, which is vendored go-nitro excluded from every pre-commit hook)
+and `test/ZkForceMoveApp.t.sol` (both land
 in N4; if they do not exist yet in your worktree, stop and report — N5 depends
 on N4), `src/nitro/interfaces/INitroTypes.sol`.
 
@@ -112,7 +114,7 @@ N4's `ZkForceMoveApp` so a real channel can finalize on a hidden-balance state.
   a channel needs `prevCommitment` of the candidate state to equal
   `nextCommitment` of the immediately preceding (proven) state, or a party
   could finalize on a valid-looking move that does not chain from the actual
-  prior state. Add `src/nitro/apps/LedgerForceMoveApp.sol`:
+  prior state. Add `src/apps/LedgerForceMoveApp.sol`:
   - `contract LedgerForceMoveApp is ZkForceMoveApp`, same constructor
     (verifying key for the `Ledger` circuit, converted from
     `armada-circuits`'s `build/ledger/vkey.json` using the same G1/G2
