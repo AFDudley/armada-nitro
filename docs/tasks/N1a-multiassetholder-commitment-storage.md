@@ -58,25 +58,37 @@ adjudicator owns its channel collateral as notes, so the collateral never leaves
 - **S4 · Events.** `Deposited(channelId, asset, held)` and `AllocationUpdated(channelId, asset,
   initialHoldings, newHoldings)` keep their current signatures; `held`/`initialHoldings`/
   `newHoldings` are now the output of `heldValue`, not a direct storage read.
+- **S5 · Keep the build and the full suite green.** The storage type change
+  (S1) breaks every reader of the old `uint256` holdings and every test that
+  reads it. This chunk makes the mechanical call-site and test updates that
+  adapt each reader to `heldValue`, with existing behaviour preserved and no
+  new behaviour. Tests supply a mock `preimageOf` (a test pool/helper that
+  returns a fixed `CommitmentPreimage` for a set commitment) so `heldValue`
+  returns the expected amount. After this chunk, `forge build` and the whole
+  `forge test` suite pass. Rationale: the exophial commit gate runs the whole
+  suite (`forge build && forge test`), so every chunk boundary must compile
+  and pass — a chunk that leaves a non-compiling test cannot be graded.
 
 Keep existing conventions: `SafeERC20` stays where raw transfers still occur in this file (none,
 after S3); `SafeCast` for the pool's `uint120` values; an event for every holdings change.
 
 ## Acceptance (paste output)
-`forge test --match-contract MultiAssetHolderCommitmentTest` output for these tests, new in
-`test/MultiAssetHolderCommitment.t.sol`, each failing on the commit before this task (compile
-failure or wrong type counts as failing) and passing after:
+`forge test --match-contract MultiAssetHolderCommitmentTest` output for these
+tests, new in `test/MultiAssetHolderCommitment.t.sol`, each failing on the
+commit before this task (compile failure or wrong type counts as failing) and
+passing after:
 - `heldValue` on an empty `(asset, channelId)` returns `0`;
-- `heldValue` on a `(asset, channelId)` with a commitment set by a test helper (a mock
-  `preimageOf` returning a fixed `CommitmentPreimage`) returns that preimage's `value`;
-- the inherited `IMultiAssetHolder.deposit` selector no longer exists on `ArmadaNitroAdjudicator`
-  (a `vm.expectRevert` low-level call to the old 4-byte selector fails: not a revert, a missing
-  function).
+- `heldValue` on a `(asset, channelId)` with a commitment set by a test helper
+  (a mock `preimageOf` returning a fixed `CommitmentPreimage`) returns that
+  preimage's `value`;
+- the inherited `IMultiAssetHolder.deposit` selector no longer exists on
+  `ArmadaNitroAdjudicator` (a `vm.expectRevert` low-level call to the old
+  4-byte selector fails: not a revert, a missing function).
 
-Plus: `forge build` succeeds with S3's interface change, and the existing `forge test` suite in
-`test/ArmadaNitroAdjudicator.t.sol` still compiles (N1b and N2a update the bodies that call the
-old `holdings` type; S1 alone breaks their compilation, which this chunk's Acceptance does not
-require to pass — name any test file left non-compiling in the report).
+Plus: `forge build` succeeds with S3's interface change, and the FULL
+`forge test` suite passes (S5 adapts every call site and every test that read
+the old `holdings` type to `heldValue`, behaviour preserved). The exophial
+gate runs the whole suite, so no test file may be left non-compiling.
 
 ## Husband review
 Audit-critical. Check:
