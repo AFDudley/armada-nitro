@@ -1,0 +1,59 @@
+# The selective-disclosure acceptance job (arn-c53), invoked by stack/scripts/
+# armada-disclosure-acceptance.py via `run-job armada-disclosure` (never a direct host read
+# of the deployment's own data directory -- gates and runners reach the fixturenet only via
+# run-job and RPC).
+#
+# Reads the deployment's manifest from the mounted armada_env volume (/env, not a host path)
+# and proves the pool, the HubCustodian and the adjudicator respond on the fixturenet RPC with
+# three read-only `cast call`s, then prints exactly one JSON line to stdout:
+#     {"fixturenet_up": true}
+#
+# No host networking: HUB_RPC resolves to the compose service name (arn-e7a c3/c4); the job
+# runs on the deployment's own docker network.
+services:
+  armada-disclosure:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        python3 - <<'PY'
+        import json
+        import os
+        import subprocess
+
+        manifest = json.load(open("/env/manifest.json"))
+        pool = manifest["armada"]["pool"]
+        usdc = manifest["armada"]["usdc"]
+        adjudicator = manifest["armadaNitro"]["adjudicator"]
+        custodian = manifest["armadaNitro"]["hubCustodian"]
+        rpc = os.environ["HUB_RPC"]
+
+        def cast_ok(addr, sig, *args):
+            p = subprocess.run(
+                ["cast", "call", addr, sig, *args, "--rpc-url", rpc],
+                capture_output=True,
+                text=True,
+            )
+            if p.returncode != 0:
+                print(f"cast call {addr} {sig} failed: {p.stderr}")
+            return p.returncode == 0 and bool(p.stdout.strip())
+
+        pool_ok = cast_ok(pool, "usdc()(address)")
+        adjudicator_ok = cast_ok(adjudicator, "isAsset(address)", usdc)
+        custodian_ok = cast_ok(
+            custodian,
+            "isActiveDelegate(address)",
+            "0x0000000000000000000000000000000000000000",
+        )
+        print(f"pool responds: {pool_ok}; adjudicator responds: {adjudicator_ok}; custodian responds: {custodian_ok}")
+        print(json.dumps({"fixturenet_up": pool_ok and adjudicator_ok and custodian_ok}))
+        PY
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
