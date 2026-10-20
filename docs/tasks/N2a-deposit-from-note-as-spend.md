@@ -10,8 +10,10 @@ Repo: `armada-nitro`. Branch: `integrated` (work in a `task/N2a` branch cut from
 
 ## P2 interface this chunk assumes
 
-Chunk P2 (armada-poc, not yet briefed) must add this surface. State these as the contract P2 must
-meet. If the real P2 interface differs, stop and report the difference instead of guessing.
+Chunk P2 is pinned at armada-poc a6c77939. It ships this surface, mirrored in
+`src/armada/IArmadaPool.sol`: `transactOwned(Transaction[])`, `preimageOf(bytes32)`, and a
+`BoundParams` with `ownerField` (bytes32) and `publicOutputs` (CommitmentPreimage[]). Confirm each
+assumption below against that file. If the real interface differs, stop and report the difference.
 
 1. A `transact` output can be contract-owned: the caller supplies the output's full
    `CommitmentPreimage` in the clear (instead of an encrypted `CommitmentCiphertext`), the pool
