@@ -22,7 +22,9 @@ summary: >
   the repo's local gates) passes on the changed files.
 cost: ~7 tokens
 commits:
+  - "ffa086f0"
   - "89099a58"
+  - "254ac978"
 verify_transcript:
   hooks:
     - name: "Gates and runners reach the fixturenet only via run-job and RPC"
