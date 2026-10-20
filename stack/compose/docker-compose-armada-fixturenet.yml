@@ -358,9 +358,9 @@ services:
               --trusted-node-url=http://armada-fixturenet-beacon:5052 \
               --non-interactive 2>&1)
             set -e
-            echo "$TNS_LOG"
-            CKPT_SLOT=$(printf '%s\n' "$TNS_LOG" | grep 'Checkpoint written to database' | grep -o 'stateSlot=[0-9]*' | cut -d= -f2)
-            if [ -n "$CKPT_SLOT" ] && [ "$CKPT_SLOT" -gt 0 ]; then
+            echo "$$TNS_LOG"
+            CKPT_SLOT=$(printf '%s\n' "$$TNS_LOG" | grep 'Checkpoint written to database' | grep -o 'stateSlot=[0-9]*' | cut -d= -f2)
+            if [ -n "$$CKPT_SLOT" ] && [ "$$CKPT_SLOT" -gt 0 ]; then
               break
             fi
             echo "trustedNodeSync: no post-genesis finalized checkpoint on lighthouse yet, retrying in 5s"
