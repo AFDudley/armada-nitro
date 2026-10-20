@@ -12,7 +12,7 @@ import {ArmadaFixture} from './helpers/ArmadaFixture.sol';
 import {ArmadaNotes} from './helpers/ArmadaNotes.sol';
 import {RevertingTransferToken} from './helpers/RevertingTransferToken.sol';
 import {ChannelStates} from './helpers/ChannelStates.sol';
-import {IArmadaPool, CommitmentPreimage, ShieldCiphertext, Transaction} from 'src/armada/IArmadaPool.sol';
+import {IArmadaPool, CommitmentPreimage, ShieldCiphertext, TokenData, TokenType, Transaction} from 'src/armada/IArmadaPool.sol';
 
 /// @dev arn-bfc (E16 S4): proves the per-asset-exit invariant. In a two-asset channel whose
 /// second token (RevertingTransferToken) always reverts on transfer, the single-asset exit
@@ -109,9 +109,18 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         assertEq(adjudicator.heldValue(address(usdc), channelId), 0);
         assertEq(adjudicator.heldValue(address(revToken), channelId), HUB_FUNDS);
 
-        // The USDC payment really reached the custodian's wallet (arn-2e6, clause c1).
+        // N1b: the payout moves as a pool commitment, not a raw ERC20 transfer -- the custodian's
+        // wallet balance is untouched, and it instead holds a fresh commitment worth HUB_FUNDS.
         uint256 custodianBalAfter = usdc.balanceOf(address(custodian));
-        assertEq(custodianBalAfter, custodianBalBefore + HUB_FUNDS);
+        assertEq(custodianBalAfter, custodianBalBefore, 'no raw ERC20 reaches the custodian');
+        bytes32 custodianCommitment = ArmadaNotes.commitmentHash(
+            CommitmentPreimage({
+                npk: bytes32(uint256(uint160(address(custodian)))),
+                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: address(usdc), tokenSubID: 0}),
+                value: uint120(HUB_FUNDS)
+            })
+        );
+        assertEq(uint256(pool.preimageOf(custodianCommitment).value), HUB_FUNDS, 'custodian paid via a fresh commitment');
     }
 
     // c2: the all-assets exit `transferAllAssets` reverts as a whole (no partial payout).
@@ -132,8 +141,13 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         );
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
 
-        // The all-assets exit reverts as a whole with the blocked token's own message (arn-2e6, clause c2).
-        vm.expectRevert('RevertingTransferToken: transfer blocked');
+        // N1b: the reverting token's `transfer()` is no longer on this path (the SHIELD payout
+        // pulls via `transferFrom`, which this token leaves standard); the all-assets exit still
+        // reverts as a whole -- now because the adjudicator never actually holds real
+        // RevertingTransferToken (it was shielded directly into the pool, never unshielded to the
+        // adjudicator), so the SHIELD pull's `transferFrom` underflows (arn-2e6, clause c2: no
+        // partial payout, whatever the asset's failure reason).
+        vm.expectRevert('ERC20: transfer amount exceeds balance');
         adjudicator.transferAllAssets(channelId, state.outcome, stateHash);
 
         // No partial payout: both assets' holdings are unchanged.

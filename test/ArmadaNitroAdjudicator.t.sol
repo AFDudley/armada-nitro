@@ -2,12 +2,14 @@
 pragma solidity 0.8.17;
 
 import {Vm} from 'forge-std/Test.sol';
+import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
 import {ConsensusApp} from 'src/nitro/ConsensusApp.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {IForceMoveApp} from 'src/nitro/interfaces/IForceMoveApp.sol';
-import {CommitmentPreimage, ShieldCiphertext, Transaction} from 'src/armada/IArmadaPool.sol';
+import {IMultiAssetHolder} from 'src/nitro/interfaces/IMultiAssetHolder.sol';
+import {CommitmentPreimage, ShieldCiphertext, TokenData, TokenType, Transaction} from 'src/armada/IArmadaPool.sol';
 import {ArmadaFixture} from './helpers/ArmadaFixture.sol';
 import {ArmadaNotes} from './helpers/ArmadaNotes.sol';
 import {ChannelStates} from './helpers/ChannelStates.sol';
@@ -144,11 +146,14 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         _fundChannel(_channelId(fixedPart));
         VariablePart memory finalState = _state(7, true, 130e6, 70e6);
 
+        uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
         vm.recordLogs();
         adjudicator.concludeAndTransferAllAssets(fixedPart, _signedByBoth(fixedPart, finalState));
 
         _assertShieldedToUser(vm.getRecordedLogs(), 130e6);
-        assertEq(usdc.balanceOf(address(custodian)), 70e6);
+        // N1b: the hub's share is paid as a pool commitment, not a raw ERC20 transfer.
+        assertEq(usdc.balanceOf(address(custodian)), custodianBalBefore, 'no raw ERC20 reaches the custodian');
+        assertEq(uint256(_custodianCommitmentPreimage(70e6).value), 70e6, 'custodian paid via a fresh commitment');
         assertEq(adjudicator.heldValue(address(usdc), _channelId(fixedPart)), 0);
     }
 
@@ -167,11 +172,14 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         );
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
 
+        uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
         vm.recordLogs();
         adjudicator.transferAllAssets(channelId, latest.outcome, NitroUtils.hashState(fixedPart, latest));
 
         _assertShieldedToUser(vm.getRecordedLogs(), 150e6);
-        assertEq(usdc.balanceOf(address(custodian)), 50e6);
+        // N1b: the hub's share is paid as a pool commitment, not a raw ERC20 transfer.
+        assertEq(usdc.balanceOf(address(custodian)), custodianBalBefore, 'no raw ERC20 reaches the custodian');
+        assertEq(uint256(_custodianCommitmentPreimage(50e6).value), 50e6, 'custodian paid via a fresh commitment');
     }
 
     function test_staleHubChallenge_isOverriddenByUsersLatestState() public {
@@ -197,11 +205,14 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         );
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
 
+        uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
         vm.recordLogs();
         adjudicator.transferAllAssets(channelId, latest.outcome, NitroUtils.hashState(fixedPart, latest));
 
         _assertShieldedToUser(vm.getRecordedLogs(), 160e6);
-        assertEq(usdc.balanceOf(address(custodian)), 40e6);
+        // N1b: the hub's share is paid as a pool commitment, not a raw ERC20 transfer.
+        assertEq(usdc.balanceOf(address(custodian)), custodianBalBefore, 'no raw ERC20 reaches the custodian');
+        assertEq(uint256(_custodianCommitmentPreimage(40e6).value), 40e6, 'custodian paid via a fresh commitment');
     }
 
     // ---------------------------------------------------------------- delegate revocation
@@ -271,6 +282,283 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         (uint48 turnNumRecord, uint48 finalizesAt, ) = adjudicator.unpackStatus(_channelId(fixedPart));
         assertEq(turnNumRecord, 1);
         assertEq(finalizesAt, block.timestamp + CHALLENGE_DURATION);
+    }
+
+    // ---------------------------------------------------------------- N1b: collateral as pool commitments
+
+    /// @dev c1: a partial transfer pays the named destination a fresh owned commitment of the paid amount.
+    function test_transfer_partial_pays_destination_fresh_commitment() public {
+        (bytes32 channelId, uint256 hubAmount, , bytes32 custodianCommitment) = _setUpPartialTransfer();
+        channelId; // silence unused-var warning (consumed for setup only)
+
+        CommitmentPreimage memory preimage = pool.preimageOf(custodianCommitment);
+        assertEq(preimage.token.tokenAddress, address(usdc), 'commitment is a USDC note');
+        assertEq(uint256(preimage.value), hubAmount, 'destination commitment worth exactly the paid amount');
+        assertEq(preimage.npk, bytes32(uint256(uint160(address(custodian)))), 'commitment owned by the named destination');
+    }
+
+    /// @dev c2: after a partial transfer, the channel's holding points at a fresh commitment of the remainder.
+    function test_transfer_partial_leaves_fresh_remainder_commitment() public {
+        (bytes32 channelId, , uint256 userAmount, ) = _setUpPartialTransfer();
+
+        bytes32 remainderCommitment = adjudicator.holdings(address(usdc), channelId);
+        assertTrue(remainderCommitment != bytes32(0), 'channel still points at a commitment');
+        CommitmentPreimage memory preimage = pool.preimageOf(remainderCommitment);
+        assertEq(uint256(preimage.value), userAmount, 'remainder commitment worth exactly the remainder');
+        assertEq(adjudicator.heldValue(address(usdc), channelId), userAmount, 'heldValue reflects the remainder live');
+    }
+
+    /// @dev c3: after a transfer that pays out all of the collateral in one asset, the channel's holding
+    /// for that asset is the zero value.
+    function test_transfer_full_payout_zeroes_holding() public {
+        FixedPart memory fixedPart = _fixedPart(address(consensusApp));
+        bytes32 channelId = _channelId(fixedPart);
+        _fundChannel(channelId);
+
+        uint256 hubAmount = HUB_FUNDS;
+        uint256 userAmount = USER_FUNDS;
+        VariablePart memory state = _state(12, false, userAmount, hubAmount);
+        bytes32 stateHash = NitroUtils.hashState(fixedPart, state);
+        bytes memory outcomeBytes = abi.encode(state.outcome);
+
+        adjudicator.challenge(
+            fixedPart,
+            new SignedVariablePart[](0),
+            _signedByBoth(fixedPart, state),
+            _challengerSig(USER_KEY, fixedPart, state)
+        );
+        vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
+
+        // Pay out everything in one asset (indices == [] means "all").
+        adjudicator.transfer(0, channelId, outcomeBytes, stateHash, new uint256[](0));
+
+        assertEq(adjudicator.holdings(address(usdc), channelId), bytes32(0), 'full payout zeroes the holding');
+        assertEq(adjudicator.heldValue(address(usdc), channelId), 0, 'heldValue reads zero for an empty commitment');
+    }
+
+    /// @dev c4: after a reclaim, the target channel's held value is larger by exactly the guarantee value.
+    function test_reclaim_raises_target_heldValue_by_guarantee_value() public {
+        uint256 leftKey = 0x1EF7;
+        uint256 rightKey = 0x1217;
+        bytes32 leftDest = bytes32(uint256(uint160(vm.addr(leftKey))));
+        bytes32 rightDest = bytes32(uint256(uint160(vm.addr(rightKey))));
+        uint256 leftTargetAmount = 5e6;
+        uint256 rightTargetAmount = 3e6;
+        uint256 guaranteeAmount = leftTargetAmount + rightTargetAmount;
+
+        (bytes32 targetChannelId, bytes32 targetStateHash, bytes memory targetOutcomeBytes, uint256 priorTargetHeld) =
+            _finalizeReclaimTarget(leftKey, leftDest, rightDest, leftTargetAmount, rightTargetAmount);
+
+        (
+            bytes32 sourceChannelId,
+            FixedPart memory sourceFixedPart,
+            VariablePart memory sourceVariablePart,
+            bytes memory sourceOutcomeBytes
+        ) = _finalizeReclaimSource(leftKey, leftDest, rightDest, targetChannelId, guaranteeAmount);
+
+        adjudicator.reclaim(
+            IMultiAssetHolder.ReclaimArgs({
+                sourceChannelId: sourceChannelId,
+                fixedPart: sourceFixedPart,
+                variablePart: sourceVariablePart,
+                sourceOutcomeBytes: sourceOutcomeBytes,
+                sourceAssetIndex: 0,
+                indexOfTargetInSource: 1,
+                targetStateHash: targetStateHash,
+                targetOutcomeBytes: targetOutcomeBytes,
+                targetAssetIndex: 0
+            })
+        );
+
+        uint256 newTargetHeld = adjudicator.heldValue(address(usdc), targetChannelId);
+        assertEq(newTargetHeld, priorTargetHeld + guaranteeAmount, 'target heldValue rises by exactly the guarantee value');
+    }
+
+    /// @dev Challenges `fixedPart`/`variablePart` with `signerKey`'s signature, then warps past
+    /// the challenge window so the channel finalizes. Shared by the reclaim test's two channels.
+    function _challengeAndWarp(
+        FixedPart memory fixedPart,
+        uint256 signerKey,
+        VariablePart memory variablePart
+    ) internal {
+        Signature[] memory sigs = new Signature[](1);
+        sigs[0] = ChannelStates.sign(signerKey, fixedPart, variablePart);
+        adjudicator.challenge(
+            fixedPart,
+            new SignedVariablePart[](0),
+            SignedVariablePart({variablePart: variablePart, sigs: sigs}),
+            ChannelStates.challengerSig(signerKey, fixedPart, variablePart)
+        );
+        vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
+    }
+
+    function _twoAllocationOutcome(
+        bytes32 destA,
+        uint256 amountA,
+        bytes32 destB,
+        uint256 amountB
+    ) internal view returns (Outcome.SingleAssetExit[] memory outcome) {
+        Outcome.Allocation[] memory allocations = new Outcome.Allocation[](2);
+        allocations[0] = Outcome.Allocation(destA, amountA, uint8(Outcome.AllocationType.simple), '');
+        allocations[1] = Outcome.Allocation(destB, amountB, uint8(Outcome.AllocationType.simple), '');
+        outcome = new Outcome.SingleAssetExit[](1);
+        outcome[0] = Outcome.SingleAssetExit(address(usdc), Outcome.AssetMetadata(Outcome.AssetType.Default, ''), allocations);
+    }
+
+    /// @dev Funds then finalizes the reclaim test's target channel with its own (unrelated)
+    /// closing outcome, split between leftDest/rightDest.
+    function _finalizeReclaimTarget(
+        uint256 leftKey,
+        bytes32 leftDest,
+        bytes32 rightDest,
+        uint256 leftAmount,
+        uint256 rightAmount
+    ) internal returns (bytes32 channelId, bytes32 stateHash, bytes memory outcomeBytes, uint256 priorHeld) {
+        FixedPart memory fixedPart = FixedPart({
+            participants: _twoParticipants(vm.addr(leftKey), address(uint160(uint256(rightDest)))),
+            channelNonce: 777,
+            appDefinition: address(new AlwaysSupportedApp()),
+            challengeDuration: CHALLENGE_DURATION
+        });
+        channelId = NitroUtils.getChannelId(fixedPart);
+        _shield(user, USER_DEPOSIT_NPK, USER_FUNDS);
+        _depositFromNote(channelId, 0, USER_FUNDS);
+        priorHeld = adjudicator.heldValue(address(usdc), channelId);
+        assertEq(priorHeld, USER_FUNDS, 'target funded before finalizing');
+
+        VariablePart memory variablePart = VariablePart({
+            outcome: _twoAllocationOutcome(leftDest, leftAmount, rightDest, rightAmount),
+            appData: '',
+            turnNum: 1,
+            isFinal: false
+        });
+        stateHash = NitroUtils.hashState(fixedPart, variablePart);
+        _challengeAndWarp(fixedPart, leftKey, variablePart);
+        outcomeBytes = abi.encode(variablePart.outcome);
+    }
+
+    /// @dev Finalizes the reclaim test's source (ledger) channel: a guarantee for the target,
+    /// plus its own left/right allocations (outside the guarantee) that the guarantee reclaims
+    /// value into.
+    function _finalizeReclaimSource(
+        uint256 leftKey,
+        bytes32 leftDest,
+        bytes32 rightDest,
+        bytes32 targetChannelId,
+        uint256 guaranteeAmount
+    )
+        internal
+        returns (
+            bytes32 channelId,
+            FixedPart memory fixedPart,
+            VariablePart memory variablePart,
+            bytes memory outcomeBytes
+        )
+    {
+        fixedPart = FixedPart({
+            participants: _twoParticipants(vm.addr(leftKey), address(uint160(uint256(rightDest)))),
+            channelNonce: 888,
+            appDefinition: address(new AlwaysSupportedApp()),
+            challengeDuration: CHALLENGE_DURATION
+        });
+        channelId = NitroUtils.getChannelId(fixedPart);
+        variablePart = VariablePart({
+            outcome: _sourceGuaranteeOutcome(leftDest, rightDest, targetChannelId, guaranteeAmount),
+            appData: '',
+            turnNum: 1,
+            isFinal: false
+        });
+        _challengeAndWarp(fixedPart, leftKey, variablePart);
+        outcomeBytes = abi.encode(variablePart.outcome);
+    }
+
+    function _sourceGuaranteeOutcome(
+        bytes32 leftDest,
+        bytes32 rightDest,
+        bytes32 targetChannelId,
+        uint256 guaranteeAmount
+    ) internal view returns (Outcome.SingleAssetExit[] memory outcome) {
+        Outcome.Allocation[] memory allocations = new Outcome.Allocation[](3);
+        allocations[0] = Outcome.Allocation(leftDest, 2e6, uint8(Outcome.AllocationType.simple), '');
+        allocations[1] = Outcome.Allocation(
+            targetChannelId,
+            guaranteeAmount,
+            uint8(Outcome.AllocationType.guarantee),
+            abi.encode(leftDest, rightDest)
+        );
+        allocations[2] = Outcome.Allocation(rightDest, 2e6, uint8(Outcome.AllocationType.simple), '');
+        outcome = new Outcome.SingleAssetExit[](1);
+        outcome[0] = Outcome.SingleAssetExit(address(usdc), Outcome.AssetMetadata(Outcome.AssetType.Default, ''), allocations);
+    }
+
+    /// @dev c5: paying out to an external destination through the adjudicator moves value as pool
+    /// commitments and sends no raw asset directly.
+    function test_exit_external_destination_pays_commitment_not_raw_asset() public {
+        FixedPart memory fixedPart = _fixedPart(address(consensusApp));
+        _fundChannel(_channelId(fixedPart));
+        VariablePart memory finalState = _state(7, true, 130e6, 70e6);
+
+        uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
+
+        adjudicator.concludeAndTransferAllAssets(fixedPart, _signedByBoth(fixedPart, finalState));
+
+        // No raw asset moved to the custodian's wallet.
+        assertEq(usdc.balanceOf(address(custodian)), custodianBalBefore, 'no raw ERC20 transfer to the custodian');
+
+        // Instead, the custodian holds a fresh pool commitment worth its allocation.
+        bytes32 custodianCommitment = ArmadaNotes.commitmentHash(
+            CommitmentPreimage({
+                npk: bytes32(uint256(uint160(address(custodian)))),
+                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: address(usdc), tokenSubID: 0}),
+                value: uint120(70e6)
+            })
+        );
+        CommitmentPreimage memory preimage = pool.preimageOf(custodianCommitment);
+        assertEq(uint256(preimage.value), 70e6, 'custodian paid via a pool commitment, not a raw transfer');
+    }
+
+    /// @dev Shared setup for the two partial-transfer tests (c1/c2): funds a standard channel,
+    /// challenges with a SHIELD (user) + simple (custodian) state, warps to finalize, then
+    /// transfers only the custodian's (index 1) share.
+    function _setUpPartialTransfer()
+        internal
+        returns (bytes32 channelId, uint256 hubAmount, uint256 userAmount, bytes32 custodianCommitment)
+    {
+        FixedPart memory fixedPart = _fixedPart(address(consensusApp));
+        channelId = _channelId(fixedPart);
+        _fundChannel(channelId);
+
+        hubAmount = HUB_FUNDS;
+        userAmount = USER_FUNDS;
+        VariablePart memory state = _state(12, false, userAmount, hubAmount);
+        bytes32 stateHash = NitroUtils.hashState(fixedPart, state);
+        bytes memory outcomeBytes = abi.encode(state.outcome);
+
+        adjudicator.challenge(
+            fixedPart,
+            new SignedVariablePart[](0),
+            _signedByBoth(fixedPart, state),
+            _challengerSig(USER_KEY, fixedPart, state)
+        );
+        vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
+
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 1; // pay out only the custodian's (index 1) share
+        adjudicator.transfer(0, channelId, outcomeBytes, stateHash, indices);
+
+        custodianCommitment = ArmadaNotes.commitmentHash(
+            CommitmentPreimage({
+                npk: bytes32(uint256(uint160(address(custodian)))),
+                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: address(usdc), tokenSubID: 0}),
+                value: uint120(hubAmount)
+            })
+        );
+    }
+
+    function _twoParticipants(address a, address b) internal pure returns (address[] memory out) {
+        out = new address[](2);
+        out[0] = a;
+        out[1] = b;
     }
 
     // ---------------------------------------------------------------- helpers
@@ -368,6 +656,20 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         bytes32 message = custodian.operationHash(custodian.nonce(), target, 0, data);
         (uint256 rx, uint256 ry, uint256 z) = frost.sign(GROUP_SCALAR, message);
         custodian.execute(target, 0, data, IHubCustodian.GroupSignature(rx, ry, z));
+    }
+
+    /// @dev N1b: the custodian's fresh pool commitment for a given payout value (a mint-only
+    /// transactOwned output, keyed by the custodian's address as npk, same encoding as a "simple"
+    /// external destination).
+    function _custodianCommitmentPreimage(uint256 value) internal view returns (CommitmentPreimage memory) {
+        bytes32 commitment = ArmadaNotes.commitmentHash(
+            CommitmentPreimage({
+                npk: bytes32(uint256(uint160(address(custodian)))),
+                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: address(usdc), tokenSubID: 0}),
+                value: uint120(value)
+            })
+        );
+        return pool.preimageOf(commitment);
     }
 
     function _assertShieldedToUser(Vm.Log[] memory logs, uint256 amount) internal view {

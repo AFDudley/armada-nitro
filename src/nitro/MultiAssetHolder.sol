@@ -94,7 +94,17 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
             initialAssetHoldings,
             totalPayouts
         );
-        _apply_transfer_interactions(outcome[assetIndex], exitAllocations);
+        // N1b: settle the exit by spending the old pool commitment and minting new ones through
+        // pool.transactOwned (the adjudicator's override); the base holder (no pool) falls back
+        // to the legacy raw-asset interactions and a plain balance decrement.
+        _settleTransferExit(
+            asset,
+            fromChannelId,
+            outcome[assetIndex].assetMetadata,
+            exitAllocations,
+            initialAssetHoldings,
+            totalPayouts
+        );
         holdingsLock[fromChannelId] -= 1;
     }
 
@@ -190,29 +200,33 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         uint256 initialHoldings,
         uint256 totalPayouts
     ) internal {
-        // update holdings
-        holdings[asset][channelId] = bytes32(uint256(holdings[asset][channelId]) - totalPayouts);
-
         // store fingerprint of modified outcome
         outcome[assetIndex].allocations = newAllocations;
         _updateFingerprint(channelId, stateHash, keccak256(abi.encode(outcome)));
-
-        // emit the information needed to compute the new outcome stored in the fingerprint
-        emit AllocationUpdated(channelId, asset, initialHoldings, heldValue(asset, channelId));
+        // N1b: the holding is updated, and AllocationUpdated emitted, by _settleTransferExit --
+        // only after the exit interaction (pool mint or legacy transfer) actually ran.
     }
 
-    function _apply_transfer_interactions(
-        Outcome.SingleAssetExit memory singleAssetExit,
-        Outcome.Allocation[] memory exitAllocations
-    ) internal {
-        // create a new tuple to avoid mutating singleAssetExit
-        _executeSingleAssetExit(
-            Outcome.SingleAssetExit(
-                singleAssetExit.asset,
-                singleAssetExit.assetMetadata,
-                exitAllocations
-            )
-        );
+    /**
+     * @dev N1b: settle a transfer's exit. The base holder (no pool) keeps go-nitro semantics: run
+     * the legacy raw-asset/holdings-credit interactions, then decrement the raw balance by
+     * `totalPayouts`. `ArmadaNitroAdjudicator` overrides this to spend `holdings[asset][channelId]`'s
+     * current pool commitment and mint fresh owned commitments (one per non-zero, non-SHIELD
+     * `exitAllocations` entry, plus a remainder commitment back to itself when the payout is
+     * partial) through `pool.transactOwned`, leaving `holdings[asset][channelId]` pointing at the
+     * remainder commitment, or `bytes32(0)` when the whole collateral was paid out.
+     */
+    function _settleTransferExit(
+        address asset,
+        bytes32 channelId,
+        Outcome.AssetMetadata memory assetMetadata,
+        Outcome.Allocation[] memory exitAllocations,
+        uint256 initialHoldings,
+        uint256 totalPayouts
+    ) internal virtual {
+        _executeSingleAssetExit(Outcome.SingleAssetExit(asset, assetMetadata, exitAllocations));
+        holdings[asset][channelId] = bytes32(uint256(holdings[asset][channelId]) - totalPayouts);
+        emit AllocationUpdated(channelId, asset, initialHoldings, heldValue(asset, channelId));
     }
 
     /**
@@ -231,6 +245,13 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         holdingsLock[reclaimArgs.sourceChannelId] += 1;
 
         Outcome.Allocation[] memory newSourceAllocations;
+        // N1b: capture the guarantee's destination (the target channel) and amount BEFORE
+        // `_apply_reclaim_effects` overwrites `sourceOutcome[...].allocations` with the
+        // guarantee-removed `newSourceAllocations` (one slot shorter -- the guarantee's index no
+        // longer points at the guarantee afterward).
+        Outcome.Allocation memory guarantee = sourceOutcome[reclaimArgs.sourceAssetIndex]
+            .allocations[reclaimArgs.indexOfTargetInSource];
+        address guaranteeAsset = sourceOutcome[reclaimArgs.sourceAssetIndex].asset;
         {
             Outcome.Allocation[] memory sourceAllocations = sourceOutcome[
                 reclaimArgs.sourceAssetIndex
@@ -246,6 +267,12 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
         }
 
         _apply_reclaim_effects(reclaimArgs, sourceOutcome, newSourceAllocations);
+
+        // N1b: move the guarantee's value into the target channel's commitment, read by
+        // heldValue. The base holder (no pool) is a no-op (go-nitro's target channel already
+        // settled independently); ArmadaNitroAdjudicator overrides this to mint the raised-value
+        // commitment through pool.transactOwned.
+        _settleReclaimExit(guaranteeAsset, guarantee.destination, guarantee.amount);
         holdingsLock[reclaimArgs.sourceChannelId] -= 1;
     }
 
@@ -387,9 +414,21 @@ contract MultiAssetHolder is IMultiAssetHolder, StatusManager {
 
         // emit the information needed to compute the new source outcome stored in the fingerprint
         emit Reclaimed(reclaimArgs.sourceChannelId, reclaimArgs.sourceAssetIndex);
-
-        // Note: no changes are made to the target channel.
     }
+
+    /**
+     * @dev N1b: move `guaranteeAmount` of `asset` into `targetChannelId`'s commitment. The base
+     * holder (no pool) is a no-op: go-nitro's target channel already settled independently of
+     * the guarantee, so there is no raw balance to credit here. `ArmadaNitroAdjudicator`
+     * overrides this to spend the target channel's current commitment (if any) and mint a fresh
+     * owned commitment through `pool.transactOwned` worth its prior held value plus
+     * `guaranteeAmount`, read back afterward by `heldValue`.
+     */
+    function _settleReclaimExit(
+        address asset,
+        bytes32 targetChannelId,
+        uint256 guaranteeAmount
+    ) internal virtual {}
 
     /**
      * @notice Executes a single asset exit by paying out the asset and calling external contracts, as well as updating the holdings stored in this contract.
