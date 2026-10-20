@@ -1,0 +1,317 @@
+{
+  "id": "derived-arn-781",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. armada-nitro offers a generic IForceMoveApp (src/apps/ZkForceMoveApp.sol) whose stateIsSupported accepts a candidate state only when it carries a Groth16 proof that verifies, with the pool's existing Snark library, against a verifying key fixed at deployment, over public inputs bound to the state. Brief: docs/tasks/N4-zk-forcemove-app.md (Family F2).\nWhat holds now? Describe the current, observed state. No channel app in armada-nitro checks a zero-knowledge proof. The only apps are ConsensusApp and the vendored examples (HashLockedSwap). A channel cannot enforce a rule over hidden state.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run forge test --match-path test/ZkForceMoveApp.t.sol -vv: a state with a valid proof for a trivial circuit (y = x*x) is supported; a wrong public input, a mangled proof, and a proof array whose length is not 1 are each refused.\nWhat constraints apply? State them in plain prose. New code under src/apps/, never src/nitro/ (vendored, excluded from hooks). Reuse armada/privacy-pool/types/SnarkTypes.sol; no second Groth16 verifier. No asset, pool or adjudicator file changes. The existing forge test suite stays green.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro src/apps/ZkForceMoveApp.sol and test/ZkForceMoveApp.t.sol",
+  "restatement": "armada-nitro gets a new generic IForceMoveApp in src/apps/ZkForceMoveApp.sol. Its stateIsSupported function accepts a candidate state only when the state carries a Groth16 proof that verifies. The check uses the pool's existing Snark library from armada/privacy-pool/types/SnarkTypes.sol. The verifying key is fixed at deployment. The public inputs are bound to the state. Tests in test/ZkForceMoveApp.t.sol use a trivial circuit y = x*x. A valid proof is supported. A wrong public input, a mangled proof, and a proof array whose length is not 1 are each refused. The change adds no second verifier. It changes nothing in src/nitro, in assets, in the pool, or in the adjudicator. The existing forge test suite stays green.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A state with a valid Groth16 proof for the trivial circuit y = x*x is supported by ZkForceMoveApp.stateIsSupported."
+    },
+    {
+      "id": "c2",
+      "text": "A state whose proof is valid but whose public input is wrong is refused."
+    },
+    {
+      "id": "c3",
+      "text": "A state with a mangled proof is refused."
+    },
+    {
+      "id": "c4",
+      "text": "A state whose proof array has a length that is not 1 is refused."
+    },
+    {
+      "id": "c5",
+      "text": "The verifying key is fixed at deployment, and the proof is checked with the existing Snark library from armada/privacy-pool/types/SnarkTypes.sol. No second Groth16 verifier exists."
+    },
+    {
+      "id": "c6",
+      "text": "The new code is in src/apps/ZkForceMoveApp.sol with tests in test/ZkForceMoveApp.t.sol."
+    },
+    {
+      "id": "c7",
+      "text": "No asset, pool, adjudicator, or src/nitro file changes, and the existing forge test suite stays green."
+    }
+  ],
+  "goal": "Add a generic channel app, ZkForceMoveApp, that supports a state only when the state carries a valid Groth16 proof.",
+  "acceptance_criteria": [
+    "The check runs the app on a state with a valid proof for y = x*x. The app reports the state as supported.",
+    "The check runs the app on a state with a wrong public input. The app refuses the state.",
+    "The check runs the app on a state with a mangled proof. The app refuses the state.",
+    "The check runs the app on a state whose proof array does not hold exactly one proof. The app refuses the state.",
+    "The app source file imports the existing SnarkTypes library from the privacy pool.",
+    "The app source file holds no pairing code of its own, so it adds no second verifier.",
+    "The app source file exists under src/apps.",
+    "The test file exists under test.",
+    "The check compares the branch with main. It counts changed files in the vendored nitro folder, the asset files, the pool files, and the adjudicator files. The count is zero.",
+    "The check runs the whole forge test suite. No test fails."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The check runs the app on a state with a valid proof for y = x*x. The app reports the state as supported."
+    },
+    {
+      "id": "c2",
+      "text": "The check runs the app on a state with a wrong public input. The app refuses the state."
+    },
+    {
+      "id": "c3",
+      "text": "The check runs the app on a state with a mangled proof. The app refuses the state."
+    },
+    {
+      "id": "c4",
+      "text": "The check runs the app on a state whose proof array does not hold exactly one proof. The app refuses the state."
+    },
+    {
+      "id": "c5",
+      "text": "The app source file imports the existing SnarkTypes library from the privacy pool."
+    },
+    {
+      "id": "c6",
+      "text": "The app source file holds no pairing code of its own, so it adds no second verifier."
+    },
+    {
+      "id": "c7",
+      "text": "The app source file exists under src/apps."
+    },
+    {
+      "id": "c8",
+      "text": "The test file exists under test."
+    },
+    {
+      "id": "c9",
+      "text": "The check compares the branch with main. It counts changed files in the vendored nitro folder, the asset files, the pool files, and the adjudicator files. The count is zero."
+    },
+    {
+      "id": "c10",
+      "text": "The check runs the whole forge test suite. No test fails."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "The check runs the app on a state with a valid proof for y = x*x. The app reports the state as supported.",
+      "proves": "A valid proof makes the state supported.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_zk_forcemove_app.sh",
+        "args": [
+          "valid"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "supported",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "The check runs the app on a state with a wrong public input. The app refuses the state.",
+      "proves": "A wrong public input is refused.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_zk_forcemove_app.sh",
+        "args": [
+          "wrong_public_input"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "supported",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "The check runs the app on a state with a mangled proof. The app refuses the state.",
+      "proves": "A mangled proof is refused.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_zk_forcemove_app.sh",
+        "args": [
+          "mangled_proof"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "supported",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "The check runs the app on a state whose proof array does not hold exactly one proof. The app refuses the state.",
+      "proves": "A proof array with a length other than 1 is refused.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_zk_forcemove_app.sh",
+        "args": [
+          "bad_proof_array_length"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "supported",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep",
+      "description": "The app source file imports the existing SnarkTypes library from the privacy pool.",
+      "proves": "The app reuses the existing Snark library.",
+      "restatement_clause_id": "c5",
+      "pattern": "SnarkTypes\\.sol",
+      "files": [
+        "src/apps/ZkForceMoveApp.sol"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The app source file holds no pairing code of its own, so it adds no second verifier.",
+      "proves": "No second Groth16 verifier exists in the app.",
+      "restatement_clause_id": "c5",
+      "pattern": "function\\s+pairing|ecPairing",
+      "files": [
+        "src/apps/ZkForceMoveApp.sol"
+      ],
+      "clause_id": "c6"
+    },
+    {
+      "type": "file_exists",
+      "description": "The app source file exists under src/apps.",
+      "proves": "The app is in the required place.",
+      "restatement_clause_id": "c6",
+      "path": "src/apps/ZkForceMoveApp.sol",
+      "clause_id": "c7"
+    },
+    {
+      "type": "file_exists",
+      "description": "The test file exists under test.",
+      "proves": "The tests are in the required place.",
+      "restatement_clause_id": "c6",
+      "path": "test/ZkForceMoveApp.t.sol",
+      "clause_id": "c8"
+    },
+    {
+      "type": "behavior",
+      "description": "The check compares the branch with main. It counts changed files in the vendored nitro folder, the asset files, the pool files, and the adjudicator files. The count is zero.",
+      "proves": "No forbidden file changed.",
+      "restatement_clause_id": "c7",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_zk_forcemove_scope.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "forbidden_changes",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c9"
+    },
+    {
+      "type": "behavior",
+      "description": "The check runs the whole forge test suite. No test fails.",
+      "proves": "The existing suite stays green.",
+      "restatement_clause_id": "c7",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_forge_suite.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "failed",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1200,
+      "clause_id": "c10"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check_forge_suite.sh",
+    "scripts/check_zk_forcemove_app.sh",
+    "scripts/check_zk_forcemove_scope.sh"
+  ]
+}
