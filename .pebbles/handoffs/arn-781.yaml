@@ -1,0 +1,55 @@
+status: completed
+pebble_id: arn-781
+summary: >
+  Added src/apps/ZkForceMoveApp.sol, a generic IForceMoveApp whose stateIsSupported accepts
+  a candidate state only when its appData carries a Groth16 proof that verifies against a
+  VerifyingKey fixed at deployment, using the pool's existing Snark library (new files
+  PoolTypes.sol and SnarkTypes.sol committed inside the lib/armada-poc privacy-pool submodule
+  under contracts/privacy-pool/types/, which the armada/ foundry remap resolves
+  armada/privacy-pool/types/SnarkTypes.sol into -- no second Groth16 verifier in the app
+  itself). Proved the wiring end to end with a real Groth16 proof for a trivial y = x*x
+  circuit, compiled with circom2 and snarkjs and committed under
+  test/fixtures/zk-app/trivial/ (trivial.circom, verification_key.json, proof.json,
+  public.json; intermediate .ptau/.zkey files gitignored, not committed).
+  test/helpers/ZkAppFixture.sol loads and converts those JSON fixtures (snarkjs's G2
+  coordinate order swapped to the pool's G2Point convention) into Solidity structs.
+  test/ZkForceMoveApp.t.sol asserts all four required behaviors: a valid proof for y=9 is
+  supported; the same proof against the wrong public input (y=10) is refused; a structurally
+  mangled proof (one flipped bit of proof.a.x, taking the G1 point off the bn128 curve)
+  propagates Snark.verify's point-validity revert rather than being silently caught (the
+  brief's own "let it propagate" instruction -- the EC precompiles reject off-curve points by
+  reverting, not by returning false, so this is the one honest way to observe that refusal);
+  and a proof array whose length is not 1 reverts. No src/nitro, src/armada, existing pool, or
+  ArmadaNitroAdjudicator.sol file was modified (lib/armada-poc only gained two new files, no
+  existing file touched). Verified with `forge test --match-path test/ZkForceMoveApp.t.sol -vv`
+  (4/4 passing) and with the whole `forge test` suite (54 total, 4 pre-existing self-skipping
+  fork-only tests, 0 failed). Also authored the three gate scripts the derived spec drives
+  (scripts/check_zk_forcemove_app.sh <scenario>, scripts/check_zk_forcemove_scope.sh,
+  scripts/check_forge_suite.sh) and ran all ten acceptance tests from
+  contracts/specs/derived-arn-781.spec.json directly: all pass.
+cost: "~140k tokens"
+commits:
+  - "ffa086f"
+verify_transcript:
+  hooks:
+    - name: "forge test --match-path test/ZkForceMoveApp.t.sol -vv"
+      outcome: passed
+      duration_s: 5
+    - name: "forge test (whole suite, --json)"
+      outcome: passed
+      duration_s: 6
+    - name: "scripts/check_zk_forcemove_app.sh valid|wrong_public_input|mangled_proof|bad_proof_array_length"
+      outcome: passed
+      duration_s: 4
+    - name: "scripts/check_zk_forcemove_scope.sh"
+      outcome: passed
+      duration_s: 1
+    - name: "scripts/check_forge_suite.sh"
+      outcome: passed
+      duration_s: 6
+e2e_gate:
+  spec: contracts/specs/derived-arn-781.spec.json
+  command: "bash scripts/check_zk_forcemove_app.sh valid && bash scripts/check_zk_forcemove_app.sh wrong_public_input && bash scripts/check_zk_forcemove_app.sh mangled_proof && bash scripts/check_zk_forcemove_app.sh bad_proof_array_length && bash scripts/check_zk_forcemove_scope.sh && bash scripts/check_forge_suite.sh"
+  result: passed
+  ran_at_sha: "ffa086f"
+  mocks_in_path: false
