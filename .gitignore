@@ -44,3 +44,7 @@ node_modules/
 .worktrees/
 # Run artifacts that script/FixturenetScenario.s.sol writes during a fixturenet run
 /deployments/fixturenet-scenario-*
+
+# N4: zk-app circuit build artifacts (reproducible via docs/tasks/N4-zk-forcemove-app.md S2)
+test/fixtures/zk-app/trivial/*.ptau
+test/fixtures/zk-app/trivial/*.zkey
