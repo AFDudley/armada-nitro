@@ -1,0 +1,142 @@
+{
+  "id": "derived-arn-e16",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. src/apps/BattleshipForceMoveApp.sol is a channel app that extends ZkForceMoveApp (see S4 of the cited brief). Its AppData.publicInputs are [prevCommitment, nextCommitment, boardCommitment, target, result, stake]. It overrides stateIsSupported to require, before the inherited Groth16 check (super.stateIsSupported): the candidate stake (index 5) equals proof[0] stake else revert 'BattleshipForceMoveApp: stake changed'; the candidate boardCommitment (index 2) equals proof[0] boardCommitment else revert 'BattleshipForceMoveApp: board changed'; the candidate prevCommitment (index 0) equals proof[0] nextCommitment (index 1) else revert 'BattleshipForceMoveApp: commitment chain broken'. The committed fixtures hit.json and miss.json are a chained pair, so a two-move chain of valid moves is supported.\nWhat holds now? Describe the current, observed state. No BattleshipForceMoveApp exists. The files src/apps/BattleshipForceMoveApp.sol and test/BattleshipForceMoveApp.t.sol are absent. The verifying key and the chained hit and miss fixtures are committed at test/fixtures/zk-app/battleship/{vkey,hit,miss}.json. ZkForceMoveApp.stateIsSupported is already public virtual (from N5's LedgerForceMoveApp, a reference pattern at src/apps/LedgerForceMoveApp.sol).\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. forge test --match-contract BattleshipForceMoveAppTest finishes with no failed tests. The two-move test loads hit.json as proof[0] and miss.json as the candidate and stateIsSupported returns (true, empty string). A test that changes the candidate stake reverts with 'BattleshipForceMoveApp: stake changed'. A test that changes the candidate boardCommitment reverts with 'BattleshipForceMoveApp: board changed'. A test that breaks the commitment chain reverts with 'BattleshipForceMoveApp: commitment chain broken'. forge build and the whole forge test suite finish with no failed tests.",
+  "restatement": "The repo must gain src/apps/BattleshipForceMoveApp.sol and test/BattleshipForceMoveApp.t.sol. The contract extends ZkForceMoveApp. Its AppData.publicInputs are [prevCommitment, nextCommitment, boardCommitment, target, result, stake]. It overrides stateIsSupported. Before it calls super.stateIsSupported (the Groth16 check), it requires three things. The candidate stake (index 5) equals proof[0] stake, else it reverts with 'BattleshipForceMoveApp: stake changed'. The candidate boardCommitment (index 2) equals proof[0] boardCommitment, else it reverts with 'BattleshipForceMoveApp: board changed'. The candidate prevCommitment (index 0) equals proof[0] nextCommitment (index 1), else it reverts with 'BattleshipForceMoveApp: commitment chain broken'. With the committed fixtures, hit.json as proof[0] and miss.json as the candidate, stateIsSupported returns (true, empty string). The command forge build and the whole forge test suite finish with no failed tests.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "src/apps/BattleshipForceMoveApp.sol and test/BattleshipForceMoveApp.t.sol exist, and the contract extends ZkForceMoveApp and overrides stateIsSupported."
+    },
+    {
+      "id": "c2",
+      "text": "Before super.stateIsSupported runs, a candidate whose stake (publicInputs index 5) differs from proof[0] stake reverts with 'BattleshipForceMoveApp: stake changed'."
+    },
+    {
+      "id": "c3",
+      "text": "Before super.stateIsSupported runs, a candidate whose boardCommitment (publicInputs index 2) differs from proof[0] boardCommitment reverts with 'BattleshipForceMoveApp: board changed'."
+    },
+    {
+      "id": "c4",
+      "text": "Before super.stateIsSupported runs, a candidate whose prevCommitment (index 0) differs from proof[0] nextCommitment (index 1) reverts with 'BattleshipForceMoveApp: commitment chain broken'."
+    },
+    {
+      "id": "c5",
+      "text": "The two-move test loads hit.json as proof[0] and miss.json as the candidate, and stateIsSupported returns (true, empty string)."
+    },
+    {
+      "id": "c6",
+      "text": "forge build and the whole forge test suite finish with no failed tests."
+    }
+  ],
+  "goal": "Add BattleshipForceMoveApp, a channel app that extends ZkForceMoveApp and accepts a Battleship move only when the stake, the board commitment, and the commitment chain match the previous move, plus its forge tests.",
+  "acceptance_criteria": [
+    "The Battleship app can be used as a ZkForceMoveApp and its own stateIsSupported answers for a valid move.",
+    "A move that changes the stake is refused with the message 'BattleshipForceMoveApp: stake changed', even when the proof check would also fail.",
+    "A move that changes the board commitment is refused with the message 'BattleshipForceMoveApp: board changed'.",
+    "A move whose previous commitment does not match the earlier move's next commitment is refused with the message 'BattleshipForceMoveApp: commitment chain broken'.",
+    "Using the committed hit move and then the committed miss move, the app reports the second move as supported with an empty reason.",
+    "Building the project and running every forge test finishes with zero failed tests."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The Battleship app can be used as a ZkForceMoveApp and its own stateIsSupported answers for a valid move."
+    },
+    {
+      "id": "c2",
+      "text": "A move that changes the stake is refused with the message 'BattleshipForceMoveApp: stake changed', even when the proof check would also fail."
+    },
+    {
+      "id": "c3",
+      "text": "A move that changes the board commitment is refused with the message 'BattleshipForceMoveApp: board changed'."
+    },
+    {
+      "id": "c4",
+      "text": "A move whose previous commitment does not match the earlier move's next commitment is refused with the message 'BattleshipForceMoveApp: commitment chain broken'."
+    },
+    {
+      "id": "c5",
+      "text": "Using the committed hit move and then the committed miss move, the app reports the second move as supported with an empty reason."
+    },
+    {
+      "id": "c6",
+      "text": "Building the project and running every forge test finishes with zero failed tests."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "The Battleship app can be used as a ZkForceMoveApp and its own stateIsSupported answers for a valid move.",
+      "proves": "The contract and its test file exist, the app builds on ZkForceMoveApp, and it redefines stateIsSupported.",
+      "restatement_clause_id": "c1",
+      "test": "test_extendsZkForceMoveApp",
+      "clause_id": "c1"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A move that changes the stake is refused with the message 'BattleshipForceMoveApp: stake changed', even when the proof check would also fail.",
+      "proves": "The stake check exists, runs before the proof check, and every small change to it is caught.",
+      "restatement_clause_id": "c2",
+      "test": "test_revertsWhenStakeChanged",
+      "clause_id": "c2"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A move that changes the board commitment is refused with the message 'BattleshipForceMoveApp: board changed'.",
+      "proves": "The board check exists and every small change to it is caught.",
+      "restatement_clause_id": "c3",
+      "test": "test_revertsWhenBoardChanged",
+      "clause_id": "c3"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A move whose previous commitment does not match the earlier move's next commitment is refused with the message 'BattleshipForceMoveApp: commitment chain broken'.",
+      "proves": "The chain check exists and every small change to it is caught.",
+      "restatement_clause_id": "c4",
+      "test": "test_revertsWhenCommitmentChainBroken",
+      "clause_id": "c4"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "Using the committed hit move and then the committed miss move, the app reports the second move as supported with an empty reason.",
+      "proves": "A valid two-move chain is accepted and the checks do not reject good moves.",
+      "restatement_clause_id": "c5",
+      "test": "test_twoMoveChainSupported",
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "Building the project and running every forge test finishes with zero failed tests.",
+      "proves": "The new app builds and leaves the whole test suite green.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/forge_full_suite.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "failed",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/forge_full_suite.sh"
+  ]
+}
