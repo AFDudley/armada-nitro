@@ -1,0 +1,46 @@
+status: completed
+pebble_id: arn-e16
+summary: >
+  Added N6: src/apps/BattleshipForceMoveApp.sol, a channel app that extends
+  ZkForceMoveApp. Its stateIsSupported overrides and, before calling the
+  inherited Groth16 check (super.stateIsSupported), requires the candidate's
+  stake (public input 5), board commitment (public input 2), and commitment
+  chain (candidate input 0 == proof[0] input 1) to match proof[0]; otherwise
+  it reverts with 'BattleshipForceMoveApp: stake changed',
+  'BattleshipForceMoveApp: board changed', or
+  'BattleshipForceMoveApp: commitment chain broken'. Added
+  test/BattleshipForceMoveApp.t.sol (BattleshipForceMoveAppTest) with five
+  tests: the ZkForceMoveApp inheritance, the three revert paths (stake,
+  board, chain), and the valid two-move chain (hit.json as proof[0],
+  miss.json as candidate). Added test/helpers/BattleshipAppFixture.sol to
+  load the committed Battleship fixtures (vkey.json, hit.json, miss.json).
+  Added scripts/forge_full_suite.sh (the declared new entrypoint for the c6
+  acceptance gate): it runs `forge build` and `forge test`, parses the JSON
+  results, and prints {"failed": <n>} to stdout with exit code 0. Verified:
+  `forge test --match-contract BattleshipForceMoveAppTest` passes all 5
+  tests, and `bash scripts/forge_full_suite.sh` exits 0 and emits
+  {"failed": 0} on a clean stdout (forge's build/test output is steered to
+  stderr so the gate's stdout_json parse sees pure JSON).
+cost: "~60k tokens (N6 implementation: BattleshipForceMoveApp.sol, the
+  fixture loader, five tests, and the c6 acceptance script; forge build +
+  full suite green)."
+commits:
+  - "7a15158505c5ba2bbf2e9ab326283ba9e92e5dbc"
+  - "4ddc240c9b7c0f30827c4d9522590e202bee08e0"
+verify_transcript:
+  hooks:
+    - name: "forge test --match-contract BattleshipForceMoveAppTest"
+      outcome: passed
+      duration_s: 8
+    - name: "bash scripts/forge_full_suite.sh (forge build + full forge test suite)"
+      outcome: passed
+      duration_s: 40
+    - name: "pre-commit (full hook run, commit 7a15158)"
+      outcome: passed
+      duration_s: 3
+e2e_gate:
+  spec: contracts/specs/derived-arn-e16.spec.json
+  command: "bash scripts/forge_full_suite.sh"
+  result: passed
+  ran_at_sha: "4ddc240c9b7c0f30827c4d9522590e202bee08e0"
+  mocks_in_path: false
