@@ -26,6 +26,7 @@ library ZkAppFixture {
         );
 
         return VerifyingKey(
+            "",  // artifactsIPFSHash: the fixture JSON has no IPFS hash
             G1Point(
                 vm.parseJsonUint(json, '.vk_alpha_1[0]'),
                 vm.parseJsonUint(json, '.vk_alpha_1[1]')
