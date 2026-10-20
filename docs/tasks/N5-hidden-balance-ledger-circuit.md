@@ -183,6 +183,9 @@ Audit-critical. The husband checks, before merge:
 
 A production Phase-2 MPC ceremony for `Ledger` (operational, not code). A
 game-specific narrowing of which party's balance may move and by how much —
-that is N6. More than two participants. A third, on-chain-verified
+that is N6. More than two participants: the commitment hashes every balance and one salt with one circomlib
+`Poseidon(n)`, defined for at most 16 inputs (circomlib 2.0.5 `poseidon.circom`, state width up to 17), so one hash
+covers at most 15 parties; more parties need a tree of hashes (armada-laconic `engineering/14-shielded-games-over-nitro.md`).
+A third, on-chain-verified
 commitment-mismatch test case (armada-circuits's witness-generation failure
 already covers it).
