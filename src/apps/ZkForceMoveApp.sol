@@ -55,7 +55,7 @@ contract ZkForceMoveApp is IForceMoveApp {
         FixedPart calldata fixedPart,
         RecoveredVariablePart[] calldata proof,
         RecoveredVariablePart calldata candidate
-    ) external view override returns (bool, string memory) {
+    ) public view virtual override returns (bool, string memory) {
         require(proof.length == 1, 'proof.length != 1');
 
         StrictTurnTaking.requireValidTurnTaking(fixedPart, proof, candidate);
