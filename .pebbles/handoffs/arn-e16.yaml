@@ -1,0 +1,41 @@
+status: completed
+pebble_id: arn-e16
+summary: >-
+  Added src/apps/BattleshipForceMoveApp.sol, a channel app extending ZkForceMoveApp
+  whose stateIsSupported requires, before the inherited Groth16 check, that the
+  candidate's stake (publicInputs[5]), board commitment (publicInputs[2]), and
+  prevCommitment (publicInputs[0], chained to the prior state's nextCommitment at
+  publicInputs[1]) all match; added test/helpers/BattleshipAppFixture.sol to load
+  the committed vkey/hit/miss snarkjs fixtures (G2 coordinates swapped to the pool's
+  convention, same pattern as LedgerAppFixture); and added
+  test/BattleshipForceMoveApp.t.sol with the five required tests. Recreated
+  scripts/forge_full_suite.sh (builds the project and runs the full forge suite,
+  emitting {"failed": <n>} on stdout for the c6 gate). Verified by running
+  `forge test --match-contract BattleshipForceMoveAppTest` (5/5 pass: the IS-A +
+  valid-move test, the three pre-check revert tests, and the two-move
+  hit->miss chain test) and `bash scripts/forge_full_suite.sh`, which built the
+  project and ran the entire 58-test suite green (0 failed, 4 pre-existing skips
+  unrelated to this change). A debugging detour found and fixed a real bug along
+  the way: BattleshipAppFixture.loadMove was only assigning publicInputs[0..2],
+  leaving target/result/stake zeroed, which made the committed fixtures fail
+  Groth16 verification until all six publicSignals were loaded.
+cost: "~140k tokens"
+commits:
+  - "7fe0589"
+verify_transcript:
+  hooks:
+    - name: forge_build
+      outcome: passed
+      duration_s: 1
+    - name: forge_test_battleship_contract
+      outcome: passed
+      duration_s: 1
+    - name: forge_full_suite_sh
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-e16.spec.json
+  command: forge test --match-contract BattleshipForceMoveAppTest
+  result: passed
+  ran_at_sha: "7fe0589"
+  mocks_in_path: false
