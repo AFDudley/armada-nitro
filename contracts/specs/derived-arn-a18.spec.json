@@ -1,0 +1,156 @@
+{
+  "id": "derived-arn-a18",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A new gate job armada-assets-e2e, with its own compose job under stack/compose-jobs/ and its scripts, reuses env/gates/nitro-e2e/prepare.ts wallet and proof code. The acceptance stands up a fresh fixturenet with stack/scripts/fixturenet-new and a run-unique name (TMPDIR set to the repo .scratch), which builds and snapshots the base layer so a later run is warm. The fixturenet reaches ready with the Aave pool, waUSDC, USDC and the adjudicator deployed.\nWhat holds now? Describe the current, observed state. No armada-assets-e2e gate job exists. No such compose job exists under stack/compose-jobs/. No warm base-layer snapshot for the assets fixturenet exists.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the compose job. The script prints one JSON line with the fields job_files_present true, fixturenet_up true (the Aave pool, waUSDC and USDC respond on the fixturenet RPC), and snapshot_present true (a base-layer snapshot exists for a later warm run).",
+  "restatement": "The repo must gain a new gate job named armada-assets-e2e. It has its own compose job under stack/compose-jobs/ and its own scripts. The scripts reuse the wallet and proof code in env/gates/nitro-e2e/prepare.ts. Running the compose job stands up a fresh fixturenet with stack/scripts/fixturenet-new, using a run-unique name and TMPDIR set to the repo .scratch. That build also snapshots the base layer, so a later run starts warm. The fixturenet reaches ready with the Aave pool, waUSDC, USDC and the adjudicator deployed. The job prints one JSON line with job_files_present true, fixturenet_up true (the Aave pool, waUSDC and USDC respond on the fixturenet RPC), and snapshot_present true (a base-layer snapshot exists for a later warm run).",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A compose job for armada-assets-e2e exists under stack/compose-jobs/ with its own scripts; the printed JSON line has job_files_present true."
+    },
+    {
+      "id": "c2",
+      "text": "The job scripts reuse the wallet and proof code in env/gates/nitro-e2e/prepare.ts."
+    },
+    {
+      "id": "c3",
+      "text": "Running the job stands up a fresh fixturenet with stack/scripts/fixturenet-new under a run-unique name with TMPDIR set to the repo .scratch, and the fixturenet reaches ready with the Aave pool, waUSDC, USDC and the adjudicator deployed; the printed JSON line has fixturenet_up true (the Aave pool, waUSDC and USDC respond on the fixturenet RPC)."
+    },
+    {
+      "id": "c4",
+      "text": "The fixturenet build snapshots the base layer so a later run is warm; the printed JSON line has snapshot_present true (a base-layer snapshot exists for a later warm run)."
+    }
+  ],
+  "goal": "Add the armada-assets-e2e compose job that builds a ready assets fixturenet and a warm base-layer snapshot.",
+  "acceptance_criteria": [
+    "Running the new job prints one summary line that says the job files are present.",
+    "The job's files under its own folder in the compose jobs area mention the shared wallet and proof code file.",
+    "After a fresh run, the summary line says the fixture network is up and the lending pool, waUSDC and USDC answer on its RPC.",
+    "After a run, the summary line says a base-layer snapshot exists for a later warm run."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the new job prints one summary line that says the job files are present."
+    },
+    {
+      "id": "c2",
+      "text": "The job's files under its own folder in the compose jobs area mention the shared wallet and proof code file."
+    },
+    {
+      "id": "c3",
+      "text": "After a fresh run, the summary line says the fixture network is up and the lending pool, waUSDC and USDC answer on its RPC."
+    },
+    {
+      "id": "c4",
+      "text": "After a run, the summary line says a base-layer snapshot exists for a later warm run."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Running the new job prints one summary line that says the job files are present.",
+      "proves": "The armada-assets-e2e compose job and its scripts exist and the job runs to completion.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "job_files_present",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c1"
+    },
+    {
+      "description": "The job's files under its own folder in the compose jobs area mention the shared wallet and proof code file.",
+      "proves": "The new job reuses the existing wallet and proof code instead of copying it.",
+      "restatement_clause_id": "c2",
+      "type": "grep",
+      "pattern": "env/gates/nitro-e2e/prepare",
+      "files": [
+        "stack/compose-jobs/armada-assets-e2e/*"
+      ],
+      "count": {
+        "unit": "files",
+        "op": "ge",
+        "value": 1
+      },
+      "clause_id": "c2"
+    },
+    {
+      "description": "After a fresh run, the summary line says the fixture network is up and the lending pool, waUSDC and USDC answer on its RPC.",
+      "proves": "A fresh fixture network reaches ready with the assets deployed.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "fixturenet_up",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c3"
+    },
+    {
+      "description": "After a run, the summary line says a base-layer snapshot exists for a later warm run.",
+      "proves": "The build saves a base-layer snapshot so the next run starts warm.",
+      "restatement_clause_id": "c4",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "snapshot_present",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c4"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/compose-jobs/armada-assets-e2e/run.sh"
+  ]
+}
