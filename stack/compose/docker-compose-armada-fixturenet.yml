@@ -321,19 +321,52 @@ services:
         BEACON_IP=$(getent hosts armada-fixturenet-beacon | awk '{print $1}')
         # nimbus-eth2's own light-client-accelerated sync (--sync-light-client,
         # default true) fails `process_light_client_update` ("error=Invalid")
-        # on this fixturenet and tears the p2p connection down with it
-        # (observed: "failed dial existing: Stream Reset!" right after the
-        # peer connects, every time, with --sync-light-client at its
-        # default). Same symptom class as the proxy's rejected light-client
-        # updates (armada-laconic labbook, SFixturenetProof REPORT.md
-        # section 6-7): this pinned nimbus-eth2 build's light-client-update
-        # validation does not accept this fixturenet's updates, independent
-        # of any proxy code -- reproduced here with the stock
-        # nimbus_beacon_node binary. Disabling it only turns off nimbus's own
-        # consumption of light-client data to accelerate its sync; it still
+        # on this fixturenet; disabling it only turns off nimbus's own
+        # consumption of light-client data to accelerate its sync. It still
         # serves light-client data to others via --light-client-data-serve
         # below, and still gets a normal, unaccelerated block-by-block p2p
         # sync from its peer.
+        #
+        # A freshly-started nimbus-eth2 reports an incorrect Status message
+        # (finalized_epoch=1, finalized_root=genesis block root) in place of
+        # the spec value (finalized_epoch=0) for a node with no finality yet.
+        # Lighthouse's handshake rejects this as "Different finalized chain"
+        # (sigp/lighthouse v8.2.2,
+        # beacon_node/network/src/network_beacon_processor/rpc_methods.rs:120)
+        # once lighthouse's own finalized epoch passes 1, then permanently
+        # bans nimbus-eth2's fixed peer id. Root-caused against this
+        # fixturenet with --log-level="DEBUG; TRACE:libp2p,gossipsub" on this
+        # service and lighthouse's matching "Handshake Failure ... Different
+        # finalized chain" log line (armada-laconic
+        # .scratch/NimbusPair2/REPORT.md). Fix: bootstrap nimbus-eth2's
+        # database from lighthouse's REST API with `trustedNodeSync` before
+        # the normal p2p-following beacon node starts, so nimbus-eth2's own
+        # finalized checkpoint is real and matches lighthouse's from the
+        # first connection. This downloads a state and a block over REST; it
+        # does not use the light client sync protocol (that is the separate
+        # `--trusted-block-root` flag, not used here), so it does not hit the
+        # process_light_client_update defect above. The loop waits for
+        # lighthouse's first post-genesis finalized checkpoint, since a
+        # checkpoint still at genesis (slot 0) would carry the same defect.
+        if [ ! -d /root/beacon-nimbus/db ]; then
+          while :; do
+            rm -rf /root/beacon-nimbus/db
+            set +e
+            TNS_LOG=$(/home/user/nimbus_beacon_node trustedNodeSync \
+              --network=/data/metadata \
+              --data-dir=/root/beacon-nimbus \
+              --trusted-node-url=http://armada-fixturenet-beacon:5052 \
+              --non-interactive 2>&1)
+            set -e
+            echo "$TNS_LOG"
+            CKPT_SLOT=$(printf '%s\n' "$TNS_LOG" | grep 'Checkpoint written to database' | grep -o 'stateSlot=[0-9]*' | cut -d= -f2)
+            if [ -n "$CKPT_SLOT" ] && [ "$CKPT_SLOT" -gt 0 ]; then
+              break
+            fi
+            echo "trustedNodeSync: no post-genesis finalized checkpoint on lighthouse yet, retrying in 5s"
+            sleep 5
+          done
+        fi
         exec /home/user/nimbus_beacon_node \
           --data-dir=/root/beacon-nimbus \
           --network=/data/metadata \
@@ -354,7 +387,14 @@ services:
         - bash -c '>/dev/tcp/127.0.0.1/5052' 2>/dev/null
       interval: 5s
       timeout: 5s
-      retries: 30
+      # The trustedNodeSync bootstrap above (comment, further up) waits for
+      # lighthouse's first post-genesis finalized checkpoint before this
+      # service's REST port opens. start_period excludes that wait from the
+      # retry count, so a slow first finalization does not mark the
+      # container unhealthy before it has had a chance to start the REST
+      # server.
+      start_period: 6m
+      retries: 12
 
 volumes:
   armada_fixturenet_genesis:

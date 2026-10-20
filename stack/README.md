@@ -116,6 +116,19 @@ Notes:
   peer id that key produces. `armada-fixturenet-beacon`'s `--target-peers` is
   raised from 0 to 1 so lighthouse accepts that one connection; it still runs
   no discovery.
+- **nimbus-eth2 bootstraps from lighthouse's REST API before p2p-following
+  it.** A freshly-started nimbus-eth2 (v26.10.1) reports an incorrect Status
+  message (`finalized_epoch=1`, root = genesis block root, instead of the
+  spec value `finalized_epoch=0`) while it has no real finality yet.
+  Lighthouse's handshake treats that as "Different finalized chain" once
+  lighthouse's own finalized epoch passes 1, and permanently bans
+  nimbus-eth2's fixed peer id for the life of the lighthouse process.
+  `armada-fixturenet-nimbus-cl`'s command runs `nimbus_beacon_node
+  trustedNodeSync` against lighthouse's REST API first (retried until
+  lighthouse has a post-genesis finalized checkpoint), so nimbus-eth2's own
+  finalized checkpoint is real by the time it dials lighthouse over p2p. See
+  the compose file's comment on this service for the full root-cause
+  citation.
 - **nimbus-eth1 is not wired into the base-layer snapshot cache.** The cache
   (below) restores `geth_data` with its full history on a warm `fixturenet-new`
   restore, but `nimbus_el_data` and `nimbus_cl_data` are not part of that tar,
