@@ -1,0 +1,26 @@
+# armada-disclosure-acceptance (arn-2fd): runs the selective-disclosure acceptance script
+# (stack/scripts/armada-disclosure-acceptance.py). The script creates a fresh per-run
+# fixturenet with stack/scripts/fixturenet-new (a run-unique name, TMPDIR set to the repo's
+# .scratch), runs the selective-disclosure chain of custody (docs/tasks/16-selective-disclosure.md)
+# as real transactions (H1-H7), records every transaction and event into a disclosure package
+# file, verifies the hops, tears the fixturenet down, and prints one JSON line with hops_ok,
+# eoa2_usdc_delta, eoa_distinct, payout_note_owned, and package_path.
+#
+# The job runs the script (c2); the on-chain hops themselves run in the armada-disclosure job
+# (prepare.ts + script/DisclosureScenario.s.sol).
+services:
+  armada-disclosure-acceptance:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        exec python3 /src/armada-nitro/stack/scripts/armada-disclosure-acceptance.py
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:

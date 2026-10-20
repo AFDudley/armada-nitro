@@ -1,0 +1,83 @@
+# armada-disclosure (arn-2fd): the on-chain selective-disclosure hops (docs/tasks/16-selective-
+# disclosure.md) as real transactions on a fresh fixturenet:
+#   H1: a test EOA shields USDC (Shield event shows npk1).
+#   H2/H4: the note funds a hub channel through depositFromNote (Nullified event + the
+#           adjudicator's Deposited event).
+#   H7: the wallet and the hub co-sign the channel states (the state after the deposit through
+#        the finalized state).
+#   H5: the channel pays a SHIELD allocation to a fresh note of the same wallet.
+#   H6: that note is unshielded to a second test EOA.
+#
+# Stage 1 (H1/H2/H4): env/gates/nitro-e2e/prepare.ts shields USDC from a test account (H1) and
+# builds the real-proof (Groth16) channel deposit (H2's nullifier + H4's depositFromNote).
+# Stage 2 (H7/H5/H6): the disclosure scenario (script/DisclosureScenario.s.sol) -- each --sig
+# call is a separate forge invocation (a real transaction on the fixturenet).
+#
+# The job prints exactly one JSON line (the scenario's `evidence()`) to stdout:
+#   {"H7": {...}, "H5": {...}, "H6": {...}, "eoa2_usdc_delta": N, "eoa_distinct": true,
+#    "payout_note_owned": true}
+#
+# All state/keys come from the mounted armada_env volume at /env (c4/c5 of arn-e7a); the job
+# reaches geth by the compose service name (armada-fixturenet-geth:8545), never the host port.
+services:
+  armada-disclosure:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    # No host networking: HUB_RPC resolves to the compose service name (arn-e7a c3/c4).
+    # Every `$NAME` in the command block is written `$$NAME` (docker compose's escape for a
+    # literal `$`) and read from the container's real environment (set once, with defaults, by
+    # the `environment:` section) -- docker compose interpolates any *unescaped* `$NAME`/`${NAME}`
+    # in this file against the *host*'s environment at parse time, which would silently blank a
+    # variable this container's own shell was meant to read at runtime.
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Gates spend test-account USDC (shields, channel deposits); top the accounts back up to
+        # the funding target first so the funding postcondition and later gate runs hold.
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc http://armada-fixturenet-geth:8545 \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (docs/tasks/E9-operability.md); verify rather than
+        # downloading -- see docker-compose-armada-nitro-e2e.yml for the same step.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # ---- stage 1 (H1/H2/H4): real-proof shield + depositFromNote via prepare.ts ----
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        (
+          cd /src/armada-poc
+          MANIFEST_PATH="$${MANIFEST_PATH}" \
+          DEPOSITS_OUTPUT="/env/disclosure/deposits.json" \
+          CHALLENGE_DURATION="$${CHALLENGE_DURATION}" \
+          HUB_RPC="$${HUB_RPC}" DEPLOY_ENV=local CCTP_MODE=real \
+            npx hardhat run scripts/gates/prepare.ts --network hub
+        )
+
+        # ---- stage 2 (H7/H5/H6): the disclosure scenario ----
+        export KEYS_DIR=/env
+        run_script() {
+          forge script script/DisclosureScenario.s.sol "$$@" --rpc-url "$${HUB_RPC}" --slow --broadcast
+        }
+        # H7: the wallet and the hub co-sign the channel states (after-deposit -> final). Both
+        # are plain test-account EOAs (no custodian/FROST delegation -- orthogonal to what this
+        # gate tests, same rationale as docker-compose-armada-watchtower-e2e.yml). View-only: no
+        # transaction, the co-signed states themselves are the H7 attribution evidence.
+        forge script script/DisclosureScenario.s.sol --sig 'coSignStates()' --rpc-url "$${HUB_RPC}"
+        # H5: the channel pays a SHIELD allocation to a fresh note of the same wallet.
+        run_script --sig 'payout()'
+        # H6: the payout note is unshielded to a second test EOA.
+        run_script --sig 'unshieldNote()'
+        # Evidence (view, no broadcast): print the one JSON line with the H7/H5/H6 evidence.
+        forge script script/DisclosureScenario.s.sol --sig 'evidence()' --rpc-url "$${HUB_RPC}"
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
