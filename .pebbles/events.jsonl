@@ -1482,3 +1482,19 @@
 {"type":"comment","timestamp":"2026-10-20T07:36:36.284378Z","issue_id":"arn-27b","payload":{"body":"exophial-integration-attempt-started: at 3ee60fa546195793bfec0e40e68cd749af209841"}}
 {"type":"comment","timestamp":"2026-10-20T07:36:39.457425Z","issue_id":"arn-27b","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
 {"type":"close","timestamp":"2026-10-20T07:36:39.465936Z","issue_id":"arn-27b","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
+{"type":"close","timestamp":"2026-10-20T07:36:58.050309Z","issue_id":"arn-781","payload":{}}
+{"type":"create","timestamp":"2026-10-20T08:12:39.438914Z","issue_id":"arn-b58","payload":{"description":"Operator order 2026-10-20: the fixturenet runs a nimbus pair beside geth and lighthouse, as the nimbus verified proxy's light-client and data source. Verified on a fresh deployment: nimbus-eth1 block hash equals geth's; nimbus-eth2 finalized root equals lighthouse's; armada-env-verify passed; the proxy proved a pool Shield log and a rootHistory slot (armada-laconic labbook 6c18941).","priority":"2","title":"fixturenet: non-validating nimbus-eth1/nimbus-eth2 pair","type":"task"}}
+{"type":"comment","timestamp":"2026-10-20T08:13:43.665766Z","issue_id":"arn-b58","payload":{"body":"exophial-integration-attempt-started: at d064a536a1b419ee24f2c45ffbc70e86d3a9cf1d"}}
+{"type":"comment","timestamp":"2026-10-20T08:13:47.021702Z","issue_id":"arn-b58","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type":"close","timestamp":"2026-10-20T08:13:47.033446Z","issue_id":"arn-b58","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
+{"type":"create","timestamp":"2026-10-20T08:23:31.460075Z","issue_id":"arn-d0a","payload":{"description":"Operator ruling 2026-10-20: Sepolia is currently out of scope. Docs-only change to docs/ENVIRONMENT.md.","priority":"2","title":"docs: Sepolia is currently out of scope","type":"task"}}
+{"type":"comment","timestamp":"2026-10-20T08:24:29.542841Z","issue_id":"arn-d0a","payload":{"body":"exophial-integration-attempt-started: at 990c9fa9d3526a459bfb374e10cfb7cf0c5b48b0"}}
+{"type":"comment","timestamp":"2026-10-20T08:24:33.682768Z","issue_id":"arn-d0a","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type":"close","timestamp":"2026-10-20T08:24:33.693342Z","issue_id":"arn-d0a","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
+{"type":"comment","timestamp":"2026-10-20T08:46:50.711808Z","issue_id":"arn-315","payload":{"body":"estimate: 3\nscale: linear"}}
+{"type":"comment","timestamp":"2026-10-20T08:51:59.652902Z","issue_id":"arn-315","payload":{"base_sha":"6d9d46e30f8ce6500297682165ed5a63245a33b0","body":"base-sha: 6d9d46e30f8ce6500297682165ed5a63245a33b0","verdict_kind":"base_sha"}}
+{"type":"create","timestamp":"2026-10-20T08:53:38.031101Z","issue_id":"arn-a89","payload":{"description":"Operator-authored branch `migrate/repin-p2ab`, landed via `exophial integrate --branch` — no pebble id already tracked it.","priority":"2","title":"land: migrate/repin-p2ab","type":"task"}}
+{"type":"comment","timestamp":"2026-10-20T08:53:38.048867Z","issue_id":"arn-a89","payload":{"body":"branch-identity: migrate/repin-p2ab"}}
+{"type":"comment","timestamp":"2026-10-20T08:54:31.304447Z","issue_id":"arn-a89","payload":{"body":"exophial-integration-attempt-started: at 6d9d46e30f8ce6500297682165ed5a63245a33b0"}}
+{"type":"comment","timestamp":"2026-10-20T08:54:34.603175Z","issue_id":"arn-a89","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type":"close","timestamp":"2026-10-20T08:54:34.613205Z","issue_id":"arn-a89","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
