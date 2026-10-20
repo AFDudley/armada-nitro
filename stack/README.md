@@ -36,12 +36,16 @@ laconic-so deployment --dir ~/deployments/armada-fixturenet-e1 stop
 laconic-so deployment --dir ~/deployments/armada-fixturenet-e1 stop --delete-volumes
 ```
 
-The pod runs four services:
+The pod runs six services:
 - `armada-fixturenet-genesis` - generates EL + CL genesis (idempotent: skips if
   `/data/metadata/genesis.json` and `genesis.ssz` already exist)
 - `armada-fixturenet-geth` - upstream geth (EL, HTTP 8545, WS 8546, engine API 8551)
 - `armada-fixturenet-beacon` - lighthouse beacon node (CL beacon, HTTP 5052)
 - `armada-fixturenet-validator` - lighthouse validator client (4 validators)
+- `armada-fixturenet-nimbus-el` - nimbus-eth1 execution client, non-validating,
+  paired with `armada-fixturenet-nimbus-cl` (EL, HTTP 8545, engine API 8551)
+- `armada-fixturenet-nimbus-cl` - nimbus-eth2 beacon node, non-validating,
+  following lighthouse (CL beacon + light-client REST, HTTP 5052)
 
 Notes:
 - `armada-fixturenet-geth`'s healthcheck (`eth_blockNumber` via BusyBox `wget`) gates
@@ -94,6 +98,36 @@ Notes:
   geth runs with `--datadir.minfreedisk=64` (MB): its default floor (~2 GB free) would shut it down
   with a third of a 3 GB disk used. With the flag it uses the disk until 64 MB remain, then shuts down
   cleanly.
+- **The nimbus-eth1/nimbus-eth2 pair follows the same chain, independently.**
+  `armada-fixturenet-nimbus-el` and `armada-fixturenet-nimbus-cl` are a second,
+  non-validating client pair: `armada-fixturenet-nimbus-cl` follows
+  `armada-fixturenet-beacon` (lighthouse) over the consensus p2p network, and
+  drives `armada-fixturenet-nimbus-el`'s execution over their own engine API,
+  the same way lighthouse drives geth. They share no engine API or JWT with
+  geth/lighthouse: `armada-fixturenet-genesis` generates a second secret,
+  `/data/jwt/nimbus-jwtsecret`, alongside the existing `jwt/jwtsecret`. Both
+  nimbus images ship no `wget`/`curl`, so their healthchecks are a bare TCP
+  connect (`bash`'s `/dev/tcp`), not a JSON-RPC/REST round trip like geth's.
+- **nimbus-eth2 reaches lighthouse with a fixed peer id, not discovery.** This
+  devnet runs no discv5 bootnodes, so `armada-fixturenet-beacon`'s command
+  seeds a fixed secp256k1 network key into its data dir before starting
+  lighthouse (devnet-only material, no different in sensitivity from the test
+  mnemonic above); `armada-fixturenet-nimbus-cl`'s `--direct-peer` dials the
+  peer id that key produces. `armada-fixturenet-beacon`'s `--target-peers` is
+  raised from 0 to 1 so lighthouse accepts that one connection; it still runs
+  no discovery.
+- **nimbus-eth1 is not wired into the base-layer snapshot cache.** The cache
+  (below) restores `geth_data` with its full history on a warm `fixturenet-new`
+  restore, but `nimbus_el_data` and `nimbus_cl_data` are not part of that tar,
+  so a warm-restored fixturenet would start nimbus-eth1 at genesis block 0
+  while geth resumes at a non-zero head -- the two execution clients would
+  disagree until nimbus-eth1 catches up to the restored head via its own
+  genesis replay, which it does not currently do (no devp2p peering with geth,
+  see `armada-fixturenet-nimbus-el`'s compose comment). A deployment that
+  changes this compose file always gets a cold build (its base-layer cache key
+  includes this file's content, see "Cache key" below), so this gap does not
+  affect a deployment made right after this change; it would affect a later,
+  unrelated warm-restored deployment that reused such a cache.
 
 ### Environment reconciler
 
@@ -232,7 +266,12 @@ Included, with the normalisation applied to each:
   build output, so the `sources[]` pins need no separate line; and the `circuits`
   stage. **Not** the whole env image and **not** the `contracts` stage:
   `armada_nitro`'s own contracts are not part of the base chain, so recompiling
-  them must not invalidate the base snapshot.
+  them must not invalidate the base snapshot. `statusim/nimbus-eth1` and
+  `statusim/nimbus-eth2` are not in this list: they are pinned by digest
+  (`@sha256:...`) directly in the compose file, which the whole-file canonical
+  JSON entry below already covers, so a digest bump changes the key without a
+  `base-key.py` change; the explicit `docker image inspect` list exists only
+  for the three chain images above, which are pinned by mutable tag.
 - `env/reconciler/**/*.py` -- hash of each file's **AST with docstrings
   stripped**, so comments, formatting and docstrings do not count.
 - **Canonical JSON** (sorted keys, no whitespace): `env/targets/fixturenet-base.json`

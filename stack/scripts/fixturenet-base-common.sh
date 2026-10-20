@@ -55,7 +55,12 @@ SNAP_SHADOW_FORK_BASENAME="shadow-fork-block.json"
 # Every chain volume dir docker bind-mounts. On restore the CL ones start empty:
 # a fresh beacon + fresh validators build new databases on the regenerated
 # genesis (new genesis_validators_root => fresh slashing-protection DBs).
-SNAP_ALL_VOLUMES="armada_fixturenet_genesis geth_data beacon_data validator_0_data validator_1_data validator_2_data validator_3_data armada_env"
+# nimbus_el_data and nimbus_cl_data (the nimbus-eth1/nimbus-eth2 pair) also
+# start empty on every restore today: neither is part of the snapshot tar
+# below (stack/README.md "nimbus-eth1 is not wired into the base-layer
+# snapshot cache" explains why that is a gap for nimbus-eth1, which --
+# unlike the CL volumes -- should ideally resume from a non-zero head).
+SNAP_ALL_VOLUMES="armada_fixturenet_genesis geth_data beacon_data validator_0_data validator_1_data validator_2_data validator_3_data armada_env nimbus_el_data nimbus_cl_data"
 # The consensus-layer services (halting these halts block production; geth then
 # produces nothing, so its head is final and we can record it).
 CL_SERVICES="armada-fixturenet-beacon armada-fixturenet-validator-0 armada-fixturenet-validator-1 armada-fixturenet-validator-2 armada-fixturenet-validator-3"
