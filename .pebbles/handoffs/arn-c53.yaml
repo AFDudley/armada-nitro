@@ -1,0 +1,61 @@
+status: completed
+pebble_id: arn-c53
+summary: >
+  Added stack/scripts/armada-disclosure-acceptance.py and the selective-disclosure compose
+  job stack/compose-jobs/docker-compose-armada-disclosure.yml. The script stands up a fresh
+  fixturenet with stack/scripts/fixturenet-new, using a run-unique name and TMPDIR set to the
+  repo's .scratch, which builds and snapshots the base layer (cold path) or restores it (warm
+  path) so a later run is warm. It brings the fixturenet to ready by invoking the
+  armada-disclosure job via laconic-so run-job -- never a direct host read of the deployment's
+  own data directory, per the repo's "gates and runners reach the fixturenet only via run-job
+  and RPC" rule -- which reads the deployment's manifest from the mounted armada_env volume
+  (/env/manifest.json) and proves the pool, the HubCustodian and the adjudicator respond on
+  the fixturenet RPC with three real cast call reads, then prints its own JSON result line
+  that the host script reads back. stack/stacks/armada-nitro-fixturenet/stack.yml now lists
+  armada-disclosure so deploy create materializes the job's compose file into new
+  deployments. The acceptance script names env/gates/nitro-e2e/prepare.ts as the shared
+  wallet + proof code (createWallet + the Groth16 prover via lib/sdk/wallet + lib/sdk/prover).
+  Verified by running python3 stack/scripts/armada-disclosure-acceptance.py end-to-end twice
+  (once cold -- built and snapshotted the base layer in ~27 minutes -- and once warm, restoring
+  that snapshot in ~2 minutes); both runs printed exactly one JSON line,
+  {"harness_files_present": true, "fixturenet_up": true, "snapshot_present": true}, and exited
+  0. All pre-commit hooks pass, including the two gates this change is scoped by
+  (gate-no-host-deployment-access, job-no-host-deployment-path). Test-created fixturenet
+  deployments under ~/deployments/ were stopped and removed after verification; the base-layer
+  snapshot cache under ~/deployments/.snapshots/ was left in place (that is the warm-run
+  artifact the acceptance proves exists).
+cost: "~140k tokens"
+commits:
+  - "662fa568"
+verify_transcript:
+  hooks:
+    - name: gate-no-host-deployment-access
+      outcome: passed
+      duration_s: 0.2
+    - name: job-no-host-deployment-path
+      outcome: passed
+      duration_s: 0.2
+    - name: claude-md-coverage
+      outcome: passed
+      duration_s: 0.3
+    - name: reroute-main-commit
+      outcome: passed
+      duration_s: 0.1
+    - name: ruff
+      outcome: passed
+      duration_s: 0.3
+    - name: ruff-format
+      outcome: passed
+      duration_s: 0.2
+    - name: mypy
+      outcome: passed
+      duration_s: 1.0
+    - name: tdd-trailer
+      outcome: passed
+      duration_s: 0.1
+e2e_gate:
+  spec: contracts/specs/derived-arn-c53.spec.json
+  command: python3 stack/scripts/armada-disclosure-acceptance.py
+  result: passed
+  ran_at_sha: "662fa568"
+  mocks_in_path: false
