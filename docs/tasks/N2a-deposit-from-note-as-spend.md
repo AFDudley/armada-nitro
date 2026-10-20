@@ -1,5 +1,7 @@
 Chunk N2a · Family F4 · Points 7 · Route 5090
-Depends on: N1a, N1b, P2 (see "P2 interface this chunk assumes" below)
+Depends on: N1a, P2 (see "P2 interface this chunk assumes" below). N1b (the transfer/reclaim
+payout side) is a parallel chunk; this deposit chunk does not use N1b's code and may land before
+or after it.
 
 Read `src/ArmadaNitroAdjudicator.sol` (`depositFromNote`, `depositBinding`),
 `test/ArmadaNitroAdjudicator.t.sol`, `test/helpers/ArmadaNotes.sol` (`unshield`), and the
@@ -10,7 +12,7 @@ Repo: `armada-nitro`. Branch: `integrated` (work in a `task/N2a` branch cut from
 
 ## P2 interface this chunk assumes
 
-Chunk P2 is pinned at armada-poc a6c77939. It ships this surface, mirrored in
+Chunk P2 is pinned at armada-poc fffbbf31. It ships this surface, mirrored in
 `src/armada/IArmadaPool.sol`: `transactOwned(Transaction[])`, `preimageOf(bytes32)`, and a
 `BoundParams` with `ownerField` (bytes32) and `publicOutputs` (CommitmentPreimage[]). Confirm each
 assumption below against that file. If the real interface differs, stop and report the difference.
