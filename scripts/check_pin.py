@@ -78,9 +78,7 @@ def cmd_no_second_verifier():
     targets = ["test/", "test/helpers/", "script/"]
     for target in targets:
         for pattern in ["function verifyProof"]:
-            out = subprocess.run(
-                ["grep", "-rn", pattern, target], capture_output=True, text=True
-            )
+            out = subprocess.run(["grep", "-rn", pattern, target], capture_output=True, text=True)
             if out.stdout.strip():
                 verifier_defs += len(out.stdout.splitlines())
     for target in targets:
@@ -107,17 +105,17 @@ SUBCOMMANDS = {
 
 def main():
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "usage: check_pin.py <subcommand> [args]"}));
+        print(json.dumps({"error": "usage: check_pin.py <subcommand> [args]"}))
         return 1
     sub = sys.argv[1]
     if sub not in SUBCOMMANDS:
-        print(json.dumps({"error": "unknown subcommand: " + sub}));
+        print(json.dumps({"error": "unknown subcommand: " + sub}))
         return 1
     handler = SUBCOMMANDS[sub]
     args = sys.argv[2:]
     if sub in ("gitlink", "snark-file", "nitro-untouched"):
         if len(args) < 1:
-            print(json.dumps({"error": sub + " requires an argument"}));
+            print(json.dumps({"error": sub + " requires an argument"}))
             return 1
         handler(args[0])
     elif sub in ("forge-build", "forge-test", "pre-commit", "no-second-verifier"):
