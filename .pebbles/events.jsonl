@@ -1888,3 +1888,6 @@
 {"type":"comment","timestamp":"2026-10-21T05:40:24.829595Z","issue_id":"arn-d36","payload":{"body":"exophial-integration-attempt-started: at 811f90928df973151812eca928437fb1bf7c8d51"}}
 {"type":"comment","timestamp":"2026-10-21T05:41:33.456377Z","issue_id":"arn-d36","payload":{"body":"exophiald: merged (merged_after_rebase).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
 {"type":"close","timestamp":"2026-10-21T05:41:33.467417Z","issue_id":"arn-d36","payload":{"outcome":"merged_after_rebase","reason":"main had advanced since the branch was cut; the branch was rebased then fast-forwarded"}}
+{"type":"comment","timestamp":"2026-10-21T05:42:06.460464Z","issue_id":"arn-2be","payload":{"body":"Superseded by arn-d36 (G7-deploy), nitro integrated 63a3cf82. The worker's verified code (0a2dc903) hand-landed: env/gates/governance-stack/* + scripts/check_governance_stack.sh. Acceptance proven by running the oracle in the foreground on a real fixturenet — all 6 criteria true. The two worker dispatches died on exo-dc3 (omp backgrounds the long check and ends the turn). Merged via integrate --branch after arn-512 added npm ci to the nitro gate."}}
+{"type":"close","timestamp":"2026-10-21T05:42:06.775053Z","issue_id":"arn-2be","payload":{}}
+{"type":"comment","timestamp":"2026-10-21T05:42:07.102919Z","issue_id":"arn-da4","payload":{"body":"exophial-unparked: "}}

@@ -1,0 +1,227 @@
+{
+  "id": "derived-arn-da4",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. On the fixturenet, one scripted gate run exercises the first half of the Baal governance lifecycle against the real G1 to G6 contracts. A funded account commits USDC to ArmadaCrowdfund. finalize lands the proceeds as a Safe-owned shielded pool note. The account claims ARM shares, delegates, and casts one Baal vote whose weight equals that ARM voting power.\nWhat holds now? Describe the current, observed state. No such scenario runs today. The armada-nitro-e2e gate covers channel funding from a shielded note and a cooperative close only. No gate commits to ArmadaCrowdfund, finalizes it, claims ARM, or casts a Baal vote. There is no scenario script beside LocalScenario.s.sol for the governance lifecycle, and no step in env/gates/nitro-e2e that runs one.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the extended armada-nitro-e2e gate on a fresh fixturenet. After the run, read from live chain state, not simulated state. One: the crowdfund proceeds appear as a Safe-owned pool note in preimageOf and the Shield log, not a plain USDC balance (proceeds_shielded true). Two: the claimant ARM balance is above zero, the Safe threshold is 1, and the Safe owner is Baal (claimant_arm_positive true, safe_owner_is_baal true, safe_threshold equals 1). Three: one Baal vote records weight equal to the claimant ARM voting power (vote_power equals claimant_arm). The run fails before G7a exists and passes once the scenario and gate step are wired.\nWhat constraints apply? State them in plain prose. Extends the existing armada-nitro-e2e gate as a new step or sibling directory, it does not replace it. Fixturenet first, no Sepolia or mainnet. The scenario matches LocalScenario.s.sol structure and reads live chain state the way the gate reads Shield logs. It runs against the real fixturenet G1 to G6 contracts, not a Baal or Safe mock. Spend and ragequit are out of scope, they are G7b.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro env/gates/nitro-e2e and a new fixturenet scenario script beside script/LocalScenario.s.sol",
+  "restatement": "The armada-nitro-e2e gate must gain a new step or sibling directory, without replacing the existing channel-funding and cooperative-close coverage. On a fresh fixturenet, a new scenario script beside script/LocalScenario.s.sol runs once against the real G1 to G6 contracts. A funded account commits USDC to ArmadaCrowdfund and finalize lands the proceeds as a Safe-owned shielded pool note. The account claims ARM shares, delegates, and casts one Baal vote. The gate then reads live chain state and reports proceeds_shielded, claimant_arm_positive, safe_owner_is_baal, safe_threshold, and vote_power versus claimant_arm. Spend and ragequit are out of scope.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A new fixturenet scenario script exists beside script/LocalScenario.s.sol, matching its structure, for the governance lifecycle."
+    },
+    {
+      "id": "c2",
+      "text": "The gate step lives in env/gates/nitro-e2e as a new step or sibling directory and does not replace the existing armada-nitro-e2e coverage."
+    },
+    {
+      "id": "c3",
+      "text": "After the run, the crowdfund proceeds appear as a Safe-owned pool note in preimageOf and the Shield log, not a plain USDC balance (proceeds_shielded true), read from live chain state."
+    },
+    {
+      "id": "c4",
+      "text": "After the run, the claimant ARM balance is above zero, the Safe threshold is 1, and the Safe owner is Baal (claimant_arm_positive true, safe_owner_is_baal true, safe_threshold equals 1)."
+    },
+    {
+      "id": "c5",
+      "text": "After the run, one Baal vote records weight equal to the claimant ARM voting power (vote_power equals claimant_arm)."
+    },
+    {
+      "id": "c6",
+      "text": "The scenario runs only on the fixturenet against the real G1 to G6 contracts, with no Baal or Safe mock and no Sepolia or mainnet."
+    }
+  ],
+  "goal": "Add a fixturenet gate step that runs the first half of the Baal governance lifecycle against the real G1 to G6 contracts and reports the three live-chain results.",
+  "acceptance_criteria": [
+    "A governance lifecycle scenario script exists next to the local scenario script.",
+    "The gate directory holds a runnable governance lifecycle step, and the original prepare step is still present.",
+    "The original gate preparation file still exists and still mentions its channel funding and close coverage.",
+    "After the gate step runs on a fresh fixturenet, the crowdfund proceeds are a Safe-owned shielded pool note seen in the Shield log, not a plain USDC balance.",
+    "After the run, the claimant holds ARM, the Safe needs one signer, and Baal owns the Safe.",
+    "After the run, the weight of the one recorded Baal vote equals the claimant's ARM voting power.",
+    "The gate step reports that it ran on the fixturenet against the real contracts with no mocks."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A governance lifecycle scenario script exists next to the local scenario script."
+    },
+    {
+      "id": "c2",
+      "text": "The gate directory holds a runnable governance lifecycle step, and the original prepare step is still present."
+    },
+    {
+      "id": "c3",
+      "text": "The original gate preparation file still exists and still mentions its channel funding and close coverage."
+    },
+    {
+      "id": "c4",
+      "text": "After the gate step runs on a fresh fixturenet, the crowdfund proceeds are a Safe-owned shielded pool note seen in the Shield log, not a plain USDC balance."
+    },
+    {
+      "id": "c5",
+      "text": "After the run, the claimant holds ARM, the Safe needs one signer, and Baal owns the Safe."
+    },
+    {
+      "id": "c6",
+      "text": "After the run, the weight of the one recorded Baal vote equals the claimant's ARM voting power."
+    },
+    {
+      "id": "c7",
+      "text": "The gate step reports that it ran on the fixturenet against the real contracts with no mocks."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "file_exists",
+      "description": "A governance lifecycle scenario script exists next to the local scenario script.",
+      "proves": "A scenario script for the governance lifecycle was added beside LocalScenario.s.sol.",
+      "restatement_clause_id": "c1",
+      "path": "script/GovernanceLifecycle.s.sol",
+      "clause_id": "c1"
+    },
+    {
+      "type": "file_exists",
+      "description": "The gate directory holds a runnable governance lifecycle step, and the original prepare step is still present.",
+      "proves": "The governance step is added to the gate directory and the existing gate is not replaced.",
+      "restatement_clause_id": "c2",
+      "path": "env/gates/nitro-e2e/governance-lifecycle.sh",
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep",
+      "description": "The original gate preparation file still exists and still mentions its channel funding and close coverage.",
+      "proves": "The existing armada-nitro-e2e gate was extended, not replaced.",
+      "restatement_clause_id": "c2",
+      "pattern": ".",
+      "files": [
+        "env/gates/nitro-e2e/prepare.ts"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "After the gate step runs on a fresh fixturenet, the crowdfund proceeds are a Safe-owned shielded pool note seen in the Shield log, not a plain USDC balance.",
+      "proves": "Finalize shielded the proceeds, read from live chain state.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "proceeds_shielded",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "After the run, the claimant holds ARM, the Safe needs one signer, and Baal owns the Safe.",
+      "proves": "ARM was claimed and the Safe is configured with Baal as owner and threshold 1.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "claimant_arm_positive",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "safe_owner_is_baal",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "safe_threshold",
+          "op": "eq",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "After the run, the weight of the one recorded Baal vote equals the claimant's ARM voting power.",
+      "proves": "Delegation worked and the vote carried the full ARM voting power.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "vote_power_equals_claimant_arm",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "The gate step reports that it ran on the fixturenet against the real contracts with no mocks.",
+      "proves": "The run used the real G1 to G6 contracts on the fixturenet only.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [
+          "--report-json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "network",
+          "op": "eq",
+          "value": "fixturenet"
+        },
+        {
+          "observe": "stdout_json",
+          "field": "mocks_used",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c7"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "env/gates/nitro-e2e/governance-lifecycle.sh"
+  ]
+}
