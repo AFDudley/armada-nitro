@@ -1,0 +1,38 @@
+# The armada-assets-e2e gate job (arn-a18), invoked by stack/compose-jobs/
+# armada-assets-e2e/run.sh via `run-job armada-assets-e2e` (never a direct host read of
+# the deployment's own data directory -- gates and runners reach the fixturenet only via
+# run-job and geth RPC).
+#
+# The job's own scripts (stack/compose-jobs/armada-assets-e2e/armada-assets-e2e-job.py)
+# reuse the shared wallet + proof code in env/gates/nitro-e2e/prepare.ts (stage 1) and
+# prove the fixturenet is ready with the Aave pool, waUSDC, USDC and the adjudicator
+# deployed (stage 2). The job prints exactly one JSON line to stdout:
+#     {"fixturenet_up": true}
+#
+# No host networking: the job runs on the deployment's own docker network and reaches
+# geth by the compose service name (armada-fixturenet-geth:8545, arn-e7a c3/c4).
+services:
+  armada-assets-e2e:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    # Working dir is the POC repo (the job's stage 1 runs prepare.ts from /src/armada-poc,
+    # the same as docker-compose-armada-nitro-e2e.yml).
+    working_dir: /src/armada-poc
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        # Stage 1: the job's own scripts reuse the shared wallet + proof code in
+        # env/gates/nitro-e2e/prepare.ts (createWallet + the Groth16 prover via
+        # lib/sdk/wallet + lib/sdk/prover) -- run it via hardhat (same pattern as
+        # docker-compose-armada-nitro-e2e.yml).
+        # Stage 2: prove the fixturenet is ready (Aave pool, waUSDC, USDC and the
+        # adjudicator respond on the fixturenet RPC). The job prints one JSON line.
+        python3 /src/armada-nitro/stack/compose-jobs/armada-assets-e2e/armada-assets-e2e-job.py
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
