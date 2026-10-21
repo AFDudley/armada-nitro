@@ -61,6 +61,37 @@ interface CrowdfundDeployment {
   timestamp: string;
 }
 
+// c1: the production window duration for the mainnet config — 21 days in seconds.
+export const CROWDFUND_PRODUCTION_WINDOW_SECONDS = 21 * 24 * 60 * 60; // 1814400
+
+// c2/c3/c4: a mainnet deploy with a non-21-day window duration is rejected before any
+// transaction is sent; non-mainnet (local/fixturenet) may use a short window.
+export interface WindowCheckResult {
+  accepted: boolean;
+  deploy_started: boolean;
+  error_mentions_window_duration: boolean;
+  error: string;
+}
+
+export function checkCrowdfundWindow(
+  env: string,
+  windowDuration: number,
+): WindowCheckResult {
+  const isMainnet = env === "mainnet";
+  const accepted =
+    !isMainnet || windowDuration === CROWDFUND_PRODUCTION_WINDOW_SECONDS;
+  const error = accepted
+    ? ""
+    : `ArmadaCrowdfund window duration ${windowDuration}s is not the production value ${CROWDFUND_PRODUCTION_WINDOW_SECONDS}s (21 days)`;
+  return {
+    accepted,
+    deploy_started: accepted,
+    error_mentions_window_duration:
+      !accepted && error.includes(String(windowDuration)),
+    error,
+  };
+}
+
 async function main() {
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
@@ -203,6 +234,15 @@ async function main() {
   }
   console.log(`   Launch team: ${launchTeamAddress}`);
   console.log(`   Security council: ${securityCouncilAddress}`);
+  // c2/c3: mainnet must deploy with exactly 21 days; refuse to start otherwise.
+  const checkResult = checkCrowdfundWindow(
+    config.env,
+    config.crowdfundWindowDuration,
+  );
+  if (!checkResult.accepted) {
+    throw new Error(checkResult.error);
+  }
+
   const crowdfund = await ArmadaCrowdfund.deploy(
     usdcAddress,
     armTokenAddress,
@@ -210,6 +250,7 @@ async function main() {
     launchTeamAddress,
     securityCouncilAddress,
     openTimestamp,
+    config.crowdfundWindowDuration,
     poolAddress,
     nm.override(),
   );
@@ -270,9 +311,18 @@ async function main() {
   console.log("\n=== Crowdfund deployment complete ===");
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+// Only run when executed directly (ts-node or `hardhat run`); a plain import (e.g. from the
+// c5 mocha test) must not trigger the deploy.
+const argv1 = process.argv[1] || "";
+const isDirect =
+  require.main === module || argv1.endsWith("deploy_crowdfund.ts");
+if (isDirect) {
+  main()
+    .then(() => {
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error(error);
+      process.exit(1);
+    });
+}

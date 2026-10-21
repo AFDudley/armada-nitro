@@ -29,7 +29,7 @@ POC_LOG="$(mktemp)"
 
 # --- copy the new/patched scripts into the (otherwise untouched) submodule ---------------
 # Restored on exit so the submodule's working tree is clean again at the pinned commit.
-COPIED_FILES=(deploy_hedgey_lockup.ts governance-stack.ts deploy_crowdfund.ts)
+COPIED_FILES=(deploy_hedgey_lockup.ts governance-stack.ts deploy_crowdfund.ts summon-baal-safe.ts)
 # --- fixturenet lifecycle (arn-5dd): this gate OWNS the fixturenet it brings up -----------
 # Standalone (the arn-2be / arn-d36 deploy gate), it tears the fixturenet down on exit, on
 # success and on failure, so a run never leaks a cluster (18 leaked and saturated the host on
@@ -51,7 +51,7 @@ teardown_fixturenet() {
   rm -rf "$DEP" 2>/dev/null || true
 }
 cleanup() {
-  (cd "$POC_DIR" && git checkout -- scripts/deploy_crowdfund.ts 2>/dev/null || true)
+  (cd "$POC_DIR" && git checkout -- scripts/deploy_crowdfund.ts scripts/summon-baal-safe.ts 2>/dev/null || true)
   rm -f "$POC_DIR/scripts/deploy_hedgey_lockup.ts" "$POC_DIR/scripts/governance-stack.ts"
   teardown_fixturenet
 }
