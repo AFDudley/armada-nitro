@@ -1,0 +1,38 @@
+status: completed
+pebble_id: arn-512
+summary: >
+  Changed the committed-gate command in .exophial/config.yaml so the gate
+  installs the Node packages before it runs the pre-commit hooks. The old
+  gate.command was only ["pre-commit", "run", "--all-files"]; in a fresh gate
+  worktree that lacks node_modules, a branch that adds/edits a .ts file fails
+  eslint with ERR_MODULE_NOT_FOUND 'typescript-eslint' and prettier cannot run.
+  The new gate.command is
+  ["sh", "-c", "npm ci --legacy-peer-deps --offline && pre-commit run
+  --all-files"]: the shell runs `npm ci --legacy-peer-deps --offline` first,
+  populating node_modules, then `pre-commit run --all-files`. Verified by
+  running the full gate command in the worker-arn-512 worktree: npm ci added
+  118 packages (node_modules now present) and the pre-commit run passed with
+  the eslint and prettier hooks green. Committed on branch worker/arn-512.
+cost: ~40k tokens
+commits:
+  - "79d5d4f2d5e14f7be076638e27ac66eabd38c2b7"
+verify_transcript:
+  hooks:
+    - name: npm ci --legacy-peer-deps --offline
+      outcome: passed
+      duration_s: 1
+    - name: eslint
+      outcome: passed
+      duration_s: 2
+    - name: prettier
+      outcome: passed
+      duration_s: 2
+    - name: pre-commit run --all-files
+      outcome: passed
+      duration_s: 2
+e2e_exempt:
+  category: infrastructure
+  reason: >
+    config-only change to the committed gate command; the linked spec's
+    acceptance tests are static grep checks on .exophial/config.yaml, so no
+    no-mock outer-loop e2e is drivable.
