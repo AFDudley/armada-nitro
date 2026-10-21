@@ -90,7 +90,7 @@ const FROST_SIGNER = process.env.FROST_SIGNER || "frost-signer";
 const CHALLENGE_DURATION = Number(process.env.CHALLENGE_DURATION || "30");
 const DEPOSIT_AMOUNT = ethers.parseUnits("100", 6); // channel deposit == channel payout (no hub cut)
 const SHIELD_AMOUNT = ethers.parseUnits("150", 6); // nets >= DEPOSIT_AMOUNT after the pool's shield fee
-const SCAN_TIMEOUT_MS = 300_000;
+const SCAN_TIMEOUT_MS = 600_000;
 
 const OUTCOME_TUPLE =
   "tuple(address asset, tuple(uint8 assetType, bytes metadata) assetMetadata, tuple(bytes32 destination, uint256 amount, uint8 allocationType, bytes metadata)[] allocations)[]";
@@ -242,7 +242,7 @@ async function waitForBalance(
     await scanWalletBalances(walletId, chain);
     const bal = await getSpendableBalance(wallet, chain, tokenAddress);
     if (bal >= minAmount) return bal;
-    await new Promise((r) => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, 5000));
   }
   throw new Error(
     `spendable balance didn't reach ${minAmount} within ${SCAN_TIMEOUT_MS / 1000}s`,
