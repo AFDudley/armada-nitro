@@ -8,13 +8,15 @@ prover via lib/sdk/wallet + lib/sdk/prover), reused by the gate stage the harnes
 
 Brings the fixturenet to ready by running the armada-disclosure compose job (run-job, never a
 direct host read of the deployment's own data directory -- gates and runners reach the
-fixturenet only via run-job and geth RPC): that job proves the pool, the HubCustodian and the
-adjudicator respond on the fixturenet RPC and prints its own JSON result line, which this
-script reads back from the job's captured output.
+fixturenet only via run-job and geth RPC): that job runs the selective-disclosure hops H1-H7
+as real transactions (shield, depositFromNote, co-signed states, conclude, unshield), records
+every transaction and event into a disclosure package, and prints the hop result as a JSON
+line, which this script reads back from the job's captured output.
 
 Prints exactly one JSON line to stdout (all diagnostics go to stderr):
-    {"harness_files_present": true, "fixturenet_up": true, "snapshot_present": true}
-and exits 0.
+    {"hops_ok": true, "eoa2_usdc_delta": <int>, "eoa_distinct": true,
+     "payout_note_owned": true, "package_path": "..."}
+then tears the fixturenet down and exits 0.
 """
 
 from __future__ import annotations
@@ -30,7 +32,9 @@ from pathlib import Path
 
 # ---- paths -----------------------------------------------------------------
 SCRIPT = Path(__file__).resolve()
-REPO_ROOT = SCRIPT.parents[2]  # <repo>/stack/scripts/... -> <repo>
+REPO_ROOT = SCRIPT.parents[
+    2
+]  # <home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-252/stack/scripts/armada-disclosure-acceptance.py -> home/rix/code/git_puller/repos/armada-nitro/.worktrees/worker-arn-252
 TMPDIR = REPO_ROOT / ".scratch"  # TMPDIR is set to the repo .scratch
 DISCLOSURE_JOB = "armada-disclosure"  # stack/compose-jobs/docker-compose-armada-disclosure.yml
 
@@ -62,26 +66,38 @@ def resolve_laconic_so() -> str:
     return exe
 
 
-def run_disclosure_job(dep: Path, env: dict[str, str]) -> dict[str, object]:
-    """Run the armada-disclosure job -- the sanctioned run-job path, never a host read of the
-    deployment's own state -- which proves, from inside the deployment's own docker network,
-    that the pool, the HubCustodian and the adjudicator respond on the fixturenet RPC. Returns
-    its JSON result (the last JSON-parseable line of its captured output)."""
-    p = run(
-        [resolve_laconic_so(), "deployment", "--dir", str(dep), "run-job", DISCLOSURE_JOB],
-        env=env,
-    )
-    for line in reversed(p.stdout.splitlines()):
+def read_json_line(output: str) -> dict[str, object]:
+    """Return the last JSON-parseable line of the job output (the hop result)."""
+    parsed: dict[str, object] = {}
+    for line in reversed(output.splitlines()):
         line = line.strip()
         if not line:
             continue
         try:
-            parsed: object = json.loads(line)
+            candidate = json.loads(line)
+            if isinstance(candidate, dict):
+                parsed = candidate
         except json.JSONDecodeError:
             continue
-        if isinstance(parsed, dict) and "fixturenet_up" in parsed:
-            return parsed
-    raise RuntimeError(f"{DISCLOSURE_JOB} job printed no fixturenet_up JSON line")
+    return parsed
+
+
+def run_disclosure_job(dep: Path, env: dict[str, str]) -> dict[str, object]:
+    """Run the armada-disclosure job -- the sanctioned run-job path, never a direct host read
+    of the deployment's own data directory -- which executes the selective-disclosure hops
+    H1-H7 as real transactions, writes the disclosure package, and prints the hop result as
+    a JSON line. Returns that result (the last JSON-parseable line of the job's captured
+    output)."""
+    p = run(
+        [resolve_laconic_so(), "deployment", "--dir", str(dep), "run-job", DISCLOSURE_JOB],
+        env=env,
+    )
+    return read_json_line(p.stdout)
+
+
+def teardown(dep: Path, env: dict[str, str]) -> None:
+    """Tear the fixturenet down (c6): shut the deployment's containers via laconic-so down."""
+    run([resolve_laconic_so(), "deployment", "--dir", str(dep), "down"], env=env)
 
 
 def main() -> int:
@@ -101,32 +117,16 @@ def main() -> int:
     env["ARMADA_IMAGE_TAG"] = run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"]).stdout.strip()
     run(["bash", str(REPO_ROOT / "stack/scripts/fixturenet-new"), name], env=env)
 
-    # c4: bring the fixturenet to ready -- the armada-disclosure job proves the pool, the
-    # HubCustodian and the adjudicator respond on the fixturenet RPC.
-    job_result = run_disclosure_job(dep, env)
-    fixturenet_up = bool(job_result.get("fixturenet_up"))
+    # c4: bring the fixturenet to ready and execute the selective-disclosure hops H1-H7 as
+    # real transactions. The job also writes the disclosure package and prints the hop result
+    # as a JSON line (hops_ok, eoa2_usdc_delta, eoa_distinct, payout_note_owned, package_path).
+    hop_result = run_disclosure_job(dep, env)
 
-    # snapshot_present: a base-layer snapshot exists for a later warm run (the fixturenet-new
-    # cold path builds and snapshots the base layer; the warm path restores it).
-    snap_dir = Path(os.environ["HOME"]) / "deployments" / ".snapshots"
-    snapshot_present = any(snap_dir.glob("armada-fixturenet-base-*.tar.zst"))
+    # c6: tear the fixturenet down after recording the package.
+    teardown(dep, env)
 
-    # harness_files_present: the script exists and a compose job under stack/compose-jobs/
-    # refers to it (so the job runs it).
-    script_file = REPO_ROOT / "stack/scripts/armada-disclosure-acceptance.py"
-    job_refs = [
-        f
-        for f in (REPO_ROOT / "stack/compose-jobs").glob("*.yml")
-        if f.is_file() and "armada-disclosure-acceptance" in f.read_text()
-    ]
-    harness_files_present = script_file.exists() and len(job_refs) >= 1
-
-    result = {
-        "harness_files_present": harness_files_present,
-        "fixturenet_up": fixturenet_up,
-        "snapshot_present": snapshot_present,
-    }
-    print(json.dumps(result))
+    # Report the hop result (the disclosure package + every transaction and event).
+    print(json.dumps(hop_result))
     return 0
 
 

@@ -1,15 +1,16 @@
-# The selective-disclosure acceptance job (arn-c53), invoked by stack/scripts/
+# The selective-disclosure acceptance job (arn-c53/arn-252), invoked by stack/scripts/
 # armada-disclosure-acceptance.py via `run-job armada-disclosure` (never a direct host read
 # of the deployment's own data directory -- gates and runners reach the fixturenet only via
 # run-job and RPC).
 #
-# Reads the deployment's manifest from the mounted armada_env volume (/env, not a host path)
-# and proves the pool, the HubCustodian and the adjudicator respond on the fixturenet RPC with
-# three read-only `cast call`s, then prints exactly one JSON line to stdout:
-#     {"fixturenet_up": true}
+# Two parts, both run inside the deployment's own docker network (no host networking --
+# HUB_RPC is a compose service name):
+#   1. Up-check: the pool, the HubCustodian and the adjudicator respond on the fixturenet RPC.
+#   2. Hop runner: the selective-disclosure hops H1-H7 are executed as real transactions, the
+#      disclosure package is written, and one JSON line is printed to stdout.
 #
-# No host networking: HUB_RPC resolves to the compose service name (arn-e7a c3/c4); the job
-# runs on the deployment's own docker network.
+# The job prints the up-check JSON line, then the hop runner's JSON line (the last JSON
+# parseable line, which the acceptance script reads back).
 services:
   armada-disclosure:
     image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
@@ -18,6 +19,7 @@ services:
     command:
       - |
         set -e
+        # ---- part 1: up-check (pool, HubCustodian, adjudicator respond on the fixturenet RPC) ----
         python3 - <<'PY'
         import json
         import os
@@ -50,8 +52,22 @@ services:
         print(f"pool responds: {pool_ok}; adjudicator responds: {adjudicator_ok}; custodian responds: {custodian_ok}")
         print(json.dumps({"fixturenet_up": pool_ok and adjudicator_ok and custodian_ok}))
         PY
+
+        # ---- part 2: run the selective-disclosure hop runner (H1-H7 as real transactions) ----
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-disclosure/disclosure.ts /src/armada-poc/scripts/gates/disclosure.ts
+        (
+          cd /src/armada-poc
+          MANIFEST_PATH=/env/manifest.json \
+          PACKAGE_PATH=/env/nitro-disclosure/disclosure-package.json \
+          FROST_SHARES_DIR=/env \
+          FROST_SIGNER=frost-signer \
+          npx hardhat run scripts/gates/disclosure.ts
+        )
     environment:
       HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      FROST_SHARES_DIR: ${FROST_SHARES_DIR:-/env}
+      FROST_SIGNER: ${FROST_SIGNER:-frost-signer}
     volumes:
       - armada_env:/env
 
