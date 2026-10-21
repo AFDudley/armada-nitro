@@ -1,0 +1,74 @@
+{
+  "id": "derived-arn-512",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. armada-nitro's committed-gate command (gate.command in .exophial/config.yaml) runs an npm install (npm ci --legacy-peer-deps --offline, matching armada-poc's gate) before pre-commit run --all-files. The ephemeral committed-gate worktree then has node_modules, so a branch that adds or edits a .ts file runs eslint and prettier in the gate instead of failing.\nWhat holds now? Describe the current, observed state. gate.command in armada-nitro/.exophial/config.yaml is only ['pre-commit', 'run', '--all-files'] with no npm install. The ephemeral gate worktree has no node_modules, so a branch that adds or edits a .ts file fails eslint with ERR_MODULE_NOT_FOUND 'typescript-eslint' and prettier cannot run. TS chunks only merge on the worker path, where the worker's own npm ci populates node_modules.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. gate.command in armada-nitro/.exophial/config.yaml runs npm ci --legacy-peer-deps --offline before pre-commit run --all-files. In a fresh worktree with no node_modules, running the gate command populates node_modules and then runs pre-commit; eslint and prettier run on a .ts file with no ERR_MODULE_NOT_FOUND.",
+  "restatement": "The committed-gate command for armada-nitro, set as gate.command in .exophial/config.yaml, must install the Node packages before it runs the pre-commit hooks. It must run 'npm ci --legacy-peer-deps --offline', the same install armada-poc's gate uses. It must then run 'pre-commit run --all-files'. A fresh gate worktree then has node_modules. A branch that adds or edits a .ts file then gets real eslint and prettier checks, not an ERR_MODULE_NOT_FOUND failure for 'typescript-eslint'.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "gate.command in .exophial/config.yaml runs 'npm ci --legacy-peer-deps --offline'."
+    },
+    {
+      "id": "c2",
+      "text": "gate.command still runs 'pre-commit run --all-files'."
+    },
+    {
+      "id": "c3",
+      "text": "The npm install runs before 'pre-commit run --all-files' in gate.command, so node_modules exists when eslint and prettier run."
+    }
+  ],
+  "goal": "Make armada-nitro's committed gate install Node packages before the pre-commit run.",
+  "acceptance_criteria": [
+    "The gate setting in the repo's .exophial/config.yaml contains the exact install step 'npm ci --legacy-peer-deps --offline'.",
+    "The gate setting in .exophial/config.yaml still contains the 'pre-commit run --all-files' step.",
+    "In .exophial/config.yaml the install step 'npm ci --legacy-peer-deps --offline' appears before 'pre-commit run --all-files' in the same gate command."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The gate setting in the repo's .exophial/config.yaml contains the exact install step 'npm ci --legacy-peer-deps --offline'."
+    },
+    {
+      "id": "c2",
+      "text": "The gate setting in .exophial/config.yaml still contains the 'pre-commit run --all-files' step."
+    },
+    {
+      "id": "c3",
+      "text": "In .exophial/config.yaml the install step 'npm ci --legacy-peer-deps --offline' appears before 'pre-commit run --all-files' in the same gate command."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep",
+      "description": "The gate setting in the repo's .exophial/config.yaml contains the exact install step 'npm ci --legacy-peer-deps --offline'.",
+      "proves": "The gate installs Node packages with the same flags as armada-poc's gate.",
+      "restatement_clause_id": "c1",
+      "pattern": "npm ci --legacy-peer-deps --offline",
+      "files": [
+        ".exophial/config.yaml"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "The gate setting in .exophial/config.yaml still contains the 'pre-commit run --all-files' step.",
+      "proves": "The pre-commit run is kept in the gate after the change.",
+      "restatement_clause_id": "c2",
+      "pattern": "pre-commit run --all-files",
+      "files": [
+        ".exophial/config.yaml"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep",
+      "description": "In .exophial/config.yaml the install step 'npm ci --legacy-peer-deps --offline' appears before 'pre-commit run --all-files' in the same gate command.",
+      "proves": "Node packages are installed before the hooks run, so eslint and prettier can find their modules.",
+      "restatement_clause_id": "c3",
+      "pattern": "npm ci --legacy-peer-deps --offline.*pre-commit.*run.*--all-files",
+      "files": [
+        ".exophial/config.yaml"
+      ],
+      "clause_id": "c3"
+    }
+  ]
+}
