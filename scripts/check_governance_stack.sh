@@ -30,9 +30,30 @@ POC_LOG="$(mktemp)"
 # --- copy the new/patched scripts into the (otherwise untouched) submodule ---------------
 # Restored on exit so the submodule's working tree is clean again at the pinned commit.
 COPIED_FILES=(deploy_hedgey_lockup.ts governance-stack.ts deploy_crowdfund.ts)
+# --- fixturenet lifecycle (arn-5dd): this gate OWNS the fixturenet it brings up -----------
+# Standalone (the arn-2be / arn-d36 deploy gate), it tears the fixturenet down on exit, on
+# success and on failure, so a run never leaks a cluster (18 leaked and saturated the host on
+# 2026-10-21). A reusing caller that needs the live cluster (check_pool_spend.sh for arn-d62,
+# governance-lifecycle.sh for arn-5c3) sets KEEP_FIXTURENET=1 to hold the teardown and owns its
+# own. DEP uses $HOME/deployments/<NAME>; NAME/DEP are set below, before any exit that reaches
+# the trap after the fixturenet is built.
+LACONIC="${LACONIC_SO:-$(command -v laconic-so || true)}"
+teardown_fixturenet() {
+  [[ "${KEEP_FIXTURENET:-}" == "1" ]] && return 0
+  [[ -n "${DEP:-}" && -d "${DEP:-}" ]] || return 0
+  err "tearing down fixturenet ${NAME:-?} ..."
+  if [[ -n "$LACONIC" ]]; then
+    "$LACONIC" deployment --dir "$DEP" down --delete-volumes >/dev/null 2>&1 || true
+  fi
+  if mountpoint -q "$DEP/data" 2>/dev/null; then
+    umount -l "$DEP/data" 2>/dev/null || true
+  fi
+  rm -rf "$DEP" 2>/dev/null || true
+}
 cleanup() {
   (cd "$POC_DIR" && git checkout -- scripts/deploy_crowdfund.ts 2>/dev/null || true)
   rm -f "$POC_DIR/scripts/deploy_hedgey_lockup.ts" "$POC_DIR/scripts/governance-stack.ts"
+  teardown_fixturenet
 }
 trap cleanup EXIT
 for f in "${COPIED_FILES[@]}"; do
