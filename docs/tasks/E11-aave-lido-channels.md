@@ -57,3 +57,12 @@ Discrimination, in scratch copies (revert after); paste each failure line:
 
 ## Out of scope
 Liquidations, borrow games in channels (out of scope per the design), Lido withdrawals, Sepolia.
+
+## Cleanup
+The gate script tears down its fixturenet when it exits. It runs `laconic-so
+deployment --dir <dir> down --delete-volumes`. It then removes the deployment
+directory. It does this on a normal exit. It does this on an error exit. An
+exit trap runs the teardown. After the gate exits, no armada-assets-e2e
+fixturenet deployment runs. No deployment directory stays. If a stand-up script
+returns the fixturenet to a caller, a `KEEP_FIXTURENET=1` flag from the caller
+holds the teardown, and the caller owns the teardown.
