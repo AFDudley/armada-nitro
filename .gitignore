@@ -48,3 +48,8 @@ node_modules/
 # N4: zk-app circuit build artifacts (reproducible via docs/tasks/N4-zk-forcemove-app.md S2)
 test/fixtures/zk-app/trivial/*.ptau
 test/fixtures/zk-app/trivial/*.zkey
+
+# G7-deploy (arn-2be): armada-circuits release artifacts, fetched at deploy time by
+# lib/armada-poc's scripts/fetch-circuits.sh into this sibling-of-the-submodule path
+# (lib/sdk/armada-artifacts.ts's expected layout); never vendored.
+/lib/armada-circuits/
