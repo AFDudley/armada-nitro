@@ -62,6 +62,7 @@ services:
           PACKAGE_PATH=/env/nitro-disclosure/disclosure-package.json \
           FROST_SHARES_DIR=/env \
           FROST_SIGNER=frost-signer \
+          HUB_RPC="$$HUB_RPC" DEPLOY_ENV=local CCTP_MODE=real \
           npx hardhat run scripts/gates/disclosure.ts
         )
     environment:
