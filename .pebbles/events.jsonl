@@ -1996,3 +1996,8 @@
 {"type":"comment","timestamp":"2026-10-21T13:12:08.988872Z","issue_id":"arn-d09","payload":{"body":"exophial-integration-attempt-started: at 949df4ad3648d7f1e9e145e92fc6fdf006cd1e4f"}}
 {"type":"comment","timestamp":"2026-10-21T13:12:17.590511Z","issue_id":"arn-d09","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
 {"type":"close","timestamp":"2026-10-21T13:12:17.601135Z","issue_id":"arn-d09","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
+{"type":"create","timestamp":"2026-10-21T13:14:17.681452Z","issue_id":"arn-941","payload":{"description":"Operator-authored branch `hand/arn-5dd-govstack-teardown`, landed via `exophial integrate --branch` — no pebble id already tracked it.","priority":"2","title":"land: hand/arn-5dd-govstack-teardown","type":"task"}}
+{"type":"comment","timestamp":"2026-10-21T13:14:17.746905Z","issue_id":"arn-941","payload":{"body":"branch-identity: hand/arn-5dd-govstack-teardown"}}
+{"type":"comment","timestamp":"2026-10-21T13:15:30.898870Z","issue_id":"arn-941","payload":{"body":"exophial-integration-attempt-started: at 818b1cff59c65a561f7cdd02c79be564c095a2bb"}}
+{"type":"comment","timestamp":"2026-10-21T13:15:34.576607Z","issue_id":"arn-941","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type":"close","timestamp":"2026-10-21T13:15:34.587621Z","issue_id":"arn-941","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
