@@ -1,0 +1,84 @@
+status: blocked
+pebble_id: arn-da4
+summary: >
+  Added script/GovernanceLifecycle.s.sol (a forge script matching
+  LocalScenario.s.sol's structure: fund -> finalize -> claim -> sponsor -> vote
+  -> report phases for the first half of the Baal governance lifecycle) and
+  env/gates/nitro-e2e/governance-lifecycle.sh (a new sibling gate step that
+  reuses scripts/check_governance_stack.sh to stand up the real G1-G6 stack on
+  a fresh fixturenet, then drives the scenario and emits the report JSON).
+  env/gates/nitro-e2e/prepare.ts is untouched. Verified: `forge build` compiles
+  the new script cleanly against the real ArmadaCrowdfund/ArmadaToken/
+  MockUSDCV2/PrivacyPool/Baal/Safe contracts (lib/armada-poc, with submodules
+  populated via `git submodule update --init --recursive` to get there), and
+  `bash -n` validates the gate script's syntax. The behavior acceptance tests
+  (c4-c7, which require an actual fixturenet run) could not be executed and
+  will not pass as specified: ArmadaCrowdfund.WINDOW_DURATION is a Solidity
+  `constant` (21 days) with no deploy-time override in the real, unmodified
+  contract, and finalize() requires block.timestamp > windowEnd. A real geth
+  fixturenet (not Anvil) has no time-travel RPC -- this repo's own code
+  (env/gates/governance-stack/deploy_crowdfund.ts's comments, docs/ENVIRONMENT.md)
+  explicitly notes real geth lacks anvil_setCode/hardhat_impersonateAccount and
+  the existing watchtower/nitro-e2e gates instead literally `sleep` out real
+  challenge windows measured in tens of seconds, not three weeks. There is no
+  way to reach `block.timestamp > windowEnd` within the spec's 1800s
+  timeout other than literally waiting 21 real days. I also found and resolved
+  a second, smaller blocker in the design (not a blocker to merge, just
+  recorded for context): ArmadaCrowdfund.MIN_SALE is $1,000,000 and one
+  committer cannot reach it alone (a hop-0 seed caps at $15,000), so fund()
+  whitelists and funds 67 synthetic seed accounts to clear the floor -- this
+  part is real and would work once the time blocker is resolved.
+cost: ~95k tokens
+commits:
+  - "e7ba0f50710a595080f5c3f049f495547f108b95"
+blocker: >
+  ArmadaCrowdfund.sol declares `uint256 public constant WINDOW_DURATION = 21 days;`
+  with no constructor parameter or deploy-time override anywhere in the deploy
+  scripts (lib/armada-poc/scripts/deploy_crowdfund.ts only configures
+  `_openTimestamp`, which sets windowEnd = openTimestamp + WINDOW_DURATION, never
+  WINDOW_DURATION itself). ArmadaCrowdfund.finalize() requires
+  `block.timestamp > windowEnd`. On the real fixturenet (go-ethereum + lighthouse,
+  not Anvil/Hardhat), block.timestamp advances only with real wall-clock time --
+  there is no evm_increaseTime/anvil_setCode/hardhat_impersonateAccount style
+  RPC to fast-forward it (confirmed against this repo's own comments:
+  env/gates/governance-stack/deploy_crowdfund.ts and docs/ENVIRONMENT.md both
+  document real geth's lack of these dev-node RPCs; the existing
+  armada-nitro-e2e and watchtower gates instead literally `sleep` out real
+  challenge windows, but those windows are tens of seconds, not 21 days).
+  The acceptance spec's behavior tests (contracts/specs/derived-arn-da4.spec.json,
+  clauses c4-c7) run `governance-lifecycle.sh --report-json` with a 1800-second
+  timeout and expect `finalize()` to have already succeeded by the time the
+  script reports. That is structurally impossible against the real, unmodified
+  ArmadaCrowdfund contract within any timeout under 21 days (≈1,814,400s).
+next_action: >
+  This needs a product/spec decision, not more engineering: either (a) approve
+  a short-window test build of ArmadaCrowdfund specifically for this gate (e.g.
+  a thin fork with WINDOW_DURATION shortened to minutes, deployed only by
+  governance-lifecycle.sh, never by the production deploy scripts) -- this
+  would be a deviation from "the real G1-G6 contracts" that the brief's
+  constraints explicitly rule out without sign-off, so I did not do it
+  unilaterally; or (b) relax contracts/specs/derived-arn-da4.spec.json's
+  behavior-test timeout to something that can span 21 real days (e.g. a
+  long-running scheduled job rather than a synchronous 1800s gate check); or
+  (c) identify an actual time-travel mechanism on this fixturenet's geth/
+  lighthouse pair that I missed (I checked SLOT_DURATION_MS in
+  stack/compose/docker-compose-armada-fixturenet.yml -- it couples 1:1 with
+  real wall-clock slot timing, so a shorter slot does not shorten 21 real
+  days). Once one of these is decided, env/gates/nitro-e2e/governance-lifecycle.sh
+  and script/GovernanceLifecycle.s.sol are otherwise complete and compile
+  clean; only the wait-for-windowEnd step needs to change.
+verify_transcript:
+  hooks:
+    - name: forge build
+      outcome: passed
+      duration_s: 17
+    - name: bash -n governance-lifecycle.sh
+      outcome: passed
+      duration_s: 1
+e2e_exempt:
+  category: outer-loop-undrivable
+  reason: >
+    The real end-to-end behavior (crowdfund finalize on a real fixturenet)
+    cannot be driven within the spec's 1800s timeout: it requires
+    block.timestamp to cross a 21-day window on a chain with no time-travel
+    RPC. See blocker/next_action above.
