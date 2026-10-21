@@ -1976,3 +1976,6 @@
 {"type":"comment","timestamp":"2026-10-21T11:11:27.008125Z","issue_id":"arn-1cd","payload":{"body":"intake-status: complete"}}
 {"type":"comment","timestamp":"2026-10-21T11:11:27.020366Z","issue_id":"arn-1cd","payload":{"body":"exophial-cli-authoring-complete: "}}
 {"type":"comment","timestamp":"2026-10-21T11:13:25.617327Z","issue_id":"arn-1cd","payload":{"body":"estimate: 9\nscale: linear"}}
+{"type":"comment","timestamp":"2026-10-21T12:09:13.282307Z","issue_id":"arn-1cd","payload":{"base_sha":"98bdbc815a8072ae1f258362c50ef3b20f68f586","body":"base-sha: 98bdbc815a8072ae1f258362c50ef3b20f68f586","verdict_kind":"base_sha"}}
+{"type":"dep_add","timestamp":"2026-10-21T12:44:39.730576Z","issue_id":"arn-5c3","payload":{"dep_type":"blocks","depends_on":"arn-d36"}}
+{"type":"comment","timestamp":"2026-10-21T12:44:40.019737Z","issue_id":"arn-5c3","payload":{"body":"Coordinator: the dispatcher withheld this pebble (exo-259 rule) because the description says 'BLOCKED on the old 21-day WINDOW_DURATION constant', a historical statement. Added the real dependency arn-5c3 -\u003e arn-d36 (the merged G7 deploy harness this gate uses), which covers it."}}

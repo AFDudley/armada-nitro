@@ -1,0 +1,297 @@
+{
+  "id": "derived-arn-5c3",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. On the fixturenet, one scripted gate run exercises the first half of the Baal governance lifecycle against the real G1-G6 contracts, extending the arn-d36 governance-stack harness (no new fixturenet harness). A funded account commits USDC to ArmadaCrowdfund. The fixturenet deploy passes a SHORT crowdfund window duration (CROWDFUND_WINDOW_DURATION, for example 60 seconds) to the ArmadaCrowdfund constructor; the window is now an immutable constructor argument, not the 21-day constant, so the scenario waits out the real short window and then calls finalize. finalize lands the proceeds as a Safe-owned shielded pool note. The account claims ARM shares, delegates, and casts one Baal vote whose weight equals that ARM voting power. The Baal summon passes SHORT votingPeriod and gracePeriod (harness config, not a contract change) so the vote completes within the gate. The gate reads live chain state and emits one JSON object. Acceptance: proceeds_shielded is true; claimant_arm_positive is true; safe_owner_is_baal is true; safe_threshold equals 1; vote_power equals claimant_arm. Fixturenet only; it refuses sepolia and mainnet.\nWhat holds now? Describe the current, observed state. The ArmadaCrowdfund active-window length is now an immutable constructor argument (poc integrated db15af17; nitro lib/armada-poc re-pinned to db15af17 at nitro integrated c97f31d4). A prior worker built env/gates/nitro-e2e/governance-lifecycle.sh and script/GovernanceLifecycle.s.sol but it BLOCKED on the old 21-day WINDOW_DURATION constant: finalize requires block.timestamp greater than windowEnd, undrivable on a real geth+lighthouse fixturenet with no time-travel RPC. No governance-lifecycle gate step runs today. The arn-d36 governance-stack harness (scripts/check_governance_stack.sh, env/gates/governance-stack/governance-stack.ts) deploys G1-G6 on a fresh fixturenet and is the base to extend.",
+  "restatement": "One scripted gate run on the fixturenet must exercise the first half of the Baal governance lifecycle against the real G1-G6 contracts, extending the arn-d36 governance-stack harness instead of adding a new one. A funded account commits USDC to ArmadaCrowdfund. The fixturenet deploy passes a short CROWDFUND_WINDOW_DURATION (for example 60 seconds) to the ArmadaCrowdfund constructor, and the scenario waits out the real window and then calls finalize. finalize puts the proceeds into the Safe as a shielded pool note. The account claims ARM shares, delegates, and casts one Baal vote whose weight equals its ARM voting power. The Baal summon uses short votingPeriod and gracePeriod set in the harness config so the vote finishes inside the gate. The gate reads live chain state and prints one JSON object with proceeds_shielded true, claimant_arm_positive true, safe_owner_is_baal true, safe_threshold equal to 1, and vote_power equal to claimant_arm. It runs on the fixturenet only and refuses sepolia and mainnet.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "After the account commits USDC and finalize is called once the short window has passed, the gate JSON field proceeds_shielded is true, meaning the proceeds reached the Safe as a shielded pool note."
+    },
+    {
+      "id": "c2",
+      "text": "After the account claims ARM shares, the gate JSON field claimant_arm_positive is true."
+    },
+    {
+      "id": "c3",
+      "text": "The gate JSON field safe_owner_is_baal is true."
+    },
+    {
+      "id": "c4",
+      "text": "The gate JSON field safe_threshold equals 1."
+    },
+    {
+      "id": "c5",
+      "text": "The one Baal vote cast by the account has vote_power equal to claimant_arm, so the gate reports that match as true."
+    },
+    {
+      "id": "c6",
+      "text": "The gate runs on the fixturenet only and refuses sepolia and mainnet."
+    },
+    {
+      "id": "c7",
+      "text": "The fixturenet deploy passes CROWDFUND_WINDOW_DURATION to the ArmadaCrowdfund constructor, and the Baal summon sets short votingPeriod and gracePeriod in the harness config, so the real window can be waited out within the gate."
+    }
+  ],
+  "goal": "A single fixturenet gate run proves the crowdfund-to-vote half of the Baal governance lifecycle and prints the five required facts as one JSON object.",
+  "acceptance_criteria": [
+    "Running the governance lifecycle gate on a fresh fixturenet ends successfully and reports that the crowdfund proceeds were shielded into the Safe.",
+    "The gate report shows that the funded account holds a positive amount of ARM after claiming its shares.",
+    "The gate report shows that the Safe is owned by the Baal contract.",
+    "The gate report shows the Safe signing threshold is exactly 1.",
+    "The gate report shows that the weight of the one Baal vote equals the account's ARM balance. The gate prints vote_power_equals_claimant_arm as true only when the two live values match.",
+    "Asking the gate to run against sepolia is refused with a failing exit status before it does anything.",
+    "Asking the gate to run against mainnet is refused with a failing exit status before it does anything.",
+    "The fixturenet deploy code names CROWDFUND_WINDOW_DURATION as the value it passes for the crowdfund window.",
+    "The harness config sets both votingPeriod and gracePeriod for the Baal summon."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the governance lifecycle gate on a fresh fixturenet ends successfully and reports that the crowdfund proceeds were shielded into the Safe."
+    },
+    {
+      "id": "c2",
+      "text": "The gate report shows that the funded account holds a positive amount of ARM after claiming its shares."
+    },
+    {
+      "id": "c3",
+      "text": "The gate report shows that the Safe is owned by the Baal contract."
+    },
+    {
+      "id": "c4",
+      "text": "The gate report shows the Safe signing threshold is exactly 1."
+    },
+    {
+      "id": "c5",
+      "text": "The gate report shows that the weight of the one Baal vote equals the account's ARM balance. The gate prints vote_power_equals_claimant_arm as true only when the two live values match."
+    },
+    {
+      "id": "c6",
+      "text": "Asking the gate to run against sepolia is refused with a failing exit status before it does anything."
+    },
+    {
+      "id": "c7",
+      "text": "Asking the gate to run against mainnet is refused with a failing exit status before it does anything."
+    },
+    {
+      "id": "c8",
+      "text": "The fixturenet deploy code names CROWDFUND_WINDOW_DURATION as the value it passes for the crowdfund window."
+    },
+    {
+      "id": "c9",
+      "text": "The harness config sets both votingPeriod and gracePeriod for the Baal summon."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Running the governance lifecycle gate on a fresh fixturenet ends successfully and reports that the crowdfund proceeds were shielded into the Safe.",
+      "proves": "The proceeds reach the Safe as a shielded note after the short real window and finalize.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "proceeds_shielded",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "The gate report shows that the funded account holds a positive amount of ARM after claiming its shares.",
+      "proves": "The account claimed a real positive ARM share balance.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "claimant_arm_positive",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "The gate report shows that the Safe is owned by the Baal contract.",
+      "proves": "Governance control of the Safe sits with Baal.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "safe_owner_is_baal",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "The gate report shows the Safe signing threshold is exactly 1.",
+      "proves": "The Safe threshold read from live chain state equals 1.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "safe_threshold",
+          "op": "eq",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "The gate report shows that the weight of the one Baal vote equals the account's ARM balance. The gate prints vote_power_equals_claimant_arm as true only when the two live values match.",
+      "proves": "The vote weight equals the claimed ARM voting power.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "vote_power_equals_claimant_arm",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "Asking the gate to run against sepolia is refused with a failing exit status before it does anything.",
+      "proves": "The gate refuses a public test network.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [
+          "--network",
+          "sepolia"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "Asking the gate to run against mainnet is refused with a failing exit status before it does anything.",
+      "proves": "The gate refuses the production network.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "env/gates/nitro-e2e/governance-lifecycle.sh",
+        "args": [
+          "--network",
+          "mainnet"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c7"
+    },
+    {
+      "type": "grep",
+      "description": "The fixturenet deploy code names CROWDFUND_WINDOW_DURATION as the value it passes for the crowdfund window.",
+      "proves": "The short window is passed to the constructor through the named setting.",
+      "restatement_clause_id": "c7",
+      "pattern": "CROWDFUND_WINDOW_DURATION",
+      "files": [
+        "script/GovernanceLifecycle.s.sol",
+        "env/gates/governance-stack/governance-stack.ts",
+        "env/gates/nitro-e2e/governance-lifecycle.sh"
+      ],
+      "clause_id": "c8"
+    },
+    {
+      "type": "grep",
+      "description": "The harness config sets both votingPeriod and gracePeriod for the Baal summon.",
+      "proves": "The Baal vote can finish inside the gate because both periods are configured short.",
+      "restatement_clause_id": "c7",
+      "pattern": "votingPeriod",
+      "additional_patterns": [
+        "gracePeriod"
+      ],
+      "files": [
+        "script/GovernanceLifecycle.s.sol",
+        "env/gates/governance-stack/governance-stack.ts",
+        "env/gates/nitro-e2e/governance-lifecycle.sh"
+      ],
+      "count": {
+        "unit": "patterns",
+        "op": "eq",
+        "value": 2
+      },
+      "clause_id": "c9"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "env/gates/nitro-e2e/governance-lifecycle.sh"
+  ]
+}
