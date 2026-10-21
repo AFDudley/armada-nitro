@@ -10,7 +10,7 @@ dispatcher:
 # Commit-boundary acceptance gate the integrator re-runs in-worktree for pebbles
 # with NO linked spec (a linked spec is graded in-process by spec_oracle.run_spec).
 gate:
-  command: ["pre-commit", "run", "--all-files"]
+  command: ["sh", "-c", "npm ci --legacy-peer-deps --offline && pre-commit run --all-files"]
   timeout: 1800
 
 # Where `exophial spec generate` writes unified spec instances (repo-relative).
