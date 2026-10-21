@@ -1,0 +1,224 @@
+{
+  "id": "derived-arn-d62",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. On the arn-d36 governance deploy harness, a real PrivacyPool.transact spend verifies on chain, independent of the crowdfund window. A note shielded directly into the real pool is spent with a real Groth16 proof built by armada-sdk planSpend/prove; the on-chain transact verifies the proof, records a new nullifier, and inserts a new commitment. The step reuses the existing governance-stack / nitro-e2e fixturenet harness (no new harness), uses no mock for the pool or the proof, and refuses a Sepolia target.\nWhat holds now? Describe the current, observed state. The former arn-57b bound the pool spend to run after the crowdfund claim and the Baal vote (the G7a lifecycle). That lifecycle is blocked: contracts/crowdfund/ArmadaCrowdfund.sol:76 declares WINDOW_DURATION = 21 days (constant), windowEnd is immutable (:216), the constructor forbids backdating (:207), and finalize() requires block.timestamp > windowEnd (:473). The fixturenet is real go-ethereum + lighthouse with no time-travel RPC, so finalize/claim/vote cannot run within the 1800s gate. No decoupled spend gate exists yet.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. On a fresh fixturenet, after the G1-G6 stack is deployed via scripts/check_governance_stack.sh: shield a note directly into the real pool, build a spend proof with armada-sdk planSpend/prove, submit PrivacyPool.transact, then read the chain for proof verification, the new nullifier, and the new commitment. Run the step against a Sepolia target and confirm it exits with an error.\nWhat constraints apply? State them in plain prose. Reuse the existing governance-stack / nitro-e2e fixturenet harness; create no new harness. No mock for the pool or the proof. Fixturenet only (refuse Sepolia and mainnet). Do not depend on the crowdfund claim or the Baal vote; the post-claim spend within the full lifecycle stays part of the held G7a work (arn-da4).\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) armada-nitro env/gates governance-stack gate; armada-sdk planSpend/prove; PrivacyPool.transact on the real pool.",
+  "restatement": "On a fresh fixturenet with the G1-G6 governance stack deployed by scripts/check_governance_stack.sh, a note shielded directly into the real PrivacyPool is spent with a real Groth16 proof built by armada-sdk planSpend/prove. The on-chain PrivacyPool.transact verifies the proof, records a new nullifier, and inserts a new commitment. This spend step does not depend on the crowdfund window, the crowdfund claim, or the Baal vote. The step reuses the existing governance-stack / nitro-e2e fixturenet harness and adds no new harness. It uses no mock for the pool or the proof. It refuses a Sepolia or mainnet target with an error.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A note shielded directly into the real pool is spent with a real Groth16 proof built by armada-sdk planSpend/prove, and the on-chain PrivacyPool.transact verifies the proof."
+    },
+    {
+      "id": "c2",
+      "text": "After the transact, the chain shows a new nullifier recorded and a new commitment inserted."
+    },
+    {
+      "id": "c3",
+      "text": "The spend step does not depend on the crowdfund window, the crowdfund claim (finalize), or the Baal vote."
+    },
+    {
+      "id": "c4",
+      "text": "The step reuses the existing governance-stack / nitro-e2e fixturenet harness (no new harness) and uses no mock for the pool or the proof."
+    },
+    {
+      "id": "c5",
+      "text": "Run against a Sepolia target (or mainnet), the step exits with an error; it runs on fixturenet only."
+    }
+  ],
+  "goal": "Add a fixturenet gate step that proves a real PrivacyPool.transact spend verifies on chain, decoupled from the crowdfund lifecycle.",
+  "acceptance_criteria": [
+    "On a fresh fixturenet with the governance stack deployed, the spend step finishes successfully and reports that the pool verified the real proof.",
+    "After the spend, reading the chain shows a new nullifier recorded and a new commitment inserted.",
+    "The spend step file contains no reference to the crowdfund finalize, claim, or Baal vote.",
+    "The spend step file contains no mock or stub of the pool or the proof.",
+    "The spend step file calls planSpend and prove from the SDK.",
+    "Run against a Sepolia target, the step stops with an error and does not spend.",
+    "Run against a mainnet target, the step stops with an error and does not spend."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "On a fresh fixturenet with the governance stack deployed, the spend step finishes successfully and reports that the pool verified the real proof."
+    },
+    {
+      "id": "c2",
+      "text": "After the spend, reading the chain shows a new nullifier recorded and a new commitment inserted."
+    },
+    {
+      "id": "c3",
+      "text": "The spend step file contains no reference to the crowdfund finalize, claim, or Baal vote."
+    },
+    {
+      "id": "c4",
+      "text": "The spend step file contains no mock or stub of the pool or the proof."
+    },
+    {
+      "id": "c5",
+      "text": "The spend step file calls planSpend and prove from the SDK."
+    },
+    {
+      "id": "c6",
+      "text": "Run against a Sepolia target, the step stops with an error and does not spend."
+    },
+    {
+      "id": "c7",
+      "text": "Run against a mainnet target, the step stops with an error and does not spend."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "On a fresh fixturenet with the governance stack deployed, the spend step finishes successfully and reports that the pool verified the real proof.",
+      "proves": "The real spend proof is accepted by the real pool on chain.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_pool_spend.sh",
+        "args": [
+          "--target",
+          "fixturenet"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "proof_verified",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "description": "After the spend, reading the chain shows a new nullifier recorded and a new commitment inserted.",
+      "proves": "The spend changed pool state as a real spend must: nullifier recorded and commitment inserted.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_pool_spend.sh",
+        "args": [
+          "--target",
+          "fixturenet"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "nullifier_recorded",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "commitment_inserted",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "description": "The spend step file contains no reference to the crowdfund finalize, claim, or Baal vote.",
+      "proves": "The spend step does not depend on the 21-day crowdfund window or the vote.",
+      "restatement_clause_id": "c3",
+      "type": "grep_absent",
+      "pattern": "finalize|claimTokens|castVote|submitVote|ArmadaCrowdfund",
+      "files": [
+        "scripts/check_pool_spend.sh"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "description": "The spend step file contains no mock or stub of the pool or the proof.",
+      "proves": "The proof and the pool are real, not mocked.",
+      "restatement_clause_id": "c4",
+      "type": "grep_absent",
+      "pattern": "[Mm]ock|[Ss]tub|fake[Pp]roof|dummyProof",
+      "files": [
+        "scripts/check_pool_spend.sh"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "description": "The spend step file calls planSpend and prove from the SDK.",
+      "proves": "The spend uses the real armada-sdk proof builder.",
+      "restatement_clause_id": "c4",
+      "type": "grep",
+      "pattern": "planSpend",
+      "additional_patterns": [
+        "prove"
+      ],
+      "files": [
+        "scripts/check_pool_spend.sh"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "description": "Run against a Sepolia target, the step stops with an error and does not spend.",
+      "proves": "The step refuses Sepolia.",
+      "restatement_clause_id": "c5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_pool_spend.sh",
+        "args": [
+          "--target",
+          "sepolia"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c6"
+    },
+    {
+      "description": "Run against a mainnet target, the step stops with an error and does not spend.",
+      "proves": "The step refuses mainnet.",
+      "restatement_clause_id": "c5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check_pool_spend.sh",
+        "args": [
+          "--target",
+          "mainnet"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 60,
+      "clause_id": "c7"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check_pool_spend.sh"
+  ]
+}
