@@ -1,0 +1,203 @@
+{
+  "id": "derived-arn-252",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. Using the warm fixturenet base snapshot, stack/scripts/armada-disclosure-acceptance.py runs hops H1-H7 of docs/tasks/16-selective-disclosure.md as real transactions: H1 a test EOA shields USDC; H2 and H4 the note funds a hub channel through depositFromNote; H7 the wallet and the hub co-sign channel states; H5 the channel pays a SHIELD payout to a fresh note of the same wallet; H6 that note is unshielded to a second test EOA. It records every transaction and event into a disclosure package file, then tears the fixturenet down.\nWhat holds now? Describe the current, observed state. The harness stands up the fixturenet but does not run the hops or record a package.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the compose job on the warm snapshot. The script prints one JSON line with the fields hops_ok true (H1, H2, H4, H5, H6 and H7 each succeeded), eoa2_usdc_delta a positive integer, eoa_distinct true, payout_note_owned true, and package_path the written package.",
+  "restatement": "The script stack/scripts/armada-disclosure-acceptance.py must run hops H1-H7 of docs/tasks/16-selective-disclosure.md as real transactions on the warm fixturenet base snapshot. H1: a test EOA shields USDC. H2 and H4: the note funds a hub channel through depositFromNote. H7: the wallet and the hub co-sign channel states. H5: the channel pays a SHIELD payout to a fresh note of the same wallet. H6: that note is unshielded to a second test EOA. The script records every transaction and event into a disclosure package file, then tears the fixturenet down. Run as a compose job, it prints one JSON line with hops_ok true, eoa2_usdc_delta a positive integer, eoa_distinct true, payout_note_owned true, and package_path set to the written package.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "hops_ok is true, meaning H1, H2, H4, H5, H6 and H7 each succeeded as real transactions."
+    },
+    {
+      "id": "c2",
+      "text": "eoa2_usdc_delta is a positive integer: the second test EOA gained USDC from the unshield in H6."
+    },
+    {
+      "id": "c3",
+      "text": "eoa_distinct is true: the first and second test EOAs are different accounts."
+    },
+    {
+      "id": "c4",
+      "text": "payout_note_owned is true: the H5 SHIELD payout note belongs to the same wallet."
+    },
+    {
+      "id": "c5",
+      "text": "package_path names the written disclosure package file that records every transaction and event."
+    },
+    {
+      "id": "c6",
+      "text": "The script tears the fixturenet down after it records the package."
+    }
+  ],
+  "goal": "The disclosure acceptance script runs all hops on the fixturenet, writes a disclosure package, and reports success in one JSON line.",
+  "acceptance_criteria": [
+    "Running the acceptance script prints a JSON line that says all hops H1, H2, H4, H5, H6 and H7 succeeded.",
+    "The printed line shows the second test account gained a positive amount of USDC.",
+    "The printed line says the two test accounts are different.",
+    "The printed line says the payout note belongs to the same wallet.",
+    "The printed line gives a non-empty path for the disclosure package file.",
+    "The script text contains a step that shuts the fixturenet down."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the acceptance script prints a JSON line that says all hops H1, H2, H4, H5, H6 and H7 succeeded."
+    },
+    {
+      "id": "c2",
+      "text": "The printed line shows the second test account gained a positive amount of USDC."
+    },
+    {
+      "id": "c3",
+      "text": "The printed line says the two test accounts are different."
+    },
+    {
+      "id": "c4",
+      "text": "The printed line says the payout note belongs to the same wallet."
+    },
+    {
+      "id": "c5",
+      "text": "The printed line gives a non-empty path for the disclosure package file."
+    },
+    {
+      "id": "c6",
+      "text": "The script text contains a step that shuts the fixturenet down."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Running the acceptance script prints a JSON line that says all hops H1, H2, H4, H5, H6 and H7 succeeded.",
+      "proves": "All hops ran as real transactions and succeeded.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hops_ok",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "The printed line shows the second test account gained a positive amount of USDC.",
+      "proves": "The unshield in H6 delivered USDC to the second account.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "eoa2_usdc_delta",
+          "op": "gt",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "The printed line says the two test accounts are different.",
+      "proves": "The unshield went to a distinct account.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "eoa_distinct",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "The printed line says the payout note belongs to the same wallet.",
+      "proves": "The H5 payout went to a fresh note owned by the wallet.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "payout_note_owned",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "The printed line gives a non-empty path for the disclosure package file.",
+      "proves": "The script wrote and reported a disclosure package.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/armada-disclosure-acceptance.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "package_path",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep",
+      "description": "The script text contains a step that shuts the fixturenet down.",
+      "proves": "The script is built to tear the fixturenet down after recording.",
+      "restatement_clause_id": "c6",
+      "pattern": "(teardown|tear_down|compose.*down|down\\b)",
+      "files": [
+        "stack/scripts/armada-disclosure-acceptance.py"
+      ],
+      "clause_id": "c6"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/armada-disclosure-acceptance.py"
+  ]
+}
