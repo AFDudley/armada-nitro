@@ -1,0 +1,264 @@
+{
+  "id": "derived-arn-d5a",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A gate job stands up a fresh Aave fixturenet, saves a warm snapshot for a later chunk, and tears down the running fixturenet on exit. The job reuses the prepare.ts wallet and proof code. The Aave lending pool, waUSDC, and USDC answer on the fixturenet RPC. The gate leaves no running fixturenet deployment after it exits. The warm snapshot stays for reuse.\nWhat holds now? Describe the current, observed state. No armada-assets-e2e stand-up gate job exists. No gate stands up the Aave fixturenet, saves a warm snapshot, and tears the running fixturenet down.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run stack/compose-jobs/armada-assets-e2e/run.sh. stdout_json job_files_present is true. stdout_json fixturenet_up is true. stdout_json snapshot_present is true. After the gate exits no armada-assets-e2e deployment runs and the deployment directory is gone.\nWhat constraints apply? State them in plain prose. The gate tears down its running fixturenet with an exit trap. The gate keeps the running fixturenet only under KEEP_FIXTURENET=1. The gate removes the deployment directory on exit. The warm snapshot cache is not the deployment directory.",
+  "restatement": "A new gate job named armada-assets-e2e stands up a fresh Aave fixturenet, saves a warm snapshot for a later chunk, and tears down the running fixturenet when it exits. The job reuses the wallet and proof code of prepare.ts. When the job runs, the Aave lending pool, waUSDC, and USDC answer on the fixturenet RPC. After the job exits, no armada-assets-e2e deployment runs and the deployment directory is gone. The warm snapshot stays for reuse. An exit trap does the teardown. The running fixturenet stays only when KEEP_FIXTURENET=1 is set. The warm snapshot cache is not the deployment directory.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "Running stack/compose-jobs/armada-assets-e2e/run.sh prints stdout_json job_files_present true."
+    },
+    {
+      "id": "c2",
+      "text": "Running run.sh prints stdout_json fixturenet_up true, meaning the Aave lending pool, waUSDC, and USDC answer on the fixturenet RPC."
+    },
+    {
+      "id": "c3",
+      "text": "Running run.sh prints stdout_json snapshot_present true, meaning the warm snapshot is saved."
+    },
+    {
+      "id": "c4",
+      "text": "After the gate exits, no armada-assets-e2e deployment runs and the deployment directory is gone, while the warm snapshot stays."
+    },
+    {
+      "id": "c5",
+      "text": "The gate tears down its running fixturenet with an exit trap."
+    },
+    {
+      "id": "c6",
+      "text": "The gate keeps the running fixturenet only under KEEP_FIXTURENET=1."
+    },
+    {
+      "id": "c7",
+      "text": "The warm snapshot cache is not the deployment directory, so removing the deployment directory leaves the snapshot."
+    },
+    {
+      "id": "c8",
+      "text": "The job reuses the wallet and proof code of prepare.ts."
+    }
+  ],
+  "goal": "Add the armada-assets-e2e gate job at stack/compose-jobs/armada-assets-e2e/run.sh. It stands up the Aave fixturenet, saves a warm snapshot, and removes the running fixturenet and its deployment directory on exit.",
+  "acceptance_criteria": [
+    "Run the gate job. It reports that all of its job files exist.",
+    "Run the gate job. It reports that the Aave lending pool, waUSDC, and USDC answer on the fixturenet RPC.",
+    "Run the gate job. It reports that a warm snapshot is saved.",
+    "Run the gate job to the end, then look. No armada-assets-e2e deployment runs, the deployment directory is gone, and the snapshot is still there.",
+    "The gate script sets an exit trap that tears down the fixturenet.",
+    "Run the gate job with KEEP_FIXTURENET=1. The fixturenet is still running after the gate exits. The check then removes it.",
+    "Run the gate job and compare the snapshot location with the deployment directory. The two locations differ and do not nest.",
+    "The gate script refers to prepare.ts for its wallet and proof code."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Run the gate job. It reports that all of its job files exist."
+    },
+    {
+      "id": "c2",
+      "text": "Run the gate job. It reports that the Aave lending pool, waUSDC, and USDC answer on the fixturenet RPC."
+    },
+    {
+      "id": "c3",
+      "text": "Run the gate job. It reports that a warm snapshot is saved."
+    },
+    {
+      "id": "c4",
+      "text": "Run the gate job to the end, then look. No armada-assets-e2e deployment runs, the deployment directory is gone, and the snapshot is still there."
+    },
+    {
+      "id": "c5",
+      "text": "The gate script sets an exit trap that tears down the fixturenet."
+    },
+    {
+      "id": "c6",
+      "text": "Run the gate job with KEEP_FIXTURENET=1. The fixturenet is still running after the gate exits. The check then removes it."
+    },
+    {
+      "id": "c7",
+      "text": "Run the gate job and compare the snapshot location with the deployment directory. The two locations differ and do not nest."
+    },
+    {
+      "id": "c8",
+      "text": "The gate script refers to prepare.ts for its wallet and proof code."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Run the gate job. It reports that all of its job files exist.",
+      "proves": "The job has its own compose job and scripts in place.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "job_files_present",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Run the gate job. It reports that the Aave lending pool, waUSDC, and USDC answer on the fixturenet RPC.",
+      "proves": "The fresh Aave fixturenet is up and its contracts respond.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "fixturenet_up",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "Run the gate job. It reports that a warm snapshot is saved.",
+      "proves": "The job saves a warm snapshot for a later chunk.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "snapshot_present",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "Run the gate job to the end, then look. No armada-assets-e2e deployment runs, the deployment directory is gone, and the snapshot is still there.",
+      "proves": "The gate leaves no running fixturenet after it exits and the warm snapshot stays.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/verify-teardown.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "deployment_running",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "deployment_dir_exists",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "snapshot_present_after_exit",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep",
+      "description": "The gate script sets an exit trap that tears down the fixturenet.",
+      "proves": "Teardown runs on any exit through a trap.",
+      "restatement_clause_id": "c5",
+      "pattern": "trap\\s+.+\\s+EXIT",
+      "files": [
+        "stack/compose-jobs/armada-assets-e2e/run.sh"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "Run the gate job with KEEP_FIXTURENET=1. The fixturenet is still running after the gate exits. The check then removes it.",
+      "proves": "The running fixturenet stays only when KEEP_FIXTURENET=1 is set.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/verify-teardown.sh",
+        "args": [
+          "--keep"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "deployment_running",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "Run the gate job and compare the snapshot location with the deployment directory. The two locations differ and do not nest.",
+      "proves": "The warm snapshot cache is separate from the deployment directory.",
+      "restatement_clause_id": "c7",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/verify-teardown.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "snapshot_outside_deployment_dir",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c7"
+    },
+    {
+      "type": "grep",
+      "description": "The gate script refers to prepare.ts for its wallet and proof code.",
+      "proves": "The job reuses the prepare.ts wallet and proof code.",
+      "restatement_clause_id": "c8",
+      "pattern": "prepare\\.ts",
+      "files": [
+        "stack/compose-jobs/armada-assets-e2e/run.sh"
+      ],
+      "clause_id": "c8"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/compose-jobs/armada-assets-e2e/run.sh",
+    "stack/compose-jobs/armada-assets-e2e/verify-teardown.sh"
+  ]
+}

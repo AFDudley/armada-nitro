@@ -1,0 +1,324 @@
+{
+  "id": "derived-arn-1cd",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A gate job armada-assets-e2e stands up a fresh fixturenet, runs the Aave yield scenario and the redeem scenario, and tears down the fixturenet on exit. The job reuses the prepare.ts wallet and proof code. In the yield scenario the hub deposits USDC into waUSDC, a second account supplies USDC to the Aave pool and borrows USDC to raise utilization, time advances at least 60 seconds of blocks, and both waUSDC.convertToAssets(1e6) and the Aave USDC liquidityIndex increase. In the redeem scenario the hub redeems its waUSDC for USDC and its USDC balance grows by at least the yield scenario principal. A run without the borrow makes the yield check fail. The gate prints exactly two evidence lines. The gate never configures the Lido oracle. The gate leaves no running fixturenet deployment after it exits.\nWhat holds now? Describe the current, observed state. No armada-assets-e2e gate job exists. No gate stands up the Aave fixturenet, runs the yield and redeem scenarios, and tears the fixturenet down.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run stack/compose-jobs/armada-assets-e2e/run.sh. stdout_json job_files_present is true. stdout_json fixturenet_up is true. Run scripts/armada-assets-e2e.py on the fixturenet. stdout_json scenario1_convert_to_assets_increased is true. stdout_json scenario1_liquidity_index_increased is true. stdout_json scenario1_blocks_advanced_seconds is at least 60. stdout_json scenario4_redeem_ge_principal is true. stdout_json scenario_line_count is 2. In a no-borrow run stdout_json yield_check_passed is false. After the gate exits no armada-assets-e2e deployment runs and the deployment directory is gone.\nWhat constraints apply? State them in plain prose. The gate script does not call addOracleMember, submitReportData, submitReport, or setPrice. The gate tears down its fixturenet with an exit trap. The gate removes the deployment directory on exit.",
+  "restatement": "A new gate job named armada-assets-e2e must exist. It stands up a fresh fixturenet, runs the Aave yield scenario and the redeem scenario, and tears the fixturenet down when it exits. It reuses the wallet and proof code of prepare.ts. In the yield scenario, the hub deposits USDC into waUSDC. A second account supplies USDC to the Aave pool and borrows USDC to raise utilization. At least 60 seconds of blocks pass. Then both waUSDC.convertToAssets(1e6) and the Aave USDC liquidityIndex are higher. In the redeem scenario, the hub redeems its waUSDC and its USDC balance grows by at least the yield scenario principal. A run without the borrow must fail the yield check. The gate prints exactly two evidence lines. The gate never configures the Lido oracle. After exit, no fixturenet deployment runs and the deployment directory is gone.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The gate job files exist under stack/compose-jobs/armada-assets-e2e/ (run.sh), and the run reports job_files_present true."
+    },
+    {
+      "id": "c2",
+      "text": "Running stack/compose-jobs/armada-assets-e2e/run.sh stands up a fresh fixturenet and reports fixturenet_up true."
+    },
+    {
+      "id": "c3",
+      "text": "The yield scenario on the fixturenet reports scenario1_convert_to_assets_increased true, scenario1_liquidity_index_increased true, and scenario1_blocks_advanced_seconds at least 60."
+    },
+    {
+      "id": "c4",
+      "text": "The redeem scenario reports scenario4_redeem_ge_principal true: the hub's USDC balance grows by at least the yield scenario principal."
+    },
+    {
+      "id": "c5",
+      "text": "A run without the borrow reports yield_check_passed false."
+    },
+    {
+      "id": "c6",
+      "text": "The gate prints exactly two evidence lines: scenario_line_count is 2."
+    },
+    {
+      "id": "c7",
+      "text": "The gate script does not call addOracleMember, submitReportData, submitReport, or setPrice."
+    },
+    {
+      "id": "c8",
+      "text": "The gate tears down its fixturenet with an exit trap, and removes the deployment directory on exit."
+    },
+    {
+      "id": "c9",
+      "text": "After the gate exits, no armada-assets-e2e deployment runs and the deployment directory is gone."
+    },
+    {
+      "id": "c10",
+      "text": "The gate job reuses the prepare.ts wallet and proof code."
+    }
+  ],
+  "goal": "Add the armada-assets-e2e gate job that proves Aave yield accrual and redemption on a fresh fixturenet and leaves nothing running.",
+  "acceptance_criteria": [
+    "Running the gate shows that all of its job files are in place.",
+    "Running the gate brings up a fresh fixturenet and says it is up.",
+    "After the borrow and at least 60 seconds of blocks, both the vault share value and the Aave USDC index are higher.",
+    "When the hub redeems its waUSDC, its USDC balance grows by at least the amount it first deposited.",
+    "When the run skips the borrow, the yield check reports that it failed.",
+    "The gate prints exactly two evidence lines for the scenarios.",
+    "The gate script never mentions the Lido oracle setup calls.",
+    "The gate's run script sets an exit trap that tears down the fixturenet and removes the deployment directory.",
+    "After the gate finishes, no armada-assets-e2e deployment is running and its directory no longer exists.",
+    "The gate script uses the wallet and proof code of prepare.ts."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Running the gate shows that all of its job files are in place."
+    },
+    {
+      "id": "c2",
+      "text": "Running the gate brings up a fresh fixturenet and says it is up."
+    },
+    {
+      "id": "c3",
+      "text": "After the borrow and at least 60 seconds of blocks, both the vault share value and the Aave USDC index are higher."
+    },
+    {
+      "id": "c4",
+      "text": "When the hub redeems its waUSDC, its USDC balance grows by at least the amount it first deposited."
+    },
+    {
+      "id": "c5",
+      "text": "When the run skips the borrow, the yield check reports that it failed."
+    },
+    {
+      "id": "c6",
+      "text": "The gate prints exactly two evidence lines for the scenarios."
+    },
+    {
+      "id": "c7",
+      "text": "The gate script never mentions the Lido oracle setup calls."
+    },
+    {
+      "id": "c8",
+      "text": "The gate's run script sets an exit trap that tears down the fixturenet and removes the deployment directory."
+    },
+    {
+      "id": "c9",
+      "text": "After the gate finishes, no armada-assets-e2e deployment is running and its directory no longer exists."
+    },
+    {
+      "id": "c10",
+      "text": "The gate script uses the wallet and proof code of prepare.ts."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "Running the gate shows that all of its job files are in place.",
+      "proves": "The gate job files exist and the gate reports job_files_present true.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "job_files_present",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the gate brings up a fresh fixturenet and says it is up.",
+      "proves": "The gate stands up a fresh fixturenet.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "fixturenet_up",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "After the borrow and at least 60 seconds of blocks, both the vault share value and the Aave USDC index are higher.",
+      "proves": "Yield accrues in waUSDC and in the Aave liquidityIndex after time passes.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-assets-e2e.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "scenario1_convert_to_assets_increased",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario1_liquidity_index_increased",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "scenario1_blocks_advanced_seconds",
+          "op": "ge",
+          "value": 60
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "When the hub redeems its waUSDC, its USDC balance grows by at least the amount it first deposited.",
+      "proves": "Redemption returns at least the principal.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-assets-e2e.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "scenario4_redeem_ge_principal",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "When the run skips the borrow, the yield check reports that it failed.",
+      "proves": "The yield check is real: no borrow means no yield and a failed check.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-assets-e2e.py",
+        "args": [
+          "--no-borrow"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "yield_check_passed",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "The gate prints exactly two evidence lines for the scenarios.",
+      "proves": "The evidence output has exactly two lines.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/armada-assets-e2e.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "scenario_line_count",
+          "op": "eq",
+          "value": 2
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The gate script never mentions the Lido oracle setup calls.",
+      "proves": "The gate leaves the Lido oracle unconfigured.",
+      "restatement_clause_id": "c7",
+      "pattern": "addOracleMember|submitReportData|submitReport|setPrice",
+      "files": [
+        "scripts/armada-assets-e2e.py",
+        "stack/compose-jobs/armada-assets-e2e/run.sh"
+      ],
+      "clause_id": "c7"
+    },
+    {
+      "type": "grep",
+      "description": "The gate's run script sets an exit trap that tears down the fixturenet and removes the deployment directory.",
+      "proves": "Teardown is tied to gate exit.",
+      "restatement_clause_id": "c8",
+      "pattern": "trap .*EXIT",
+      "files": [
+        "stack/compose-jobs/armada-assets-e2e/run.sh"
+      ],
+      "clause_id": "c8"
+    },
+    {
+      "type": "behavior",
+      "description": "After the gate finishes, no armada-assets-e2e deployment is running and its directory no longer exists.",
+      "proves": "The gate leaves nothing behind.",
+      "restatement_clause_id": "c9",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/compose-jobs/armada-assets-e2e/run.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "deployment_running",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "deployment_dir_present",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c9"
+    },
+    {
+      "type": "grep",
+      "description": "The gate script uses the wallet and proof code of prepare.ts.",
+      "proves": "The gate reuses prepare.ts instead of new wallet and proof code.",
+      "restatement_clause_id": "c10",
+      "pattern": "prepare\\.ts|prepare",
+      "files": [
+        "scripts/armada-assets-e2e.py",
+        "stack/compose-jobs/armada-assets-e2e/run.sh"
+      ],
+      "clause_id": "c10"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/armada-assets-e2e.py",
+    "stack/compose-jobs/armada-assets-e2e/run.sh"
+  ]
+}
