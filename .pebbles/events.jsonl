@@ -2224,3 +2224,4 @@
 {"type":"comment","timestamp":"2026-10-22T17:02:21.601657Z","issue_id":"arn-981","payload":{"body":"exophial-integration-attempt-started: at f262aab14054bc88774708bcea7f960b107ec7c4"}}
 {"type":"comment","timestamp":"2026-10-22T17:02:22.391883Z","issue_id":"arn-981","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
 {"type":"close","timestamp":"2026-10-22T17:02:22.410521Z","issue_id":"arn-981","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
+{"type":"comment","timestamp":"2026-10-22T17:04:58.724214Z","issue_id":"arn-981","payload":{"body":"exophial-integration-attempt-started: at dfe2f8ade31cfd93bbd1f227324136d0a1488ea9"}}
