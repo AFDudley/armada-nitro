@@ -12,5 +12,6 @@
     "pebble-filing"
   ],
   "gate_commands": {},
-  "deploy_surfaces": {}
+  "deploy_surfaces": {},
+  "environment_command": ["sh", ".exophial/gate/prepare-oracle-env.sh"]
 }
