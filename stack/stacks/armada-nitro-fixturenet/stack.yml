@@ -16,3 +16,4 @@ jobs:
   - armada-watchtower-e2e
   - armada-watchtower-discrimination-e2e
   - armada-disclosure
+  - armada-assets-e2e

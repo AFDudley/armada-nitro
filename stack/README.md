@@ -413,6 +413,29 @@ at image build time (`stack/container-build/cerc-armada-nitro-env/Dockerfile`, p
 `armada-env-reconcile`, only verifies the baked-in circuits' SHA-256 and never downloads
 them (docs/tasks/E9-operability.md).
 
+### Aave stand-up gate (`armada-assets-e2e`)
+
+`stack/compose-jobs/armada-assets-e2e/run.sh` (E11 stand-up, arn-d5a) stands up its own fresh
+Aave fixturenet with `fixturenet-new` (a run-unique deployment name,
+`${ARMADA_ASSETS_DEP_NAME:-armada-assets-e2e}`), runs the `armada-assets-e2e` compose job, and
+tears the fixturenet down on exit:
+
+```sh
+stack/compose-jobs/armada-assets-e2e/run.sh
+```
+
+The job reuses `env/gates/nitro-e2e/prepare.ts`'s wallet and proof code (shield, then a
+Groth16-proved unshield), then proves the Aave lending pool, `waUSDC` and USDC answer on the
+fixturenet RPC -- read entirely from inside the job over the compose network
+(`armada-fixturenet-geth:8545`), never by a host-side read of the deployment's root-owned `data/`
+directory. `run.sh` prints one JSON summary line (`job_files_present`, `fixturenet_up`,
+`snapshot_present`) and, on exit, tears down the running fixturenet and removes its deployment
+directory via an `EXIT` trap -- unless `KEEP_FIXTURENET=1` is set, in which case the fixturenet is
+left running. The warm base-layer snapshot cache (`~/deployments/.snapshots`) is never the
+deployment directory, so removing the deployment directory on exit never touches it; the
+snapshot stays for a later chunk's warm `fixturenet-new`. `check-teardown.sh` and `check-keep.sh`
+in the same directory verify the teardown and the `KEEP_FIXTURENET=1` path respectively.
+
 ### Full sequence
 
 ```sh

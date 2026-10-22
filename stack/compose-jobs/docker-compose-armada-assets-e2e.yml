@@ -1,0 +1,71 @@
+# armada-assets-e2e (E11 stand-up, arn-d5a): proves, from a laconic-so job inside
+# the deployment, that the Aave fixturenet it just stood up is real and working.
+#
+# Runs entirely inside the job:
+#   1. Funds the test accounts (reconciler mints only the shortfall).
+#   2. Verifies the circuits (baked into the image, docs/tasks/E9-operability.md).
+#   3. Reuses the gate's wallet and proof code: copies env/gates/nitro-e2e/prepare.ts
+#      into the job and runs it via hardhat (shield, then a Groth16-proved
+#      unshield to the adjudicator).
+#   4. Reads the deployment manifest (mounted armada_env volume, no sudo, no
+#      host data-dir access) for the Aave pool, waUSDC and USDC addresses, and
+#      calls a simple view method on each over the compose network's RPC
+#      (armada-fixturenet-geth:8545) to prove they answer.
+#   5. Prints one JSON line: {"fixturenet_up": true|false}.
+#
+# Later chunks (E11's Aave-yield and redeem scenarios) run as their own job.
+services:
+  armada-assets-e2e:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Fund the test accounts.
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image; verify rather than download.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # Reuse the gate's wallet and proof code: copy prepare.ts and run it.
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        (
+          cd /src/armada-poc
+          MANIFEST_PATH="$${MANIFEST_PATH}" \
+          DEPOSITS_OUTPUT="$${DEPOSITS_PATH}" \
+          CHALLENGE_DURATION="$${CHALLENGE_DURATION}" \
+          HUB_RPC="$${HUB_RPC}" DEPLOY_ENV=local CCTP_MODE=real \
+          NITRO_E2E_BAD_ADAPT_PARAMS="$${NITRO_E2E_BAD_ADAPT_PARAMS}" \
+          NITRO_E2E_BAD_ADAPT_CONTRACT="$${NITRO_E2E_BAD_ADAPT_CONTRACT}" \
+            npx hardhat run scripts/gates/prepare.ts --network hub
+        )
+
+        # The Aave lending pool, waUSDC and USDC answer on the fixturenet RPC.
+        POOL=$$(jq -r '.aave.pool // empty' "$$MANIFEST_PATH")
+        WA_USDC=$$(jq -r '.assets.waUSDC // empty' "$$MANIFEST_PATH")
+        USDC=$$(jq -r '.usdc.proxy // empty' "$$MANIFEST_PATH")
+        FIXTURENET_UP=false
+        if [ -n "$$POOL" ] && [ -n "$$WA_USDC" ] && [ -n "$$USDC" ] \
+          && cast call "$$POOL" "getConfiguration(address)(uint256)" "$$USDC" --rpc-url "$$HUB_RPC" >/dev/null 2>&1 \
+          && cast call "$$WA_USDC" "asset()(address)" --rpc-url "$$HUB_RPC" >/dev/null 2>&1 \
+          && cast call "$$USDC" "symbol()(string)" --rpc-url "$$HUB_RPC" >/dev/null 2>&1; then
+          FIXTURENET_UP=true
+        fi
+        echo "{\"fixturenet_up\": $$FIXTURENET_UP}"
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/assets-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      NITRO_E2E_BAD_ADAPT_PARAMS: ${NITRO_E2E_BAD_ADAPT_PARAMS:-}
+      NITRO_E2E_BAD_ADAPT_CONTRACT: ${NITRO_E2E_BAD_ADAPT_CONTRACT:-}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
