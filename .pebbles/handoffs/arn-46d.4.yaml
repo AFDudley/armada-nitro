@@ -1,0 +1,38 @@
+status: completed
+pebble_id: arn-46d.4
+summary: >
+  Added the module-set check to stack/scripts/fixturenet-new: after the full
+  reconcile, the script verifies the manifest holds exactly the eight expected
+  modules (weth, usdc, cctp, aave, lido, armada, armada_nitro, funding) and
+  exits non-zero on any difference. A new check_module_set() function reads the
+  manifest's .gasUsed keys (plain jq, with a sudo fallback for the root-owned
+  tmpfs deployment) and compares the set against the expected eight via jq array
+  difference (missing = expected - actual, extra = actual - expected), printing
+  which modules are missing or unexpected. A new probe,
+  stack/scripts/probe_module_check.sh (the spec's acceptance oracle), builds a
+  scenario manifest (exact_eight / ninth_module / missing_module) and runs
+  fixturenet-new's own check function against it, reporting JSON
+  {"scenario", "script_exit"}; the probe exits 0 and script_exit reflects what
+  fixturenet-new would exit (0 for the exact eight, 1 for a ninth or a missing
+  module). Verified: exact_eight -> script_exit=0, ninth_module -> script_exit=1,
+  missing_module -> script_exit=1.
+cost: "~60k tokens"
+commits:
+  - "213d0b74ccc14d5a599fcdac6932f86136639422"
+verify_transcript:
+  hooks:
+    - name: "gate-no-host-deployment-access"
+      outcome: passed
+      duration_s: 1.0
+    - name: "tdd-trailer"
+      outcome: passed
+      duration_s: 0.5
+    - name: "pre-commit (all repo hooks)"
+      outcome: passed
+      duration_s: 2.0
+e2e_gate:
+  spec: contracts/specs/derived-arn-46d.4.spec.json
+  command: "bash stack/scripts/probe_module_check.sh exact_eight"
+  result: passed
+  ran_at_sha: "213d0b74ccc14d5a599fcdac6932f86136639422"
+  mocks_in_path: false
