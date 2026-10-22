@@ -225,6 +225,16 @@ if [ "$MODE" = warm ]; then
   # the recorded head to the genesis container's shadow-fork step; `start` then
   # regenerates the consensus genesis (slot 0 on geth's head, genesis time = now)
   # so the beacon + validators come up fresh with no slot gap. -------------------
+  # arn-46d.3: before accepting the restore, compare the snapshot's recorded .key
+  # lines against the current stack/scripts/base-key.py output, and refuse the restore
+  # on any difference (naming the differing lines). A matching snapshot (recorded
+  # lines equal the fresh output) is restored as before.
+  KEYFILE=$(key_path "$KEY")
+  if ! check_restore_key_diff "$REPO_ROOT" "$KEYFILE"; then
+    echo "fixturenet-new: restore REFUSED: recorded key lines differ from the fresh base-key.py output (differing lines named above)" >&2
+    exit 1
+  fi
+  echo "fixturenet-new: recorded .key lines compared against a fresh base-key.py run; snapshot accepted for restore"
   echo "fixturenet-new: restoring ${SNAP} into ${DEP}/data (EL-only; CL genesis regenerated with a shadow fork) ..."
   tr=$(now)
   restore_snapshot "$DEP" "$SNAP"

@@ -90,6 +90,54 @@ compute_base_key() {
 snap_path() { printf '%s/armada-fixturenet-base-%s.tar.zst' "$SNAP_DIR" "$1"; }
 key_path()  { printf '%s/armada-fixturenet-base-%s.key' "$SNAP_DIR" "$1"; }
 
+# arn-46d.3: before accepting a base snapshot restore, compare the .key lines
+# recorded with the snapshot against the output of the current stack/scripts/base-key.py
+# run, and refuse on any difference, naming each differing line. The recorded
+# lines are the non-# lines of the .key file (fixturenet-base-snapshot writes the
+# key-input lines verbatim under a # header); a missing file means nothing was
+# recorded.
+# Returns 0 when the recorded lines equal the fresh output; 1 (refusal) when any
+# line differs, with the differing lines named on stderr.
+check_restore_key_diff() {  # check_restore_key_diff <repo-root> <key-file>
+  local root="$1" keyfile="$2"
+  local fresh
+  if ! fresh=$(python3 "${root}/stack/scripts/base-key.py" --root "$root" 2>/dev/null); then
+    echo "fixturenet-new: REFUSED: fresh base-key.py run failed; recorded lines could not be compared" >&2
+    return 1
+  fi
+  if [ ! -f "$keyfile" ]; then
+    echo "fixturenet-new: REFUSED: no .key file at ${keyfile}; no recorded lines to compare" >&2
+    return 1
+  fi
+  local recorded
+  if ! recorded=$(grep -v '^#' "$keyfile"); then
+    echo "fixturenet-new: REFUSED: could not read recorded lines from ${keyfile}" >&2
+    return 1
+  fi
+  local diffs
+  diffs=$(python3 -c '
+import sys
+rec = sys.argv[1].splitlines()
+fsh = sys.argv[2].splitlines()
+n = max(len(rec), len(fsh))
+for i in range(n):
+    r = rec[i] if i < len(rec) else "<missing>"
+    f = fsh[i] if i < len(fsh) else "<missing>"
+    if r != f:
+        print(f"  line {i+1}: recorded={r} fresh={f}")
+' "$recorded" "$fresh" 2>/dev/null)
+  if [ -n "$diffs" ]; then
+    local nlines
+    nlines=$(printf '%s
+' "$diffs" | grep -c .)
+    echo "fixturenet-new: REFUSED: ${nlines} recorded key line(s) differ from the fresh base-key.py output:" >&2
+    printf '%s
+' "$diffs" >&2
+    return 1
+  fi
+  return 0
+}
+
 # Assert a deployment's manifest names exactly the base modules (no
 # armada_nitro / funding, and none missing). Exits non-zero with a reason.
 require_base_only_manifest() {
