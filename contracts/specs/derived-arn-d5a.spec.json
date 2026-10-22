@@ -85,7 +85,7 @@
     {
       "type": "behavior",
       "description": "Run the gate job. It reports that all of its job files exist.",
-      "proves": "The job has its own compose job and scripts in place.",
+      "proves": "The gate job ships all the files it needs.",
       "restatement_clause_id": "c1",
       "when": {
         "interpreter": "bash",
@@ -108,7 +108,7 @@
     {
       "type": "behavior",
       "description": "Run the gate job. It reports that the Aave lending pool, waUSDC, and USDC answer on the fixturenet RPC.",
-      "proves": "The fresh Aave fixturenet is up and its contracts respond.",
+      "proves": "The gate stands up a working Aave fixturenet.",
       "restatement_clause_id": "c2",
       "when": {
         "interpreter": "bash",
@@ -131,7 +131,7 @@
     {
       "type": "behavior",
       "description": "Run the gate job. It reports that a warm snapshot is saved.",
-      "proves": "The job saves a warm snapshot for a later chunk.",
+      "proves": "The gate saves a warm snapshot for a later chunk.",
       "restatement_clause_id": "c3",
       "when": {
         "interpreter": "bash",
@@ -154,11 +154,11 @@
     {
       "type": "behavior",
       "description": "Run the gate job to the end, then look. No armada-assets-e2e deployment runs, the deployment directory is gone, and the snapshot is still there.",
-      "proves": "The gate leaves no running fixturenet after it exits and the warm snapshot stays.",
+      "proves": "The gate cleans up its running fixturenet and keeps the snapshot.",
       "restatement_clause_id": "c4",
       "when": {
         "interpreter": "bash",
-        "script": "stack/compose-jobs/armada-assets-e2e/verify-teardown.sh",
+        "script": "stack/compose-jobs/armada-assets-e2e/check-teardown.sh",
         "args": [],
         "stdin": ""
       },
@@ -171,7 +171,7 @@
         },
         {
           "observe": "stdout_json",
-          "field": "deployment_dir_exists",
+          "field": "deployment_dir_present",
           "op": "eq",
           "value": false
         },
@@ -189,7 +189,7 @@
     {
       "type": "grep",
       "description": "The gate script sets an exit trap that tears down the fixturenet.",
-      "proves": "Teardown runs on any exit through a trap.",
+      "proves": "Teardown runs on every exit of the gate.",
       "restatement_clause_id": "c5",
       "pattern": "trap\\s+.+\\s+EXIT",
       "files": [
@@ -200,20 +200,18 @@
     {
       "type": "behavior",
       "description": "Run the gate job with KEEP_FIXTURENET=1. The fixturenet is still running after the gate exits. The check then removes it.",
-      "proves": "The running fixturenet stays only when KEEP_FIXTURENET=1 is set.",
+      "proves": "The fixturenet stays up only when KEEP_FIXTURENET=1 is set.",
       "restatement_clause_id": "c6",
       "when": {
         "interpreter": "bash",
-        "script": "stack/compose-jobs/armada-assets-e2e/verify-teardown.sh",
-        "args": [
-          "--keep"
-        ],
+        "script": "stack/compose-jobs/armada-assets-e2e/check-keep.sh",
+        "args": [],
         "stdin": ""
       },
       "then": [
         {
           "observe": "stdout_json",
-          "field": "deployment_running",
+          "field": "fixturenet_running_after_exit",
           "op": "eq",
           "value": true
         }
@@ -225,11 +223,11 @@
     {
       "type": "behavior",
       "description": "Run the gate job and compare the snapshot location with the deployment directory. The two locations differ and do not nest.",
-      "proves": "The warm snapshot cache is separate from the deployment directory.",
+      "proves": "Removing the deployment directory cannot remove the snapshot.",
       "restatement_clause_id": "c7",
       "when": {
         "interpreter": "bash",
-        "script": "stack/compose-jobs/armada-assets-e2e/verify-teardown.sh",
+        "script": "stack/compose-jobs/armada-assets-e2e/check-teardown.sh",
         "args": [],
         "stdin": ""
       },
@@ -248,7 +246,7 @@
     {
       "type": "grep",
       "description": "The gate script refers to prepare.ts for its wallet and proof code.",
-      "proves": "The job reuses the prepare.ts wallet and proof code.",
+      "proves": "The gate reuses the wallet and proof code of prepare.ts.",
       "restatement_clause_id": "c8",
       "pattern": "prepare\\.ts",
       "files": [
@@ -258,7 +256,8 @@
     }
   ],
   "declared_new_entrypoints": [
-    "stack/compose-jobs/armada-assets-e2e/run.sh",
-    "stack/compose-jobs/armada-assets-e2e/verify-teardown.sh"
+    "stack/compose-jobs/armada-assets-e2e/check-keep.sh",
+    "stack/compose-jobs/armada-assets-e2e/check-teardown.sh",
+    "stack/compose-jobs/armada-assets-e2e/run.sh"
   ]
 }
