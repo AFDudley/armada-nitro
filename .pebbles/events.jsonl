@@ -2185,3 +2185,9 @@
 {"type":"comment","timestamp":"2026-10-22T15:25:03.080004Z","issue_id":"arn-bd4","payload":{"body":"estimate: 6\nscale: linear"}}
 {"type":"dep_add","timestamp":"2026-10-22T15:25:03.460627Z","issue_id":"arn-d5a","payload":{"dep_type":"blocks","depends_on":"arn-bd4"}}
 {"type":"dep_add","timestamp":"2026-10-22T15:25:18.982643Z","issue_id":"arn-848","payload":{"dep_type":"blocks","depends_on":"arn-d5a"}}
+{"type":"comment","timestamp":"2026-10-22T15:26:04.312039Z","issue_id":"arn-bd4","payload":{"base_sha":"da6034d9ca33b09a600390c12a2c8f3a7f87dd6c","body":"base-sha: da6034d9ca33b09a600390c12a2c8f3a7f87dd6c","verdict_kind":"base_sha"}}
+{"type":"create","timestamp":"2026-10-22T15:44:31.692700Z","issue_id":"arn-6fe","payload":{"description":"Operator-authored branch `hand/arn-501b`, landed via `exophial integrate --branch` — no pebble id already tracked it.","priority":"2","title":"land: hand/arn-501b","type":"task"}}
+{"type":"comment","timestamp":"2026-10-22T15:44:31.726626Z","issue_id":"arn-6fe","payload":{"body":"branch-identity: hand/arn-501b"}}
+{"type":"comment","timestamp":"2026-10-22T15:49:30.712924Z","issue_id":"arn-6fe","payload":{"body":"exophial-integration-attempt-started: at da6034d9ca33b09a600390c12a2c8f3a7f87dd6c"}}
+{"type":"comment","timestamp":"2026-10-22T15:49:31.467359Z","issue_id":"arn-6fe","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type":"close","timestamp":"2026-10-22T15:49:31.479296Z","issue_id":"arn-6fe","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
