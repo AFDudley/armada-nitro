@@ -190,3 +190,23 @@ The SDK builds and checks disclosure packages. A client app uses the SDK and hol
 - Hub yield and swaps: [15](./15-hub-yield-and-swaps.md). Hub channels and games: [14](./14-shielded-games-over-nitro.md).
 - Settlement rail: [A.5 deposit/payout contract](./A-nitro-on-railgun/A.5-deposit-payout-contract.md). Anonymity set: [A.7](./A-nitro-on-railgun/A.7-anonymity-set.md).
 - Decisions: [ADR-0016](./09-architecture-decisions.md#adr-0016) (adjudicator and custodian), [ADR-0017](./09-architecture-decisions.md#adr-0017) (hub yield), [ADR-0020](./09-architecture-decisions.md#adr-0020) (this design).
+
+## Cleanup
+
+The disclosure gate script tears down its fixturenet when it exits. It runs
+`laconic-so deployment stop --delete-volumes`. It then removes the deployment
+directory. It does this on a normal exit. It does this on an error exit. An exit
+trap runs the teardown. It stands up the fixturenet from the warm snapshot, not
+a cold build.
+
+Every teardown command guards its path. It runs `: "${DEP:?}"` first. An empty
+or unset path aborts the teardown. The teardown acts only on that exact path.
+
+An exit trap does not run on a SIGKILL. The gate timeout can send a SIGKILL. So
+the gate does not trust the trap alone. stack/scripts/fixturenet-new removes its
+own stale deployments at the start of each run. It matches them by the exact
+name prefix. It guards the non-empty path. A run that a SIGKILL ended is cleaned
+by the next run.
+
+After the gate exits, no disclosure fixturenet deployment runs. No deployment
+directory stays.

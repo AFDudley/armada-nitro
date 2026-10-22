@@ -66,3 +66,12 @@ exit trap runs the teardown. After the gate exits, no armada-assets-e2e
 fixturenet deployment runs. No deployment directory stays. If a stand-up script
 returns the fixturenet to a caller, a `KEEP_FIXTURENET=1` flag from the caller
 holds the teardown, and the caller owns the teardown.
+
+Every teardown command guards its path. It runs `: "${DEP:?}"` first. An empty
+or unset path aborts the teardown. The teardown acts only on that exact path.
+
+An exit trap does not run on a SIGKILL. The gate timeout can send a SIGKILL. So
+the gate does not trust the trap alone. stack/scripts/fixturenet-new removes its
+own stale deployments at the start of each run. It matches them by the exact
+name prefix. It guards the non-empty path. A run that a SIGKILL ended is cleaned
+by the next run.
