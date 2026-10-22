@@ -1,0 +1,150 @@
+{
+  "id": "derived-arn-396",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. Before stack/scripts/fixturenet-new creates a deployment, it removes any earlier deployment that it left and that no live process uses. It finds earlier deployments by the exact deployment name prefix. It guards the deployment path so it never acts on an empty or unset path. For each stale deployment it runs laconic-so deployment stop --delete-volumes and then removes the deployment directory. A deployment that an earlier run left after a SIGKILL is cleaned by the next run that shares the name prefix.\nWhat holds now? Describe the current, observed state. stack/scripts/fixturenet-new creates a deployment without first removing earlier deployments it left. A run that a SIGKILL ended leaves its deployment. The next run does not clean it.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read stack/scripts/fixturenet-new. A cleanup step runs before the deploy create step. The cleanup step runs laconic-so deployment stop --delete-volumes. The cleanup step guards its path against an empty value. The cleanup step selects deployments by the exact name prefix. After fixturenet-new runs with a stale same-prefix deployment left on disk, that stale deployment is gone.\nWhat constraints apply? State them in plain prose. The cleanup step guards the deployment path against an empty value. The cleanup step acts only on the exact name prefix. The cleanup step does not remove a deployment that a live process uses.",
+  "restatement": "Before stack/scripts/fixturenet-new creates a new deployment, it must remove every earlier deployment that it left behind and that no live process uses. It finds those deployments by the exact deployment name prefix. It guards the deployment path so it never acts on an empty or unset path. For each stale deployment it runs laconic-so deployment stop --delete-volumes and then removes the deployment directory. This means a deployment left by a run that a SIGKILL ended is cleaned by the next run that shares the name prefix.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A cleanup step in stack/scripts/fixturenet-new runs before the deploy create step (\"$LACONIC\" --stack \"$STACK\" deploy create)."
+    },
+    {
+      "id": "c2",
+      "text": "For each stale deployment the cleanup step runs laconic-so deployment stop --delete-volumes and then removes the deployment directory."
+    },
+    {
+      "id": "c3",
+      "text": "The cleanup step guards the deployment path against an empty or unset value, so it never acts on an empty path."
+    },
+    {
+      "id": "c4",
+      "text": "The cleanup step selects earlier deployments by the exact deployment name prefix and acts only on those."
+    },
+    {
+      "id": "c5",
+      "text": "The cleanup step does not remove a deployment that a live process uses."
+    },
+    {
+      "id": "c6",
+      "text": "A deployment that an earlier run left after a SIGKILL is cleaned by the next run that shares the name prefix."
+    }
+  ],
+  "goal": "fixturenet-new cleans up stale same-prefix deployments before it creates a new deployment.",
+  "acceptance_criteria": [
+    "In the script, the stop-and-delete-volumes cleanup appears before the line that creates the new deployment.",
+    "The script stops each stale deployment with the option that deletes its volumes.",
+    "The script removes the deployment directory of a stale deployment after it stops that deployment.",
+    "The script checks that the deployment path is not empty or unset before it acts on it.",
+    "The script finds earlier deployments by looping over directories that start with the deployment name prefix.",
+    "The script checks whether a live process still uses a deployment before it removes that deployment.",
+    "The script does not pick leftover deployments by a run id. It uses the shared name prefix only."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "In the script, the stop-and-delete-volumes cleanup appears before the line that creates the new deployment."
+    },
+    {
+      "id": "c2",
+      "text": "The script stops each stale deployment with the option that deletes its volumes."
+    },
+    {
+      "id": "c3",
+      "text": "The script removes the deployment directory of a stale deployment after it stops that deployment."
+    },
+    {
+      "id": "c4",
+      "text": "The script checks that the deployment path is not empty or unset before it acts on it."
+    },
+    {
+      "id": "c5",
+      "text": "The script finds earlier deployments by looping over directories that start with the deployment name prefix."
+    },
+    {
+      "id": "c6",
+      "text": "The script checks whether a live process still uses a deployment before it removes that deployment."
+    },
+    {
+      "id": "c7",
+      "text": "The script does not pick leftover deployments by a run id. It uses the shared name prefix only."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep",
+      "description": "In the script, the stop-and-delete-volumes cleanup appears before the line that creates the new deployment.",
+      "proves": "The cleanup runs before the new deployment is created.",
+      "restatement_clause_id": "c1",
+      "pattern": "(?s)deployment stop[^\\n]*--delete-volumes.*--stack \"\\$STACK\" deploy create",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "The script stops each stale deployment with the option that deletes its volumes.",
+      "proves": "Stale deployments are stopped with volumes deleted.",
+      "restatement_clause_id": "c2",
+      "pattern": "deployment stop[^\\n]*--delete-volumes",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep",
+      "description": "The script removes the deployment directory of a stale deployment after it stops that deployment.",
+      "proves": "The stale deployment directory is deleted after the stop.",
+      "restatement_clause_id": "c2",
+      "pattern": "(?s)deployment stop[^\\n]*--delete-volumes.*rm -rf[^\\n]*\"\\$",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep",
+      "description": "The script checks that the deployment path is not empty or unset before it acts on it.",
+      "proves": "The cleanup never acts on an empty or unset path.",
+      "restatement_clause_id": "c3",
+      "pattern": "(-n \"\\$|\\$\\{[A-Za-z_]+:\\?|-z \"\\$)",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep",
+      "description": "The script finds earlier deployments by looping over directories that start with the deployment name prefix.",
+      "proves": "Earlier deployments are selected by the name prefix.",
+      "restatement_clause_id": "c4",
+      "pattern": "for \\w+ in [^\\n]*\\*",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep",
+      "description": "The script checks whether a live process still uses a deployment before it removes that deployment.",
+      "proves": "A deployment in use by a live process is not removed.",
+      "restatement_clause_id": "c5",
+      "pattern": "(fuser|lsof|pgrep|kill -0)",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c6"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The script does not pick leftover deployments by a run id. It uses the shared name prefix only.",
+      "proves": "A deployment from a killed run is found by the next run that shares the prefix.",
+      "restatement_clause_id": "c6",
+      "pattern": "for \\w+ in [^\\n]*(RUN_ID|\\$\\$)[^\\n]*\\*",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c7"
+    }
+  ]
+}
