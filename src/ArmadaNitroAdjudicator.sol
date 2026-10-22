@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
 import {PoseidonT4} from 'armada/privacy-pool/types/PoseidonLibs.sol';
@@ -15,8 +13,6 @@ import {
     CommitmentPreimage,
     G1Point,
     G2Point,
-    ShieldCiphertext,
-    ShieldRequest,
     SnarkProof,
     TokenData,
     TokenType,
@@ -31,13 +27,13 @@ uint8 constant SHIELD_ALLOCATION_TYPE = 3;
  * @title ArmadaNitroAdjudicator
  * @notice go-nitro's adjudicator with note-native custody on an Armada pool.
  * @dev Funding: `depositFromNote` submits an Armada unshield that is bound, inside the proof, to one
- * channel and one expected holding. Payout: an allocation of type `SHIELD` is paid by shielding a
- * fresh note (`destination` = the recipient's note public key, `metadata` = the note's
- * `ShieldCiphertext`). Participants may be EOAs or EIP-1271 contracts (see NitroUtils.isAuthorizedBy).
+ * channel and one expected holding. Payout (N2b): an allocation of type `SHIELD` is paid by
+ * minting a fresh owned commitment (`npk` = the recipient's note public key, value = the
+ * allocated amount) as one more output of the same single `transactOwned` spend that pays every
+ * other allocation -- never a separate shield call. Participants may be EOAs or EIP-1271
+ * contracts (see NitroUtils.isAuthorizedBy).
  */
 contract ArmadaNitroAdjudicator is NitroAdjudicator {
-    using SafeERC20 for IERC20;
-
     /// @notice Allocation type for a payout that shields a fresh note in the pool.
     uint8 public constant SHIELD = SHIELD_ALLOCATION_TYPE;
 
@@ -146,59 +142,28 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
     }
 
     /**
-     * @dev Pays `SHIELD` allocations by shielding one fresh note each, in a single `pool.shield`
-     * call (pulling real ERC20 the adjudicator holds); other allocations are paid with a fresh,
-     * un-nullified owned commitment through `pool.transactOwned` -- N1b: no raw ERC20/ETH
-     * transfer for an external destination, and a channel-to-channel (non-external, non-SHIELD)
-     * destination is out of this family's scope (no test exercises it; reverts if attempted).
-     * Zero-amount allocations are skipped (the pool rejects zero-value notes/commitments).
+     * @dev N2b: a SHIELD payout is one more output of N1b's single `transactOwned` spend on the
+     * pool (c1: not a separate shield call against a raw ERC-20 balance, which cannot stand
+     * now that `holdings` is a commitment). Each non-zero allocation -- SHIELD or non-SHIELD
+     * external -- mints a commitment of its own amount (c2), zero-amount allocations are skipped
+     * (c3), and the mechanism used for non-SHIELD (ETH or raw-asset) allocations is the unchanged
+     * N1b owned-commitment mint, never a raw `_transferAsset` (c4). The spend carries no protocol
+     * fee: it is a plain output with no fee tag and no cumulativeFees coupling (c5).
      */
     function _executeSingleAssetExit(
         Outcome.SingleAssetExit memory singleAssetExit
     ) internal override {
-        _payShieldAllocations(singleAssetExit.asset, singleAssetExit.assetMetadata, singleAssetExit.allocations);
-        _mintExternalCommitments(singleAssetExit.asset, singleAssetExit.allocations);
-    }
-
-    /// @dev N1b: the non-SHIELD half of a generic (channelId-less) exit, used by
-    /// NitroAdjudicator's transferAllAssets/concludeAndTransferAllAssets. Mints one un-nullified
-    /// owned commitment per non-zero, non-SHIELD allocation (every such allocation must be an
-    /// external destination -- channel-to-channel is out of this family's scope, see the brief).
-    function _mintExternalCommitments(
-        address asset,
-        Outcome.Allocation[] memory allocations
-    ) internal {
-        uint256 externalCount = 0;
-        for (uint256 j = 0; j < allocations.length; j++) {
-            if (allocations[j].amount > 0 && allocations[j].allocationType != SHIELD) externalCount++;
-        }
-        if (externalCount == 0) return;
-        CommitmentPreimage[] memory externalOutputs = new CommitmentPreimage[](externalCount);
-        uint256 e = 0;
-        for (uint256 j = 0; j < allocations.length; j++) {
-            if (allocations[j].amount == 0 || allocations[j].allocationType == SHIELD) continue;
-            require(_isExternalDestination(allocations[j].destination), 'Internal destination not supported');
-            externalOutputs[e++] = CommitmentPreimage({
-                npk: allocations[j].destination,
-                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: asset, tokenSubID: 0}),
-                value: SafeCast.toUint120(allocations[j].amount)
-            });
-        }
-        // N1b: no nullifier spent here -- this caller has no channel-keyed commitment context to
-        // spend; the real ERC20 backing each output stays locked in the adjudicator's own wallet
-        // (as it already was, via depositFromNote), redeemable later by the owning destination
-        // through its own transactOwned call.
-        _mintOwnedCommitments(new bytes32[](0), externalOutputs);
+        _mintPayoutCommitmentsNoChannel(singleAssetExit.asset, singleAssetExit.allocations);
     }
 
     /**
-     * @dev N1b: settle `transfer()`'s exit. Spends `holdings[asset][channelId]`'s current pool
-     * commitment and mints fresh owned commitments through `pool.transactOwned`: one per
-     * non-zero, non-SHIELD `exitAllocations` entry (owner-derived `npk` = the allocation's
-     * destination), plus a remainder commitment back to this adjudicator when the payout is
-     * partial (`totalPayouts < initialHoldings`). A full payout mints no remainder output, so
-     * `holdings[asset][channelId]` is left at `bytes32(0)`. SHIELD-type allocations are paid as
-     * before, by shielding a fresh note from the adjudicator's own ERC20 balance.
+     * @dev N1b/N2b: settle `transfer()`'s exit. Spends `holdings[asset][channelId]`'s current pool
+     * commitment and mints fresh owned commitments through a single `pool.transactOwned` call: one
+     * per non-zero `exitAllocations` entry -- SHIELD (c1/c2/c3: the payout note, npk = the
+     * allocation's destination) folded alongside non-SHIELD external (owner-derived npk, c4: the
+     * unchanged N1b mechanism) -- plus a remainder commitment back to this adjudicator when the
+     * payout is partial (`totalPayouts < initialHoldings`). A full payout mints no remainder
+     * output, so `holdings[asset][channelId]` is left at `bytes32(0)`. No protocol fee (c5).
      */
     function _settleTransferExit(
         address asset,
@@ -208,8 +173,8 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         uint256 initialHoldings,
         uint256 totalPayouts
     ) internal override {
-        _payShieldAllocations(asset, assetMetadata, exitAllocations);
-        holdings[asset][channelId] = _mintTransferRemainder(
+        assetMetadata; // unused here; kept for a uniform call signature with _executeSingleAssetExit
+        holdings[asset][channelId] = _mintTransferPayout(
             asset,
             holdings[asset][channelId],
             exitAllocations,
@@ -218,84 +183,92 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         emit AllocationUpdated(channelId, asset, initialHoldings, heldValue(asset, channelId));
     }
 
-    /// @dev N1b: the SHIELD-type half of a transfer exit, factored out to keep
-    /// `_settleTransferExit` under the local-variable limit.
-    function _payShieldAllocations(
-        address asset,
-        Outcome.AssetMetadata memory assetMetadata,
-        Outcome.Allocation[] memory exitAllocations
-    ) internal {
-        assetMetadata; // unused here; kept for a uniform call signature with _executeSingleAssetExit
-        uint256 shieldCount = 0;
-        for (uint256 i = 0; i < exitAllocations.length; i++) {
-            if (exitAllocations[i].amount > 0 && exitAllocations[i].allocationType == SHIELD) shieldCount++;
-        }
-        if (shieldCount == 0) return;
-        ShieldRequest[] memory requests = new ShieldRequest[](shieldCount);
-        uint256 shieldTotal = 0;
-        uint256 k = 0;
-        for (uint256 i = 0; i < exitAllocations.length; i++) {
-            Outcome.Allocation memory allocation = exitAllocations[i];
-            if (allocation.amount == 0 || allocation.allocationType != SHIELD) continue;
-            requests[k++] = ShieldRequest({
-                preimage: CommitmentPreimage({
-                    npk: allocation.destination,
-                    token: TokenData({tokenType: TokenType.ERC20, tokenAddress: asset, tokenSubID: 0}),
-                    value: SafeCast.toUint120(allocation.amount)
-                }),
-                ciphertext: abi.decode(allocation.metadata, (ShieldCiphertext))
-            });
-            shieldTotal += allocation.amount;
-        }
-        require(asset != address(0), 'Cannot shield ETH');
-        IERC20(asset).forceApprove(address(pool), shieldTotal);
-        pool.shield(requests, address(0));
-    }
-
-    /// @dev N1b: the non-SHIELD half of a transfer exit, factored out to keep
-    /// `_settleTransferExit` under the local-variable limit. Spends `oldCommitment` and mints one
-    /// commitment per non-zero, non-SHIELD allocation plus a remainder commitment back to this
-    /// adjudicator when `remainder > 0`; returns the new holding (the remainder commitment, or
-    /// `bytes32(0)` when nothing remains).
-    function _mintTransferRemainder(
+    /// @dev N1b/N2b: the single transactOwned spend for `_settleTransferExit`, factored out to
+    /// keep that function under the local-variable limit. Nullifies `oldCommitment` (if set) and
+    /// mints one commitment per non-zero `exitAllocations` entry (SHIELD and non-SHIELD external
+    /// folded into the same spend, c1), plus a remainder commitment back to this adjudicator when
+    /// `remainder > 0`; returns the new holding (the remainder commitment, or `bytes32(0)` when
+    /// nothing remains).
+    function _mintTransferPayout(
         address asset,
         bytes32 oldCommitment,
         Outcome.Allocation[] memory exitAllocations,
         uint256 remainder
     ) internal returns (bytes32) {
-        uint256 ownedCount = 0;
+        uint256 payoutCount = 0;
         for (uint256 i = 0; i < exitAllocations.length; i++) {
-            if (exitAllocations[i].amount > 0 && exitAllocations[i].allocationType != SHIELD) ownedCount++;
+            if (exitAllocations[i].amount > 0) payoutCount++;
         }
-        if (ownedCount == 0 && remainder == 0) {
+        if (payoutCount == 0 && remainder == 0) {
             return bytes32(0);
         }
 
-        uint256 outputCount = ownedCount + (remainder > 0 ? 1 : 0);
+        uint256 outputCount = payoutCount + (remainder > 0 ? 1 : 0);
         CommitmentPreimage[] memory outputs = new CommitmentPreimage[](outputCount);
         uint256 k = 0;
         for (uint256 i = 0; i < exitAllocations.length; i++) {
-            if (exitAllocations[i].amount == 0 || exitAllocations[i].allocationType == SHIELD) continue;
-            require(_isExternalDestination(exitAllocations[i].destination), 'Internal destination not supported');
-            outputs[k++] = CommitmentPreimage({
-                npk: exitAllocations[i].destination,
-                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: asset, tokenSubID: 0}),
-                value: SafeCast.toUint120(exitAllocations[i].amount)
-            });
+            Outcome.Allocation memory a = exitAllocations[i];
+            if (a.amount == 0) continue;
+            if (uint8(a.allocationType) != SHIELD) {
+                require(_isExternalDestination(a.destination), 'Internal destination not supported');
+            }
+            outputs[k++] = _notePreimage(asset, a.destination, a.amount);
         }
-        bytes32 remainderCommitment;
+        bytes32 newHolding;
         if (remainder > 0) {
-            CommitmentPreimage memory remPreimage = CommitmentPreimage({
-                npk: _addressToBytes32(address(this)),
-                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: asset, tokenSubID: 0}),
-                value: SafeCast.toUint120(remainder)
-            });
-            outputs[k] = remPreimage;
-            remainderCommitment = _hashCommitment(remPreimage);
+            CommitmentPreimage memory remainderPreimage = _notePreimage(asset, _addressToBytes32(address(this)), remainder);
+            outputs[payoutCount] = remainderPreimage;
+            newHolding = _hashCommitment(remainderPreimage);
         }
         bytes32[] memory nullifiers = oldCommitment == bytes32(0) ? new bytes32[](0) : _singleton(oldCommitment);
         _mintOwnedCommitments(nullifiers, outputs);
-        return remainderCommitment;
+        return newHolding;
+    }
+
+    /// @dev N1b/N2b: the non-SHIELD-plus-SHIELD half of a generic (channelId-less) exit, used by
+    /// NitroAdjudicator's transferAllAssets/concludeAndTransferAllAssets. Mints one un-nullified
+    /// owned commitment per non-zero allocation in a single transactOwned call (SHIELD and
+    /// non-SHIELD external folded together, c1); every non-SHIELD allocation must be an external
+    /// destination (channel-to-channel is out of this family's scope, see the brief).
+    function _mintPayoutCommitmentsNoChannel(
+        address asset,
+        Outcome.Allocation[] memory allocations
+    ) internal {
+        uint256 payoutCount = 0;
+        for (uint256 j = 0; j < allocations.length; j++) {
+            if (allocations[j].amount > 0) payoutCount++;
+        }
+        if (payoutCount == 0) return;
+        CommitmentPreimage[] memory outputs = new CommitmentPreimage[](payoutCount);
+        uint256 k = 0;
+        for (uint256 j = 0; j < allocations.length; j++) {
+            Outcome.Allocation memory a = allocations[j];
+            if (a.amount == 0) continue;
+            if (uint8(a.allocationType) != SHIELD) {
+                require(_isExternalDestination(a.destination), 'Internal destination not supported');
+            }
+            outputs[k++] = _notePreimage(asset, a.destination, a.amount);
+        }
+        // N1b: no nullifier spent here -- this caller has no channel-keyed commitment context to
+        // spend; the real ERC20 backing each output stays locked in the adjudicator's own wallet
+        // (as it already was, via depositFromNote), redeemable later by the owning destination
+        // through its own transactOwned call.
+        _mintOwnedCommitments(new bytes32[](0), outputs);
+    }
+
+    /// @dev N2b: a payout commitment's preimage (npk = the allocation's destination, value = the
+    /// allocated amount). The pool records a preimage for every payout commitment, so every
+    /// payout is provable later via `pool.preimageOf` (c2).
+    function _notePreimage(
+        address asset,
+        bytes32 npk,
+        uint256 value
+    ) internal pure returns (CommitmentPreimage memory) {
+        return CommitmentPreimage({
+            npk: npk,
+            token: TokenData({tokenType: TokenType.ERC20, tokenAddress: asset, tokenSubID: 0}),
+            value: SafeCast.toUint120(value)
+        });
     }
 
     /**
