@@ -1,0 +1,161 @@
+{
+  "id": "derived-arn-274",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/R1-adjudicator-rewrite.md's Structure and Chunking sections: the deploy script (component d) links the commitment-holdings library (a) and the pool-spend library (b) at deploy time; no deploy script carries an unlinked library placeholder into production. forge build --sizes shows every contract a deploy script deploys at or below 24,576 bytes runtime, with the margin recorded.\nWhat holds now? Describe the current, observed state. ArmadaNitroAdjudicator deploys today with no library linking, as one monolithic contract measured at 25,558 bytes runtime, 982 bytes over the EIP-170 limit of 24,576.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run forge build --sizes on integrated; read the deploy script that instantiates ArmadaNitroAdjudicator.\nWhat constraints apply? State them in plain prose. Depends on R1.1, R1.2 and R1.3 (the new contract and libraries it deploys and links).\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) script/*.s.sol deploying the new adjudicator contract",
+  "restatement": "Chunk 4 (component d) of the R1 adjudicator rewrite in armada-nitro. The deploy script in script/*.s.sol that deploys the new adjudicator contract must deploy the commitment-holdings library (a) and the pool-spend library (b) and link them into the adjudicator at deploy time, with no proxy. The adjudicator that the script puts on chain must carry no unlinked library placeholder. Today ArmadaNitroAdjudicator deploys as one monolithic contract with no library linking, at 25,558 bytes runtime. That is 982 bytes over the EIP-170 limit of 24,576 bytes. After this change, forge build --sizes must show every contract a deploy script deploys at or below 24,576 bytes runtime. The measured size and the margin of each deployed contract must be recorded in docs/tasks/R1-adjudicator-rewrite.md. The deploy script must run against a local anvil with the libraries linked and must not revert. This work depends on R1.1, R1.2 and R1.3, which supply the new contract and the two libraries. The worst failure is a deploy that reverts or cannot proceed; no funds move and nothing is lost, so the severity is negligible.",
+  "restatement_clauses": [
+    {
+      "id": "C1",
+      "text": "The deploy script (component d) links the commitment-holdings library (a) and the pool-spend library (b) at deploy time, runs against a local anvil without a revert, and no deploy script carries an unlinked library placeholder into production."
+    },
+    {
+      "id": "C2",
+      "text": "forge build --sizes shows every contract a deploy script deploys at or below 24,576 bytes runtime."
+    },
+    {
+      "id": "C3",
+      "text": "The measured runtime size and the margin below 24,576 bytes of each deployed contract are recorded in docs/tasks/R1-adjudicator-rewrite.md."
+    }
+  ],
+  "goal": "The deploy script deploys the new adjudicator with libraries (a) and (b) linked, every deployed contract is at or below 24,576 bytes runtime, and the brief records each measured size and margin.",
+  "acceptance_criteria": [
+    "Start a fresh local anvil chain and run the adjudicator deploy script against it with broadcast. The script finishes without a revert. The two libraries have code on chain at their deployed addresses. The adjudicator code on chain contains zero unlinked library placeholders (the __$...$__ marker).",
+    "Run forge build --sizes and match its runtime sizes against the list of contracts the deploy script actually deployed on a fresh local anvil run. At least three contracts are deployed (the adjudicator and the two libraries). None of them is over 24,576 bytes runtime, and the largest is at or below 24,576.",
+    "The R1 brief has a 'Measured sizes' section that states a runtime size in bytes and a margin for the deployed contracts."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Start a fresh local anvil chain and run the adjudicator deploy script against it with broadcast. The script finishes without a revert. The two libraries have code on chain at their deployed addresses. The adjudicator code on chain contains zero unlinked library placeholders (the __$...$__ marker)."
+    },
+    {
+      "id": "c2",
+      "text": "Run forge build --sizes and match its runtime sizes against the list of contracts the deploy script actually deployed on a fresh local anvil run. At least three contracts are deployed (the adjudicator and the two libraries). None of them is over 24,576 bytes runtime, and the largest is at or below 24,576."
+    },
+    {
+      "id": "c3",
+      "text": "The R1 brief has a 'Measured sizes' section that states a runtime size in bytes and a margin for the deployed contracts."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Start a fresh local anvil chain and run the adjudicator deploy script against it with broadcast. The script finishes without a revert. The two libraries have code on chain at their deployed addresses. The adjudicator code on chain contains zero unlinked library placeholders (the __$...$__ marker).",
+      "proves": "The deploy script deploys and links libraries (a) and (b) into the new adjudicator, and no unlinked placeholder reaches the chain.",
+      "restatement_clause_id": "C1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-adjudicator-deploy-linked.py",
+        "args": [
+          "--script",
+          "script/Deploy.s.sol"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "deploy_script_exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "linked_libraries_with_code",
+          "op": "ge",
+          "value": 2
+        },
+        {
+          "observe": "stdout_json",
+          "field": "adjudicator_has_code",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "unlinked_placeholder_count",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c1"
+    },
+    {
+      "description": "Run forge build --sizes and match its runtime sizes against the list of contracts the deploy script actually deployed on a fresh local anvil run. At least three contracts are deployed (the adjudicator and the two libraries). None of them is over 24,576 bytes runtime, and the largest is at or below 24,576.",
+      "proves": "Every contract the deploy script deploys fits under the EIP-170 limit of 24,576 bytes runtime, so the 982-byte overage is gone.",
+      "restatement_clause_id": "C2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-deployed-contract-sizes.py",
+        "args": [
+          "--script",
+          "script/Deploy.s.sol",
+          "--limit",
+          "24576"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "deployed_contract_count",
+          "op": "ge",
+          "value": 3
+        },
+        {
+          "observe": "stdout_json",
+          "field": "over_limit_count",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "max_runtime_size",
+          "op": "le",
+          "value": 24576
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 900,
+      "clause_id": "c2"
+    },
+    {
+      "description": "The R1 brief has a 'Measured sizes' section that states a runtime size in bytes and a margin for the deployed contracts.",
+      "proves": "The measured size and margin of each deployed contract are on record in the brief, as its acceptance requires.",
+      "restatement_clause_id": "C3",
+      "type": "grep",
+      "pattern": "[0-9][0-9,]*\\s*bytes",
+      "additional_patterns": [
+        "[Mm]argin"
+      ],
+      "files": [
+        "docs/tasks/R1-adjudicator-rewrite.md"
+      ],
+      "section": "Measured sizes",
+      "count": {
+        "unit": "patterns",
+        "op": "eq",
+        "value": 2
+      },
+      "clause_id": "c3"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check-adjudicator-deploy-linked.py",
+    "scripts/check-deployed-contract-sizes.py"
+  ]
+}
