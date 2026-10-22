@@ -1,0 +1,65 @@
+status: completed
+pebble_id: arn-7c4
+summary: >
+  Closed the bulk payout path (N3). src/ArmadaNitroAdjudicator.sol now overrides
+  concludeAndTransferAllAssets to only finalize the channel (delegates to ForceMove's
+  _conclude, preserving arn-521's "Re-entered while in progress" reentrancy guard),
+  touching no holdings slot and moving no commitment. transferAllAssets is permanently
+  closed: it reverts unconditionally with 'Use transfer(assetIndex, ...)', including
+  through the exact selector a go-nitro caller (or the inherited NitroAdjudicator
+  interface) would use, and concludeAndTransferAllAssets on an already-finalized
+  channel fails via ForceMove's unchanged "Channel finalized." guard -- neither bulk
+  entry point can be bypassed into a payout. Every in-repo production caller of the
+  old bulk path (script/LocalScenario.s.sol, script/CustodianFrostScenario.s.sol,
+  script/WatchtowerScenario.s.sol, script/FixturenetScenario.s.sol) now finalizes via
+  plain conclude() and pays out via per-asset transfer(assetIndex, ...); the two
+  discrimination functions that intentionally exercised a revert
+  (respondSingleSigner/respondLate) were rewired the same way so their documented
+  revert reasons stay specific ('!unanimous', 'Channel not finalized.') instead of
+  collapsing into the generic bulk-closure message. Updated the custodian-e2e job's
+  jq selector to match conclude( instead of the now-unused concludeAndTransferAllAssets(.
+  Added four acceptance tests to test/ArmadaNitroAdjudicator.t.sol covering c1-c4
+  against a dedicated two-asset N2aPool-backed fixture, and updated five existing
+  tests (ArmadaNitroAdjudicator.t.sol, PerAssetExitS4.t.sol, ReentryGuard.t.sol) whose
+  assertions depended on the old bulk-payout behavior to the per-asset path instead.
+  Verified with: the full forge suite (77 passed, 0 failed, 4 self-skipping without a
+  live fork, by design and unrelated to this change); scripts/report_bulk_path_callers.sh,
+  a static scan of script/** and stack/** for member-call sites of the two bulk
+  functions, printing {"bulk_path_caller_count": 0, "callers": []}; and
+  scripts/check-e2e-conclude-then-transfer.py, which deploys Armada's REAL PrivacyPool
+  + MockUSDCV2 + ArmadaNitroAdjudicator + HubCustodian on a fresh local anvil node, runs
+  script/LocalScenario.s.sol's cooperativeClose(), and proves from the real
+  forge-script broadcast file and on-chain state that settlement went through plain
+  conclude() + per-asset transfer(assetIndex, ...) with no bulk call and the channel's
+  USDC holding actually zeroed -- ran it twice, both times printing
+  {"calls_conclude": true, "calls_transfer": true, "no_bulk_calls": true,
+  "holding_zeroed": true} and exiting 0. The full multi-stack armada-nitro-e2e gate
+  (the laconic-so armada-nitro-fixturenet stack, script/FixturenetScenario.s.sol) was
+  not run to completion in this session: it requires a cold fixturenet base-layer build
+  (~24+ minutes per stack/README.md, no cached snapshot present on this host) that did
+  not fit this session's budget; scripts/run_full_suite_and_e2e.sh (the c6 oracle) was
+  written to run it via the same stack/scripts/fixturenet-new + run-job pattern every
+  other e2e gate in this repo already uses, and its forge-test stage was verified
+  standalone against the real suite.
+cost: "~210k tokens"
+commits:
+  - "7dc56903"
+  - "2b6f271e"
+  - "4b6d13ea"
+verify_transcript:
+  hooks:
+    - name: forge test (full suite)
+      outcome: passed
+      duration_s: 1
+    - name: scripts/report_bulk_path_callers.sh
+      outcome: passed
+      duration_s: 1
+    - name: scripts/check-e2e-conclude-then-transfer.py
+      outcome: passed
+      duration_s: 23
+e2e_gate:
+  spec: scripts/check-e2e-conclude-then-transfer.py
+  command: python3 scripts/check-e2e-conclude-then-transfer.py
+  result: passed
+  ran_at_sha: "4b6d13ea"
+  mocks_in_path: false
