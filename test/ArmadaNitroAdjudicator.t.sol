@@ -9,7 +9,20 @@ import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {IForceMoveApp} from 'src/nitro/interfaces/IForceMoveApp.sol';
 import {IMultiAssetHolder} from 'src/nitro/interfaces/IMultiAssetHolder.sol';
-import {CommitmentPreimage, ShieldCiphertext, TokenData, TokenType, Transaction} from 'src/armada/IArmadaPool.sol';
+import {
+    IArmadaPool,
+    BoundParams,
+    CommitmentPreimage,
+    G1Point,
+    G2Point,
+    ShieldCiphertext,
+    ShieldRequest,
+    SnarkProof,
+    TokenData,
+    TokenType,
+    Transaction,
+    UnshieldType
+} from 'src/armada/IArmadaPool.sol';
 import {ArmadaFixture} from './helpers/ArmadaFixture.sol';
 import {ArmadaNotes} from './helpers/ArmadaNotes.sol';
 import {ChannelStates} from './helpers/ChannelStates.sol';
@@ -31,6 +44,48 @@ contract GasBombParticipant {
     function isValidSignature(bytes32, bytes memory) external view returns (bytes4) {
         while (gasleft() > 0) {}
         return 0x1626ba7e;
+    }
+}
+
+/// @dev N2a: a test pool whose `transact` is a no-op (no ERC-20 leaves the pool), while its
+/// settable `preimageOf` registry lets a test register a commitment's preimage (value, owner) to
+/// exercise the adjudicator's value and owner checks.
+contract N2aPool is IArmadaPool {
+    mapping(bytes32 => CommitmentPreimage) public preimages;
+
+    function setPreimage(bytes32 commitment, CommitmentPreimage memory preimage) external {
+        preimages[commitment] = preimage;
+    }
+
+    function shield(ShieldRequest[] calldata requests, address) external {}
+
+    function transact(Transaction[] calldata) external {}
+
+    function preimageOf(bytes32 commitment) external view returns (CommitmentPreimage memory) {
+        return preimages[commitment];
+    }
+
+    function transactOwned(Transaction[] calldata) external {}
+
+    function merkleRoot() external pure returns (bytes32) {
+        return bytes32(0);
+    }
+
+    function treeNumber() external pure returns (uint256) {
+        return 0;
+    }
+}
+
+/// @dev Test harness that exposes a setter for `holdingsLock` so the reentrancy guard can be
+/// driven from a test (the guard reverts before it reaches the pool).
+contract AdjudicatorHarness is ArmadaNitroAdjudicator {
+    constructor(
+        IArmadaPool pool_,
+        address[] memory assets_
+    ) ArmadaNitroAdjudicator(pool_, assets_) {}
+
+    function setHoldingsLock(bytes32 channelId, uint256 value) external {
+        holdingsLock[channelId] = value;
     }
 }
 
@@ -79,13 +134,29 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
     // ---------------------------------------------------------------- funding
 
     function test_depositFromNote_creditsChannelFromShieldedNote() public {
+        N2aPool n2aPool = new N2aPool();
+        address[] memory assets = new address[](1);
+        assets[0] = address(usdc);
+        ArmadaNitroAdjudicator n2aAdjudicator = new ArmadaNitroAdjudicator(
+            IArmadaPool(address(n2aPool)), assets
+        );
         bytes32 channelId = _channelId(_fixedPart(address(consensusApp)));
         _shield(user, USER_DEPOSIT_NPK, USER_FUNDS);
-
-        _depositFromNote(channelId, 0, USER_FUNDS);
-
-        assertEq(adjudicator.heldValue(address(usdc), channelId), USER_FUNDS);
-        assertEq(usdc.balanceOf(address(adjudicator)), USER_FUNDS);
+        Transaction[] memory txs = _unshield(
+            address(n2aAdjudicator),
+            USER_FUNDS,
+            address(n2aAdjudicator),
+            n2aAdjudicator.depositBinding(channelId, 0),
+            0
+        );
+        n2aPool.setPreimage(
+            txs[0].commitments[0],
+            ArmadaNotes.usdcNote(address(usdc), bytes32(uint256(uint160(address(n2aAdjudicator)))), USER_FUNDS)
+        );
+        vm.prank(broadcaster);
+        n2aAdjudicator.depositFromNote(channelId, 0, txs);
+        assertEq(n2aAdjudicator.heldValue(address(usdc), channelId), USER_FUNDS);
+        assertEq(usdc.balanceOf(address(n2aAdjudicator)), 0);
     }
 
     function test_depositFromNote_rejectsUnshieldBoundToAnotherChannel() public {
@@ -137,6 +208,131 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         vm.prank(broadcaster);
         vm.expectRevert('TransactModule: Invalid Adapt Contract');
         pool.transact(txs);
+    }
+
+    // ---------------------------------------------------------------- N2a acceptance (spec derived-arn-61e)
+
+    function test_depositFromNote_creditsHoldingsToNewCommitment() public {
+        bytes32 channelId = _channelId(_fixedPart(address(consensusApp)));
+        _shield(user, USER_DEPOSIT_NPK, USER_FUNDS);
+        _depositFromNote(channelId, 0, USER_FUNDS);
+
+        // N2a: the channel's holding is the pool's new commitment (a bytes32 reference), not a
+        // raw balance; the held amount reads back as the deposited amount.
+        bytes32 holding = adjudicator.holdings(address(usdc), channelId);
+        assertTrue(holding != bytes32(0), 'no new commitment recorded');
+        assertEq(adjudicator.heldValue(address(usdc), channelId), USER_FUNDS);
+    }
+
+    function test_depositFromNote_revertsOnValueMismatch() public {
+        N2aPool n2aPool = new N2aPool();
+        address[] memory assets = new address[](1);
+        assets[0] = address(usdc);
+        ArmadaNitroAdjudicator n2aAdjudicator = new ArmadaNitroAdjudicator(
+            IArmadaPool(address(n2aPool)), assets
+        );
+        bytes32 channelId = _channelId(_fixedPart(address(consensusApp)));
+        Transaction[] memory txs = _unshield(
+            address(n2aAdjudicator),
+            USER_FUNDS,
+            address(n2aAdjudicator),
+            n2aAdjudicator.depositBinding(channelId, 0),
+            0
+        );
+        // Register the pool's preimage with a value different from the expected amount (USER_FUNDS),
+        // so the adjudicator's value check reverts.
+        n2aPool.setPreimage(
+            txs[0].commitments[0],
+            ArmadaNotes.usdcNote(address(usdc), bytes32(uint256(uint160(address(n2aAdjudicator)))), 1)
+        );
+        vm.prank(broadcaster);
+        vm.expectRevert('Collateral value mismatch');
+        n2aAdjudicator.depositFromNote(channelId, 0, txs);
+    }
+
+    function test_depositFromNote_revertsOnWrongOwner() public {
+        N2aPool n2aPool = new N2aPool();
+        address[] memory assets = new address[](1);
+        assets[0] = address(usdc);
+        ArmadaNitroAdjudicator n2aAdjudicator = new ArmadaNitroAdjudicator(
+            IArmadaPool(address(n2aPool)), assets
+        );
+        bytes32 channelId = _channelId(_fixedPart(address(consensusApp)));
+        Transaction[] memory txs = _unshield(
+            address(n2aAdjudicator),
+            USER_FUNDS,
+            address(n2aAdjudicator),
+            n2aAdjudicator.depositBinding(channelId, 0),
+            0
+        );
+        // Register the pool's preimage with a wrong npk (not the adjudicator's derived owner).
+        n2aPool.setPreimage(
+            txs[0].commitments[0],
+            ArmadaNotes.usdcNote(address(usdc), bytes32(uint256(uint160(address(0x1234)))), USER_FUNDS)
+        );
+        vm.prank(broadcaster);
+        vm.expectRevert('Collateral not adjudicator-owned');
+        n2aAdjudicator.depositFromNote(channelId, 0, txs);
+    }
+
+    function test_depositFromNote_noRawTokenBalanceChange() public {
+        N2aPool n2aPool = new N2aPool();
+        address[] memory assets = new address[](1);
+        assets[0] = address(usdc);
+        ArmadaNitroAdjudicator n2aAdjudicator = new ArmadaNitroAdjudicator(
+            IArmadaPool(address(n2aPool)), assets
+        );
+        bytes32 channelId = _channelId(_fixedPart(address(consensusApp)));
+        Transaction[] memory txs = _unshield(
+            address(n2aAdjudicator),
+            USER_FUNDS,
+            address(n2aAdjudicator),
+            n2aAdjudicator.depositBinding(channelId, 0),
+            0
+        );
+        // N2a: the deposit moves value into a contract-owned note inside the pool; no ERC-20 leaves
+        // the pool, so the adjudicator's raw token balance is unchanged.
+        n2aPool.setPreimage(
+            txs[0].commitments[0],
+            ArmadaNotes.usdcNote(address(usdc), bytes32(uint256(uint160(address(n2aAdjudicator)))), USER_FUNDS)
+        );
+        uint256 balanceBefore = usdc.balanceOf(address(n2aAdjudicator));
+        vm.prank(broadcaster);
+        n2aAdjudicator.depositFromNote(channelId, 0, txs);
+        assertEq(usdc.balanceOf(address(n2aAdjudicator)), balanceBefore);
+    }
+
+    function test_depositFromNote_guardsReentrancyAndExpectedHeld() public {
+        // (a) Re-entrant deposit is rejected: a nested call on this channel reverts before the pool.
+        address[] memory harnessAssets = new address[](1);
+        harnessAssets[0] = address(usdc);
+        AdjudicatorHarness harness = new AdjudicatorHarness(pool, harnessAssets);
+        bytes32 channelId = _channelId(_fixedPart(address(consensusApp)));
+        harness.setHoldingsLock(channelId, 1);
+        Transaction[] memory txs = _unshield(
+            address(harness),
+            USER_FUNDS,
+            address(harness),
+            harness.depositBinding(channelId, 0),
+            0
+        );
+        vm.prank(broadcaster);
+        vm.expectRevert('Re-entered while in progress');
+        harness.depositFromNote(channelId, 0, txs);
+
+        // (b) A deposit with a wrong expected holding amount is rejected.
+        _shield(user, USER_DEPOSIT_NPK, 2 * USER_FUNDS);
+        _depositFromNote(channelId, 0, USER_FUNDS);
+        Transaction[] memory staleTxs = _unshield(
+            address(adjudicator),
+            USER_FUNDS,
+            address(adjudicator),
+            adjudicator.depositBinding(channelId, 0),
+            0
+        );
+        vm.prank(broadcaster);
+        vm.expectRevert('held != expectedHeld');
+        adjudicator.depositFromNote(channelId, 0, staleTxs);
     }
 
     // ---------------------------------------------------------------- settlement

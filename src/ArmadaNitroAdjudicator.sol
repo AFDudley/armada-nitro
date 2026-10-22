@@ -92,6 +92,11 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
      * proof, and the pool accepts the transaction only from `adaptContract`, so the unshield can be
      * submitted only here and only for this channel at this holding. Anyone (e.g. a broadcaster) may
      * submit it.
+     * @dev N2a: the deposited value never leaves the pool. The transaction's single output
+     * (`commitments[0]`) must be a fresh contract-owned commitment whose pool-registered preimage
+     * (read live via `pool.preimageOf`, never a caller-asserted value) has `npk` derived from
+     * `address(this)`, a token on `isAsset`, and a value equal to the new cumulative holding
+     * (`expectedHeld + note.value`). No `IERC20.balanceOf` read is used for deposit accounting.
      * @param channelId Channel to credit.
      * @param expectedHeld Holdings of the note's token against `channelId` before the deposit.
      * @param transactions The single unshield transaction.
@@ -122,30 +127,22 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         // guard: no nested call may run on this channel while this deposit is in progress.
         require(holdingsLock[channelId] == 0, 'Re-entered while in progress');
         holdingsLock[channelId] += 1;
-        uint256 balanceBefore = IERC20(asset).balanceOf(address(this));
         pool.transact(transactions);
-        uint256 received = IERC20(asset).balanceOf(address(this)) - balanceBefore;
-        require(received == note.value, 'Unshield amount mismatch');
-
+        // N2a: the deposit moves value into a fresh contract-owned note inside the pool; no ERC-20
+        // leaves the pool to the adjudicator's raw balance. The single output (newCommitment) is a
+        // contract-owned commitment; the adjudicator verifies the pool's own preimage for it (value,
+        // owner and asset) before crediting the channel holding -- never a caller-asserted amount.
+        bytes32 newCommitment = transaction.commitments[0];
+        CommitmentPreimage memory preimage = pool.preimageOf(newCommitment);
+        uint256 amount = held + uint256(note.value);
+        require(preimage.npk == _addressToBytes32(address(this)), 'Collateral not adjudicator-owned');
+        require(preimage.token.tokenType == TokenType.ERC20, 'Collateral not ERC20');
+        require(preimage.token.tokenAddress == asset, 'Collateral wrong asset');
+        require(isAsset(preimage.token.tokenAddress), 'Collateral asset not configured');
+        require(uint256(preimage.value) == amount, 'Collateral value mismatch');
+        holdings[asset][channelId] = newCommitment;
         holdingsLock[channelId] -= 1;
-        held += received;
-
-        // N1a: the channel collateral is a pool commitment reference (bytes32), not a raw
-        // balance. `commitments[0]` is a SEPARATE, pool-verified commitment (distinct from the
-        // unshield's own hash at the last index) whose plaintext the caller must publish as
-        // `publicOutputs[0]`; the pool's own `_recordPreimages` only ever registers a preimage it
-        // has itself hash-matched to that commitment (TransactModule._validatePublicOutputs), so
-        // the adjudicator here only has to check the VALUE the pool let through is the one this
-        // deposit actually produced -- never a cached or caller-asserted amount.
-        require(transaction.commitments.length >= 1, 'Missing collateral commitment');
-        require(transaction.boundParams.publicOutputs.length >= 1, 'Missing collateral preimage');
-        CommitmentPreimage calldata collateral = transaction.boundParams.publicOutputs[0];
-        require(collateral.npk == _addressToBytes32(address(this)), 'Collateral not adjudicator-owned');
-        require(collateral.token.tokenType == TokenType.ERC20, 'Collateral not ERC20');
-        require(collateral.token.tokenAddress == asset, 'Collateral wrong asset');
-        require(uint256(collateral.value) == held, 'Collateral value mismatch');
-        holdings[asset][channelId] = transaction.commitments[0];
-        emit Deposited(channelId, asset, held);
+        emit Deposited(channelId, asset, amount);
     }
 
     /**
