@@ -1,10 +1,7 @@
-> **De-fee-tagged and superseded (2026-10-22).** There is no protocol swap fee
-> (operator ruling 2026-10-22; treasury decision 23 struck). A channel payout
-> carries no protocol fee, so the fee-tagged outputs to the Safe, the
-> `cumulativeFees` coupling and the `feeRecipient` recognition below are
-> WITHDRAWN. Separately, this chunk is superseded by contract-owned-notes §3a R6
-> (the adjudicator holds a pool balance), pending R1-R5. See
-> `docs/tasks/R6-adjudicator-balance-check.md`.
+> **De-fee-tagged (2026-10-22).** There is no protocol swap fee (operator ruling
+> 2026-10-22; treasury decision 23 struck). A channel payout carries no protocol
+> fee, so the fee-tagged outputs to the Safe, the `cumulativeFees` coupling and
+> the `feeRecipient` recognition below are WITHDRAWN.
 
 Chunk N2b · Family F4 · Points 7 · Route 5090
 Depends on: N1b, N2a, P2 (see "P2 interface this chunk assumes" below)
