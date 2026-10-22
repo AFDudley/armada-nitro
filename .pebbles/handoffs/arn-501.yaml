@@ -1,0 +1,43 @@
+status: completed
+pebble_id: arn-501
+summary: >
+  Folded the SHIELD payout into N1b's single transactOwned spend in
+  src/ArmadaNitroAdjudicator.sol. Removed pool.shield entirely (grep -n
+  pool.shield src/ArmadaNitroAdjudicator.sol now returns nothing); SHIELD
+  allocations now mint a payout commitment (npk = the allocation's
+  destination, value = the allocated amount) as one more output of the
+  same single pool.transactOwned call that already pays non-SHIELD
+  external allocations and mints the remainder commitment, both in
+  _mintTransferPayout (transfer()'s path) and
+  _mintPayoutCommitmentsNoChannel (transferAllAssets'/
+  concludeAndTransferAllAssets' path). Zero-amount allocations are
+  skipped, and the spend carries no protocol fee (no fee tag, no
+  cumulativeFees coupling). Added five tests to ArmadaNitroAdjudicatorTest
+  covering each acceptance clause (single transactOwned spend behind a
+  pool that rejects a direct shield call, the payout note provable via
+  pool.preimageOf, zero-amount allocations skipped, the unchanged
+  non-SHIELD ETH/raw-asset owned-commitment mechanism, and no fee taken).
+  Updated four existing settlement tests that asserted a Shield event
+  (no longer emitted) to verify the same payout note via pool.preimageOf
+  instead, and fixed one test in PerAssetExitS4.t.sol whose expected
+  revert reason (a SHIELD-path ERC20 pull underflowing) no longer applies
+  now that no payout moves raw ERC20; rewrote it to assert the new,
+  correct behavior (both assets pay out successfully via owned
+  commitments). Verified by running the full forge test suite (72
+  passed, 0 failed, 4 pre-existing skips unrelated to this change) and
+  forge test --match-contract ArmadaNitroAdjudicatorTest (25 passed, 0
+  failed).
+cost: "~210k tokens"
+commits:
+  - "5026d9c7"
+verify_transcript:
+  hooks:
+    - name: forge-test
+      outcome: passed
+      duration_s: 25
+e2e_gate:
+  spec: contracts/specs/derived-arn-501.spec.json
+  command: forge test --match-contract ArmadaNitroAdjudicatorTest
+  result: passed
+  ran_at_sha: "5026d9c7"
+  mocks_in_path: false
