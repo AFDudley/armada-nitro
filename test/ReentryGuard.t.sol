@@ -37,6 +37,14 @@ contract NoopPool is IArmadaPool {
     }
 
     function transactOwned(Transaction[] calldata) external {}
+
+    function merkleRoot() external pure returns (bytes32) {
+        return bytes32(0);
+    }
+
+    function treeNumber() external pure returns (uint256) {
+        return 0;
+    }
 }
 
 /// @dev Exposes test-only setters so each of the six holdings-mutating entry points can be

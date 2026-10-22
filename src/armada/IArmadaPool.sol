@@ -105,4 +105,11 @@ interface IArmadaPool {
      * by `msg.sender == owner`). Callable only by the owning contract.
      */
     function transactOwned(Transaction[] calldata transactions) external;
+
+    /// @dev N1b: the pool's current merkle root, needed to bind a transactOwned transaction's
+    /// `merkleRoot`/`treeNumber` fields to a root the pool's `rootHistory` recognizes.
+    function merkleRoot() external view returns (bytes32);
+
+    /// @dev N1b: the pool's current tree number, paired with `merkleRoot()` above.
+    function treeNumber() external view returns (uint256);
 }

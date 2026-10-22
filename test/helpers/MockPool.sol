@@ -37,4 +37,13 @@ contract MockPool is IArmadaPool {
     }
 
     function transactOwned(Transaction[] calldata transactions) external {}
+
+    /// @dev N1b: fixed stand-ins; MockPool's transactOwned is a no-op, so nothing checks these.
+    function merkleRoot() external pure returns (bytes32) {
+        return bytes32(0);
+    }
+
+    function treeNumber() external pure returns (uint256) {
+        return 0;
+    }
 }
