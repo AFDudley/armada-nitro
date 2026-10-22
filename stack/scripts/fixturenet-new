@@ -173,6 +173,43 @@ run_reconcile() {  # run_reconcile <label> [RECONCILER_TARGET-in-container]
   grep -E '^(weth|usdc|cctp|aave|lido|armada|armada_nitro|funding), ' "$log" | sed 's/^/    /' || true
 }
 
+# arn-46d.4: after the full reconcile, the manifest must hold exactly the
+# eight expected modules (weth, usdc, cctp, aave, lido, armada, armada_nitro,
+# funding); a ninth module or a missing module makes the script fail.
+check_module_set() {  # check_module_set <manifest>
+  local manifest="$1"
+  local expected='["weth","usdc","cctp","aave","lido","armada","armada_nitro","funding"]'
+  local actual missing extra
+  # Read .gasUsed keys; the real manifest lives under a root-owned
+  # tmpfs (needs sudo); a plain temp file (probe) is read without it.
+  actual=$(jq -c '.gasUsed | keys' "$manifest" 2>/dev/null || true)
+  if [ -z "$actual" ]; then
+    actual=$(sudo jq -c '.gasUsed | keys' "$manifest" 2>/dev/null || true)
+  fi
+  if [ -z "$actual" ]; then
+    echo "fixturenet-new: module check FAILED: could not read .gasUsed keys from ${manifest}" >&2
+    return 1
+  fi
+  missing=$(jq -cn --argjson exp "$expected" --argjson act "$actual" '$exp - $act')
+  extra=$(jq -cn --argjson exp "$expected" --argjson act "$actual" '$act - $exp')
+  if [ -z "$missing" ] || [ -z "$extra" ]; then
+    echo "fixturenet-new: module check FAILED: could not compute the set difference" >&2
+    return 1
+  fi
+  if [ "$missing" != '[]' ] || [ "$extra" != '[]' ]; then
+    echo "fixturenet-new: module check FAILED: ${manifest} does not hold exactly the eight modules" >&2
+    if [ "$missing" != '[]' ]; then
+      echo "  missing (expected but absent): $(jq -r '.[]' <<< "$missing")" >&2
+    fi
+    if [ "$extra" != '[]' ]; then
+      echo "  unexpected (present but not expected): $(jq -r '.[]' <<< "$extra")" >&2
+    fi
+    return 1
+  fi
+  return 0
+}
+
+
 t0=$(now)
 KEY=$(compute_base_key "$REPO_ROOT")
 SNAP=$(snap_path "$KEY")
@@ -269,6 +306,16 @@ else
   run_frost_keygen
   run_reconcile full
   echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
+fi
+
+
+# arn-46d.4: after the full reconcile, verify the manifest holds exactly the eight
+# expected modules; fail the script on a ninth or a missing module.
+if check_module_set "${DEP}/data/armada_env/manifest.json"; then
+  : # pass -- the module set is exactly the eight expected modules
+else
+  echo "fixturenet-new: manifest module set check failed" >&2
+  exit 1
 fi
 
 echo "=============================================================="
