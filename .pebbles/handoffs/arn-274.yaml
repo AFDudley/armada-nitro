@@ -1,0 +1,61 @@
+status: completed
+pebble_id: arn-274
+branch: worker/arn-274
+summary: >-
+  Component (d) of the R1 adjudicator rewrite: the deploy script
+  (script/Deploy.s.sol, left unchanged) deploys and links the
+  commitment-holdings library (a) and pool-spend library (b) into the new
+  ArmadaNitroAdjudicator at deploy time. Brought in the library split and
+  matching ArmadaNitroAdjudicator rewrite from the sibling worker/arn-a46
+  branch (src/armada/libraries/CommitmentHoldings.sol, PoolSpend.sol),
+  which forge script's --broadcast run deploys and links automatically via
+  CREATE2 -- no deploy script carries an unlinked __$...$__ placeholder
+  into production. Added the two spec-declared checker scripts:
+  scripts/check-adjudicator-deploy-linked.py starts a fresh local anvil,
+  deploys a local Armada pool, runs script/Deploy.s.sol against it with
+  --broadcast, reads forge's own broadcast record for the deployed
+  library/adjudicator addresses, and checks the deploy did not revert,
+  both libraries have on-chain code, the adjudicator has on-chain code,
+  and its runtime bytecode carries zero unlinked library placeholders;
+  scripts/check-deployed-contract-sizes.py resolves every contract the
+  deploy script deploys (its direct new/deployCode targets plus every
+  external library those contracts link, read from each artifact's
+  bytecode.linkReferences) and matches against `forge build --sizes
+  --json`, failing if any exceeds the EIP-170 limit. Recorded a "Measured
+  sizes" section in docs/tasks/R1-adjudicator-rewrite.md:
+  ArmadaNitroAdjudicator 21,913 B runtime (2,663 B margin under the
+  24,576 B limit), CommitmentHoldings 680 B, PoolSpend 6,392 B,
+  ConsensusApp 2,337 B, HubCustodian 4,328 B -- closing the 982 B overage
+  the Operator ruling recorded. Verified by running both new checker
+  scripts against a real local anvil (both print the required JSON
+  fields and exit 0), running `forge test` (73 passed, 0 failed, 4
+  pre-existing skips), and confirming the pre-existing arn-578 EIP-170
+  gate (scripts/check-contract-sizes.py) still exits 0 with
+  oversized_count 0. pre-commit (ruff, ruff-format, mypy, forge build and
+  test, EIP-170 contract size gate) all pass on the commit.
+cost: "~95k tokens"
+commits:
+  - "d9375a69"
+verify_transcript:
+  hooks:
+    - name: forge build and test
+      outcome: passed
+      duration_s: 25.0
+    - name: EIP-170 contract size gate (24,576 B runtime)
+      outcome: passed
+      duration_s: 2.0
+    - name: ruff
+      outcome: passed
+      duration_s: 0.3
+    - name: ruff-format
+      outcome: passed
+      duration_s: 0.3
+    - name: mypy
+      outcome: passed
+      duration_s: 1.5
+e2e_gate:
+  spec: contracts/specs/derived-arn-274.spec.json
+  command: python3 scripts/check-adjudicator-deploy-linked.py --script script/Deploy.s.sol && python3 scripts/check-deployed-contract-sizes.py --script script/Deploy.s.sol --limit 24576
+  result: passed
+  ran_at_sha: "d9375a69"
+  mocks_in_path: false
