@@ -111,8 +111,6 @@ def main() -> int:
     hook_exit_code: int = result.returncode
     out: str = (result.stdout or "") + "\n" + (result.stderr or "")
     # The hook's failure message must name the offending caller file.
-    if hook_exit_code != 0:
-        print(out)  # debug: show why the hook failed
     names_caller = bool(caller_rel) and (caller_rel in out)
 
     # Clean up the throwaway worktree.
