@@ -1,3 +1,8 @@
+> **Superseded (2026-10-22).** Contract-owned-notes lab book §3a R6 moves the
+> adjudicator to a pool balance `balance[adjudicator][token]`, not notes, so this
+> chunk's note-based mechanism is superseded, pending the R1-R5 pool work. See
+> `docs/tasks/R6-adjudicator-balance-check.md`.
+
 Chunk N3 · Family F4 · Points 8 · Route 5090
 Depends on: N1a, N1b, N2a, N2b
 
@@ -66,4 +71,4 @@ Audit-critical. Check:
 
 ## Out of scope
 The N7 gate updates that prove the new per-asset-only payout flow end to end on the fixturenet
-(this chunk only adds the unit tests); the N8 swap-fee gate.
+(this chunk only adds the unit tests).

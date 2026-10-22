@@ -1,3 +1,9 @@
+> **Superseded (2026-10-22).** Contract-owned-notes lab book §3a R6 moves the
+> adjudicator to a pool balance `balance[adjudicator][token]`, not notes. N1a
+> merged, but its holdings-as-commitment semantics and the `preimageOf` read are
+> superseded: holdings becomes a per-channel amount beside the pool balance,
+> pending the R1-R5 pool work. See `docs/tasks/R6-adjudicator-balance-check.md`.
+
 Chunk N1a · Family F4 · Points 8 · Route 5090
 Depends on: P2 (see "P2 interface this chunk assumes" below)
 

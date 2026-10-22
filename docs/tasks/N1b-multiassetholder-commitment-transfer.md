@@ -1,3 +1,9 @@
+> **Superseded (2026-10-22).** Contract-owned-notes lab book §3a R6 moves the
+> adjudicator to a pool balance `balance[adjudicator][token]`, not notes, so this
+> chunk's commitment transfer becomes a plain holdings-amount move with no owned
+> note and no circuit, pending the R1-R5 pool work. See
+> `docs/tasks/R6-adjudicator-balance-check.md`.
+
 Chunk N1b · Family F4 · Points 6 · Route 5090
 Depends on: N1a, P2 (see "P2 interface this chunk assumes" below)
 

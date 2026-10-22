@@ -1,3 +1,8 @@
+> **Superseded (2026-10-22).** Contract-owned-notes lab book §3a R6 moves the
+> adjudicator to a pool balance `balance[adjudicator][token]`, not notes, so this
+> chunk's note-based mechanism is superseded, pending the R1-R5 pool work. See
+> `docs/tasks/R6-adjudicator-balance-check.md`.
+
 Chunk N2a · Family F4 · Points 7 · Route 5090
 Depends on: N1a, P2 (see "P2 interface this chunk assumes" below). N1b (the transfer/reclaim
 payout side) is a parallel chunk; this deposit chunk does not use N1b's code and may land before
@@ -84,4 +89,4 @@ Audit-critical. Check:
 - no code path still reads `IERC20.balanceOf(address(this))` for deposit accounting.
 
 ## Out of scope
-Payout as a spend and fee-tagged outputs to the Safe (N2b); commitment-outcome finalization (N3).
+Payout as a spend (N2b); commitment-outcome finalization (N3).

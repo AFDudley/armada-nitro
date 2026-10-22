@@ -1,3 +1,10 @@
+> **WITHDRAWN (2026-10-22).** There is no protocol swap fee. Treasury lab book
+> decision 23 ("N8 proves a swap fee reaches RevenueLock") was an agent drafting
+> error with no operator ruling; it is struck. A swap is a co-signed reallocation
+> inside a channel whose collateral is already in the pool, so it crosses no pool
+> boundary -- the only protocol fee is the shield-in fee (operator ruling
+> 2026-10-22). Kept for history; do not build it.
+
 Chunk N8 · Family F4 · Points 6 · Route 5090
 Depends on: N2b, N7, G4
 

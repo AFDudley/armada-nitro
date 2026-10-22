@@ -1,3 +1,8 @@
+> **Superseded (2026-10-22).** Contract-owned-notes lab book §3a R6 moves the
+> adjudicator to a pool balance `balance[adjudicator][token]`, not notes, so this
+> chunk's note-based mechanism is superseded, pending the R1-R5 pool work. See
+> `docs/tasks/R6-adjudicator-balance-check.md`.
+
 Chunk N7 · Family F4 · Points 8 · Route 5090
 Depends on: N2a, N2b, N3
 
@@ -63,5 +68,5 @@ Check:
   report with the reason it no longer applies).
 
 ## Out of scope
-E11's own content (Aave/Lido channel assets); the N8 gate; a change to the allow-list's governance
+E11's own content (Aave/Lido channel assets); a change to the allow-list's governance
 model (still immutable, set at construction, per E16 S1).
