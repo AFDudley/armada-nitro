@@ -132,8 +132,20 @@ contract CustodianFrostScenario is Script {
             fp,
             finalState
         );
+        // N3: settlement is finalize (plain conclude) + the single asset's own
+        // transfer(assetIndex, ...), using ForceMove._conclude's bytes32(0) stateHash. Neither
+        // the now-closed transferAllAssets nor the finalize-only concludeAndTransferAllAssets is
+        // used here; the per-asset path is unconditional, not a fallback.
         vm.broadcast(c.deployerKey);
-        c.adjudicator.concludeAndTransferAllAssets(fp, signedFinal);
+        c.adjudicator.conclude(fp, signedFinal);
+        vm.broadcast(c.deployerKey);
+        c.adjudicator.transfer(
+            0,
+            NitroUtils.getChannelId(fp),
+            abi.encode(finalState.outcome),
+            bytes32(0),
+            new uint256[](0)
+        );
     }
 
     /// @dev Step 3 (E14d): signers {2,3} schedule `revokeDelegate` through `execute`

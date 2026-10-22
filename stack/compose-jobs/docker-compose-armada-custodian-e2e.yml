@@ -68,7 +68,7 @@ services:
         # each FROST-signed), then the delegate + user cooperatively close it, shielding the
         # payout (isValidSignature/EIP-1271 accepts the delegate's signature).
         run_script 'cooperativeClose()'
-        CLOSE_TX="$$(jq -r '.transactions[] | select((.function // "") | startswith("concludeAndTransferAllAssets(")) | .hash' "$$BCAST/cooperativeClose-latest.json")"
+        CLOSE_TX="$$(jq -r '.transactions[] | select((.function // "") | startswith("conclude(")) | .hash' "$$BCAST/cooperativeClose-latest.json")"
 
         # c7: the Shield log's payout note equals the closed state's allocation net of shieldFee().
         if forge script script/CustodianFrostScenario.s.sol --sig 'verify()' --rpc-url "$$HUB_RPC"; then

@@ -159,12 +159,15 @@ contract ReentryGuardTest is Test, INitroTypes {
         assertEq(adjudicator.heldValue(ASSET, channelId), 0);
     }
 
+    /// @dev N3: transferAllAssets is permanently closed; it reverts with the exact closure
+    /// message regardless of reentrancy state, so a nested call while holdingsLock is set
+    /// cannot reach the (now-removed) bulk path through some other revert reason either.
     function test_guard_transferAllAssets_revertsWhileInProgress() public {
         bytes32 channelId = bytes32(uint256(4));
         adjudicator.setHoldingsLock(channelId, 1);
         uint256 hBefore = adjudicator.heldValue(ASSET, channelId);
 
-        vm.expectRevert(bytes(GUARD_REVERT));
+        vm.expectRevert(bytes('Use transfer(assetIndex, ...)'));
         adjudicator.transferAllAssets(channelId, new Outcome.SingleAssetExit[](0), bytes32(0));
         uint256 hAfter = adjudicator.heldValue(ASSET, channelId);
         console.log("ARN521_C2 transferAllAssets", hBefore, hAfter);

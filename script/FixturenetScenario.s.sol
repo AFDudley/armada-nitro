@@ -154,11 +154,13 @@ contract FixturenetScenario is Script {
     }
 
     /// @dev E10: prove the challenge window is enforced, not just present. Attempts the same
-    /// `transferAllAssets` call `settle()` makes below, immediately after `openAndChallenge()`
-    /// registered the challenge -- i.e. strictly before `finalizesAt` (`block.timestamp` at
-    /// challenge time + `challengeDuration`, per `ForceMove.challenge`). `_mode` (StatusManager)
-    /// is therefore `Challenge`, not `Finalized`, and `_requireChannelFinalized`
-    /// (MultiAssetHolder.sol) must revert 'Channel not finalized.'.
+    /// per-asset `transfer(assetIndex, ...)` call `settle()` makes below, immediately after
+    /// `openAndChallenge()` registered the challenge -- i.e. strictly before `finalizesAt`
+    /// (`block.timestamp` at challenge time + `challengeDuration`, per `ForceMove.challenge`).
+    /// `_mode` (StatusManager) is therefore `Challenge`, not `Finalized`, and
+    /// `_requireChannelFinalized` (MultiAssetHolder.sol) must revert 'Channel not finalized.'
+    /// (N3: the now-closed `transferAllAssets` would revert unconditionally here regardless of
+    /// the channel's state, which would no longer prove the challenge window is enforced).
     ///
     /// Deliberately NOT wrapped in `vm.broadcast()`: forge script's `--broadcast` mode replays
     /// every call made under an active broadcast prank as a real transaction in its second
@@ -177,8 +179,8 @@ contract FixturenetScenario is Script {
         INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
         INitroTypes.VariablePart memory latest = _forcedState(c, 12, false, FORCED_USER, FORCED_HUB);
         bytes memory data = abi.encodeCall(
-            c.adjudicator.transferAllAssets,
-            (NitroUtils.getChannelId(fp), latest.outcome, NitroUtils.hashState(fp, latest))
+            c.adjudicator.transfer,
+            (0, NitroUtils.getChannelId(fp), abi.encode(latest.outcome), NitroUtils.hashState(fp, latest), new uint256[](0))
         );
         (bool ok, bytes memory ret) = address(c.adjudicator).call(data);
         require(!ok, 'early settle unexpectedly succeeded before the challenge window elapsed');

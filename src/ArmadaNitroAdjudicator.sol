@@ -75,6 +75,35 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
      * @param expectedHeld Holdings of the note's token against `channelId` before the deposit.
      * @return The binding committed to by the unshield proof.
      */
+    /**
+     * @dev N3 S1: finalizes the channel (sets its status to Finalized) and leaves every
+     * holdings[asset][channelId] slot as the pre-conclude commitment, with no bulk payout.
+     * A two-asset channel is paid out by its own per-asset `transfer(assetIndex, ...)`, never
+     * by a single all-assets call.
+     */
+    function concludeAndTransferAllAssets(
+        FixedPart memory fixedPart,
+        SignedVariablePart memory candidate
+    ) public virtual override {
+        bytes32 channelId = _conclude(fixedPart, candidate);
+        // guard: a nested call on this channel reverts, atomically undoing `_conclude`'s effects
+        // too (arn-521's invariant, preserved even though this override makes no further call).
+        require(holdingsLock[channelId] == 0, 'Re-entered while in progress');
+    }
+
+    /**
+     * @dev N3 S2: closes the inherited bulk payout path. Reverts with the exact message, so
+     * no base MultiAssetHolder or NitroAdjudicator selector can reach the bulk path.
+     */
+    function transferAllAssets(
+        bytes32 channelId,
+        Outcome.SingleAssetExit[] memory outcome,
+        bytes32 stateHash
+    ) public virtual override {
+        revert('Use transfer(assetIndex, ...)');
+    }
+
+
     function depositBinding(bytes32 channelId, uint256 expectedHeld) public pure returns (bytes32) {
         return keccak256(abi.encode(channelId, expectedHeld));
     }

@@ -123,9 +123,13 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         assertEq(uint256(pool.preimageOf(custodianCommitment).value), HUB_FUNDS, 'custodian paid via a fresh commitment');
     }
 
-    // c2: the all-assets exit `transferAllAssets` succeeds for both assets, including the
-    // reverting token.
-    function test_transferAllAssets_succeedsForBothAssets_evenWhenPairedTokenReverts() public {
+    // c2 (N3): the all-assets exit `transferAllAssets` is permanently closed. It reverts with
+    // the exact closure message on this finalized two-asset channel -- even though, absent N3,
+    // both payouts would have succeeded (the reverting token's broken `transfer()` is never
+    // invoked by a pool-commitment payout) -- and neither asset's holding moves. The per-asset
+    // path for this same channel shape is exercised by
+    // test_transfer_assetIndex_paysOtherAsset_whenPairedTokenReverts above.
+    function test_transferAllAssets_revertsOnFinalizedTwoAssetChannel() public {
         FixedPart memory fp = _fixedPart(address(consensusApp));
         bytes32 channelId = _channelId(fp);
         _fundTwoAssetChannel(channelId);
@@ -142,23 +146,11 @@ contract PerAssetExitS4Test is ArmadaFixture, INitroTypes {
         );
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
 
-        // N2b: a payout -- SHIELD or non-SHIELD -- never pulls or pushes the real ERC20 anymore;
-        // every allocation mints a pool commitment through a single `transactOwned` spend. The
-        // reverting token's broken `transfer()` is never invoked by either asset's payout, so the
-        // all-assets exit now succeeds for both, leaving no holding behind.
+        vm.expectRevert(bytes('Use transfer(assetIndex, ...)'));
         adjudicator.transferAllAssets(channelId, state.outcome, stateHash);
 
-        assertEq(adjudicator.heldValue(address(usdc), channelId), 0, 'usdc fully paid out');
-        assertEq(adjudicator.heldValue(address(revToken), channelId), 0, 'revToken fully paid out');
-
-        bytes32 revUserCommitment = ArmadaNotes.commitmentHash(
-            CommitmentPreimage({
-                npk: USER2_PAYOUT_NPK,
-                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: address(revToken), tokenSubID: 0}),
-                value: uint120(USER_FUNDS)
-            })
-        );
-        assertEq(uint256(pool.preimageOf(revUserCommitment).value), USER_FUNDS, 'user paid revToken via a fresh commitment');
+        assertEq(adjudicator.heldValue(address(usdc), channelId), USER_FUNDS + HUB_FUNDS, 'usdc untouched by the reverted attempt');
+        assertEq(adjudicator.heldValue(address(revToken), channelId), HUB_FUNDS, 'revToken untouched by the reverted attempt');
     }
 
     // ---------------------------------------------------------------- helpers

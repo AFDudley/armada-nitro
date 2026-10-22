@@ -3,12 +3,13 @@ pragma solidity 0.8.17;
 
 import {Vm} from 'forge-std/Test.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
-import {ArmadaNitroAdjudicator} from 'src/ArmadaNitroAdjudicator.sol';
+import {ArmadaNitroAdjudicator, SHIELD_ALLOCATION_TYPE} from 'src/ArmadaNitroAdjudicator.sol';
 import {ConsensusApp} from 'src/nitro/ConsensusApp.sol';
 import {NitroUtils} from 'src/nitro/libraries/NitroUtils.sol';
 import {INitroTypes} from 'src/nitro/interfaces/INitroTypes.sol';
 import {IForceMoveApp} from 'src/nitro/interfaces/IForceMoveApp.sol';
 import {IMultiAssetHolder} from 'src/nitro/interfaces/IMultiAssetHolder.sol';
+import {INitroAdjudicator} from 'src/nitro/interfaces/INitroAdjudicator.sol';
 import {
     IArmadaPool,
     BoundParams,
@@ -374,11 +375,15 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
 
     function test_cooperativeClose_shieldsUserNoteAndPaysCustodian() public {
         FixedPart memory fixedPart = _fixedPart(address(consensusApp));
-        _fundChannel(_channelId(fixedPart));
+        bytes32 channelId = _channelId(fixedPart);
+        _fundChannel(channelId);
         VariablePart memory finalState = _state(7, true, 130e6, 70e6);
 
         uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
+        // N3: concludeAndTransferAllAssets only finalizes; the single asset is paid out by its
+        // own per-asset transfer(assetIndex, ...), using ForceMove._conclude's bytes32(0) stateHash.
         adjudicator.concludeAndTransferAllAssets(fixedPart, _signedByBoth(fixedPart, finalState));
+        adjudicator.transfer(0, channelId, abi.encode(finalState.outcome), bytes32(0), new uint256[](0));
 
         assertEq(uint256(_userPayoutCommitmentPreimage(130e6).value), 130e6, 'user paid via a fresh SHIELD commitment');
         // N1b: the hub's share is paid as a pool commitment, not a raw ERC20 transfer.
@@ -403,7 +408,8 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
 
         uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
-        adjudicator.transferAllAssets(channelId, latest.outcome, NitroUtils.hashState(fixedPart, latest));
+        // N3: transferAllAssets is closed; pay the single asset through its own per-asset call.
+        adjudicator.transfer(0, channelId, abi.encode(latest.outcome), NitroUtils.hashState(fixedPart, latest), new uint256[](0));
 
         assertEq(uint256(_userPayoutCommitmentPreimage(150e6).value), 150e6, 'user paid via a fresh SHIELD commitment');
         // N1b: the hub's share is paid as a pool commitment, not a raw ERC20 transfer.
@@ -435,7 +441,8 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
 
         uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
-        adjudicator.transferAllAssets(channelId, latest.outcome, NitroUtils.hashState(fixedPart, latest));
+        // N3: transferAllAssets is closed; pay the single asset through its own per-asset call.
+        adjudicator.transfer(0, channelId, abi.encode(latest.outcome), NitroUtils.hashState(fixedPart, latest), new uint256[](0));
 
         assertEq(uint256(_userPayoutCommitmentPreimage(160e6).value), 160e6, 'user paid via a fresh SHIELD commitment');
         // N1b: the hub's share is paid as a pool commitment, not a raw ERC20 transfer.
@@ -465,7 +472,8 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         // Past the revocation and the challenge window, the registered outcome pays out unchanged.
         vm.warp(block.timestamp + CHALLENGE_DURATION + 1);
         assertFalse(custodian.isActiveDelegate(delegate));
-        adjudicator.transferAllAssets(channelId, latest.outcome, NitroUtils.hashState(fixedPart, latest));
+        // N3: transferAllAssets is closed; pay the single asset through its own per-asset call.
+        adjudicator.transfer(0, channelId, abi.encode(latest.outcome), NitroUtils.hashState(fixedPart, latest), new uint256[](0));
         assertEq(uint256(_userPayoutCommitmentPreimage(120e6).value), 120e6, 'user paid via a fresh SHIELD commitment');
     }
 
@@ -1020,12 +1028,16 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
     /// commitments and sends no raw asset directly.
     function test_exit_external_destination_pays_commitment_not_raw_asset() public {
         FixedPart memory fixedPart = _fixedPart(address(consensusApp));
-        _fundChannel(_channelId(fixedPart));
+        bytes32 channelId = _channelId(fixedPart);
+        _fundChannel(channelId);
         VariablePart memory finalState = _state(7, true, 130e6, 70e6);
 
         uint256 custodianBalBefore = usdc.balanceOf(address(custodian));
 
+        // N3: concludeAndTransferAllAssets only finalizes; pay the single asset via its own
+        // per-asset transfer(assetIndex, ...), using ForceMove._conclude's bytes32(0) stateHash.
         adjudicator.concludeAndTransferAllAssets(fixedPart, _signedByBoth(fixedPart, finalState));
+        adjudicator.transfer(0, channelId, abi.encode(finalState.outcome), bytes32(0), new uint256[](0));
 
         // No raw asset moved to the custodian's wallet.
         assertEq(usdc.balanceOf(address(custodian)), custodianBalBefore, 'no raw ERC20 transfer to the custodian');
@@ -1230,5 +1242,209 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         vm.expectRevert('Internal destination not supported');
         harness.exposedMintTransferPayout(address(usdc), bytes32(0), allocs, 0);
     }
+
+    // ---------------------------------------------------------------- N3: finalize-only conclude,
+    // revert bulk transferAllAssets (derived-arn-7c4)
+
+    uint120 internal constant N3_USDC_FUNDS = 100e6;
+    uint120 internal constant N3_SECOND_FUNDS = 80e6;
+    uint256 internal constant N3_USDC_USER = 60e6;
+    uint256 internal constant N3_USDC_HUB = 40e6;
+    uint256 internal constant N3_SECOND_USER = 50e6;
+    uint256 internal constant N3_SECOND_HUB = 30e6;
+    bytes32 internal constant N3_USER_NPK = bytes32(uint256(0x7777));
+    bytes32 internal constant N3_USER2_NPK = bytes32(uint256(0x8888));
+    address internal constant N3_RECIPIENT = address(0xC0DE);
+
+    /// @dev A two-asset channel over a dedicated N2aPool-backed adjudicator, used by the N3
+    /// conclude/transfer tests below.
+    struct N3Channel {
+        ArmadaNitroAdjudicator adjudicator;
+        N2aPool pool;
+        FixedPart fixedPart;
+        bytes32 channelId;
+        VariablePart finalState;
+        address secondAsset;
+    }
+
+    /// @dev c1/c4: funds both assets of a fresh two-asset channel and builds its (unsubmitted)
+    /// two-asset final state -- a SHIELD allocation to a fresh npk plus a "simple" external
+    /// allocation to `N3_RECIPIENT`, for each asset, summing to that asset's funded amount.
+    function _n3SetUpTwoAssetChannel() internal returns (N3Channel memory c) {
+        c.pool = new N2aPool();
+        c.secondAsset = address(0xA55E70C0);
+        address[] memory assets = new address[](2);
+        assets[0] = address(usdc);
+        assets[1] = c.secondAsset;
+        c.adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(address(c.pool)), assets);
+
+        c.fixedPart = _fixedPart(address(consensusApp));
+        c.channelId = _channelId(c.fixedPart);
+
+        _n3Fund(c, address(usdc), N3_USDC_FUNDS);
+        _n3Fund(c, c.secondAsset, N3_SECOND_FUNDS);
+
+        c.finalState = _n3FinalState(c.secondAsset);
+    }
+
+    /// @dev Deposits `amount` of `asset` into `c.channelId` through `c.pool`'s mocked
+    /// `depositFromNote` path (same shape as the N2a tests above, generalized to any asset).
+    function _n3Fund(N3Channel memory c, address asset, uint120 amount) internal {
+        Transaction[] memory txs = ArmadaNotes.unshield(
+            privacyPool,
+            asset,
+            address(c.adjudicator),
+            amount,
+            address(c.adjudicator),
+            c.adjudicator.depositBinding(c.channelId, 0),
+            keccak256(abi.encode('n3-fund', asset, c.channelId)),
+            0
+        );
+        c.pool.setPreimage(
+            txs[0].commitments[0],
+            ArmadaNotes.usdcNote(asset, bytes32(uint256(uint160(address(c.adjudicator)))), amount)
+        );
+        vm.prank(broadcaster);
+        c.adjudicator.depositFromNote(c.channelId, 0, txs);
+    }
+
+    function _n3FinalState(address secondAsset) internal view returns (VariablePart memory) {
+        Outcome.Allocation[] memory usdcAlloc = new Outcome.Allocation[](2);
+        usdcAlloc[0] = Outcome.Allocation(
+            N3_USER_NPK,
+            N3_USDC_USER,
+            SHIELD_ALLOCATION_TYPE,
+            abi.encode(ArmadaNotes.ciphertext(N3_USER_NPK))
+        );
+        usdcAlloc[1] = Outcome.Allocation(
+            bytes32(uint256(uint160(N3_RECIPIENT))),
+            N3_USDC_HUB,
+            uint8(Outcome.AllocationType.simple),
+            ''
+        );
+
+        Outcome.Allocation[] memory secondAlloc = new Outcome.Allocation[](2);
+        secondAlloc[0] = Outcome.Allocation(
+            N3_USER2_NPK,
+            N3_SECOND_USER,
+            SHIELD_ALLOCATION_TYPE,
+            abi.encode(ArmadaNotes.ciphertext(N3_USER2_NPK))
+        );
+        secondAlloc[1] = Outcome.Allocation(
+            bytes32(uint256(uint160(N3_RECIPIENT))),
+            N3_SECOND_HUB,
+            uint8(Outcome.AllocationType.simple),
+            ''
+        );
+
+        Outcome.SingleAssetExit[] memory outcome = new Outcome.SingleAssetExit[](2);
+        outcome[0] = Outcome.SingleAssetExit(
+            address(usdc),
+            Outcome.AssetMetadata(Outcome.AssetType.Default, ''),
+            usdcAlloc
+        );
+        outcome[1] = Outcome.SingleAssetExit(
+            secondAsset,
+            Outcome.AssetMetadata(Outcome.AssetType.Default, ''),
+            secondAlloc
+        );
+        return VariablePart({outcome: outcome, appData: '', turnNum: 12, isFinal: true});
+    }
+
+    /// @dev c1: concludeAndTransferAllAssets finalizes a two-asset channel and leaves every
+    /// asset's holdings[asset][channelId] exactly as the pre-conclude commitment -- no bulk
+    /// payout, and no commitment moved (the mocked pool sees zero transactOwned spends).
+    function test_concludeAndTransferAllAssets_finalizesAndLeavesHoldingsUntouched() public {
+        N3Channel memory c = _n3SetUpTwoAssetChannel();
+        bytes32 usdcBefore = c.adjudicator.holdings(address(usdc), c.channelId);
+        bytes32 secondBefore = c.adjudicator.holdings(c.secondAsset, c.channelId);
+        assertTrue(usdcBefore != bytes32(0), 'usdc funded before conclude');
+        assertTrue(secondBefore != bytes32(0), 'second asset funded before conclude');
+
+        c.adjudicator.concludeAndTransferAllAssets(c.fixedPart, _signedByBoth(c.fixedPart, c.finalState));
+
+        assertEq(c.adjudicator.holdings(address(usdc), c.channelId), usdcBefore, 'usdc holding untouched by conclude-only');
+        assertEq(c.adjudicator.holdings(c.secondAsset, c.channelId), secondBefore, 'second asset holding untouched by conclude-only');
+        assertEq(c.pool.transactOwnedCalls(), 0, 'conclude-only moves no commitment');
+
+        (, uint48 finalizesAt, ) = c.adjudicator.unpackStatus(c.channelId);
+        assertTrue(finalizesAt != 0 && finalizesAt <= block.timestamp, 'channel finalized by conclude-only');
+    }
+
+    /// @dev c2: transferAllAssets reverts with the exact message, unconditionally (before any
+    /// channel-state check), so no setup is needed to observe it.
+    function test_transferAllAssets_revertsWithUseTransferMessage() public {
+        vm.expectRevert(bytes('Use transfer(assetIndex, ...)'));
+        adjudicator.transferAllAssets(bytes32(0), new Outcome.SingleAssetExit[](0), bytes32(0));
+    }
+
+    /// @dev c3: calling either bulk payout entry point on the adjudicator through the
+    /// INitroAdjudicator interface -- the exact selector a go-nitro caller would use, including
+    /// one inherited unchanged from the base contracts -- still fails on a finalized channel,
+    /// with no holdings change. transferAllAssets fails with the override's exact message;
+    /// concludeAndTransferAllAssets fails via ForceMove's unchanged "already finalized" guard
+    /// (the override delegates to the same `_conclude`), so neither ever reaches a bulk payout.
+    function test_inheritedBulkSelectorsCannotBypassRevert() public {
+        FixedPart memory fixedPart = _fixedPart(address(consensusApp));
+        bytes32 channelId = _channelId(fixedPart);
+        _fundChannel(channelId);
+        VariablePart memory finalState = _state(7, true, 130e6, 70e6);
+        adjudicator.concludeAndTransferAllAssets(fixedPart, _signedByBoth(fixedPart, finalState));
+
+        bytes32 holdingBefore = adjudicator.holdings(address(usdc), channelId);
+
+        vm.expectRevert(bytes('Use transfer(assetIndex, ...)'));
+        INitroAdjudicator(address(adjudicator)).transferAllAssets(
+            channelId,
+            finalState.outcome,
+            NitroUtils.hashState(fixedPart, finalState)
+        );
+        assertEq(adjudicator.holdings(address(usdc), channelId), holdingBefore, 'transferAllAssets attempt moves no holding');
+
+        vm.expectRevert(bytes('Channel finalized.'));
+        INitroAdjudicator(address(adjudicator)).concludeAndTransferAllAssets(
+            fixedPart,
+            _signedByBoth(fixedPart, finalState)
+        );
+        assertEq(adjudicator.holdings(address(usdc), channelId), holdingBefore, 'concludeAndTransferAllAssets attempt moves no holding');
+    }
+
+    /// @dev c4: on a finalized two-asset channel, each asset is paid by its own
+    /// `transfer(assetIndex, ...)` call -- paying asset 0 never touches asset 1's holding, and
+    /// each payout lands as its own commitment.
+    function test_perAssetTransfer_paysEachAssetOnFinalizedChannel() public {
+        N3Channel memory c = _n3SetUpTwoAssetChannel();
+        c.adjudicator.concludeAndTransferAllAssets(c.fixedPart, _signedByBoth(c.fixedPart, c.finalState));
+
+        bytes memory outcomeBytes = abi.encode(c.finalState.outcome);
+        // ForceMove._conclude stores the fingerprint with stateHash = bytes32(0); the per-asset
+        // transfer must match that same bytes32(0) (not NitroUtils.hashState(fixedPart, state)).
+        bytes32 stateHash = bytes32(0);
+
+        c.adjudicator.transfer(0, c.channelId, outcomeBytes, stateHash, new uint256[](0));
+        assertEq(c.adjudicator.heldValue(address(usdc), c.channelId), 0, 'usdc fully paid out by its own transfer');
+        assertEq(c.adjudicator.heldValue(c.secondAsset, c.channelId), N3_SECOND_FUNDS, 'second asset untouched by asset 0 transfer');
+
+        // The first transfer re-stores the fingerprint over the WHOLE outcome, with asset 0's
+        // allocations zeroed by the full payout (same destinations, amount 0) and asset 1's
+        // allocations still untouched; the second call's outcomeBytes must match that update.
+        c.finalState.outcome[0].allocations[0].amount = 0;
+        c.finalState.outcome[0].allocations[1].amount = 0;
+        bytes memory outcomeBytesAfterAsset0 = abi.encode(c.finalState.outcome);
+
+        c.adjudicator.transfer(1, c.channelId, outcomeBytesAfterAsset0, stateHash, new uint256[](0));
+        assertEq(c.adjudicator.heldValue(c.secondAsset, c.channelId), 0, 'second asset fully paid out by its own transfer');
+
+        bytes32 usdcUserCommitment = ArmadaNotes.commitmentHash(
+            ArmadaNotes.usdcNote(address(usdc), N3_USER_NPK, uint120(N3_USDC_USER))
+        );
+        assertEq(uint256(c.pool.preimageOf(usdcUserCommitment).value), N3_USDC_USER, 'usdc user paid via its own transfer');
+
+        bytes32 secondUserCommitment = ArmadaNotes.commitmentHash(
+            ArmadaNotes.usdcNote(c.secondAsset, N3_USER2_NPK, uint120(N3_SECOND_USER))
+        );
+        assertEq(uint256(c.pool.preimageOf(secondUserCommitment).value), N3_SECOND_USER, 'second asset user paid via its own transfer');
+    }
+
 
 }

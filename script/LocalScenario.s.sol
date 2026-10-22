@@ -72,7 +72,8 @@ contract LocalScenario is Script {
         Ctx memory c = _ctx();
         uint64 nonce = uint64(block.timestamp);
         INitroTypes.FixedPart memory fp = _fixedPart(c, nonce);
-        _fund(c, NitroUtils.getChannelId(fp));
+        bytes32 channelId = NitroUtils.getChannelId(fp);
+        _fund(c, channelId);
 
         INitroTypes.VariablePart memory finalState = _state(c, 7, true, COOPERATIVE_USER, COOPERATIVE_HUB);
         INitroTypes.SignedVariablePart memory signedFinal = ChannelStates.signedByBoth(
@@ -81,8 +82,14 @@ contract LocalScenario is Script {
             fp,
             finalState
         );
+        // N3: settlement is finalize (plain conclude) + the single asset's own
+        // transfer(assetIndex, ...), using ForceMove._conclude's bytes32(0) stateHash. Neither
+        // the now-closed transferAllAssets nor the finalize-only concludeAndTransferAllAssets is
+        // used here; the per-asset path is unconditional, not a fallback.
         vm.broadcast(c.deployerKey);
-        c.adjudicator.concludeAndTransferAllAssets(fp, signedFinal);
+        c.adjudicator.conclude(fp, signedFinal);
+        vm.broadcast(c.deployerKey);
+        c.adjudicator.transfer(0, channelId, abi.encode(finalState.outcome), bytes32(0), new uint256[](0));
         vm.writeFile(COOPERATIVE_NONCE, vm.toString(nonce));
     }
 
@@ -115,11 +122,14 @@ contract LocalScenario is Script {
         Ctx memory c = _ctx();
         INitroTypes.FixedPart memory fp = _fixedPart(c, _readNonce(CHALLENGE_NONCE));
         INitroTypes.VariablePart memory latest = _state(c, 12, false, FORCED_USER, FORCED_HUB);
+        // N3: transferAllAssets is closed; pay the single asset through its own per-asset call.
         vm.broadcast(c.deployerKey);
-        c.adjudicator.transferAllAssets(
+        c.adjudicator.transfer(
+            0,
             NitroUtils.getChannelId(fp),
-            latest.outcome,
-            NitroUtils.hashState(fp, latest)
+            abi.encode(latest.outcome),
+            NitroUtils.hashState(fp, latest),
+            new uint256[](0)
         );
     }
 
