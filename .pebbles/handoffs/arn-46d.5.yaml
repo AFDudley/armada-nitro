@@ -1,0 +1,68 @@
+status: completed
+pebble_id: arn-46d.5
+summary: >
+  The fixturenet gate now runs both base-key verify scripts. Added
+  stack/compose-jobs/docker-compose-armada-fixturenet-gate.yml, a
+  self-contained job registered in
+  stack/stacks/armada-nitro-fixturenet/stack.yml that runs
+  verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py
+  in order under `set -e`, so the gate exits non-zero when either script
+  fails, and prints a line naming each script so a reader of the run output
+  can confirm both checks ran. Added scripts/observe_fixturenet_gate.py,
+  the linked spec's acceptance oracle, which runs the gate across
+  both-pass, python-versions-fails, and docker-rebuild-fails scenarios and
+  reports gate_exit_code / python_versions_ran / docker_rebuild_ran, plus
+  the output-naming booleans under --report-output. Verified by running all
+  five acceptance tests of contracts/specs/derived-arn-46d.5.spec.json
+  (all PASS) and by the passing commit-boundary pre-commit gate.
+cost: "~40k tokens"
+commits:
+  - "9c85611e2b21885e043472885668d2f7"
+verify_transcript:
+  hooks:
+    - name: "pre-commit (full suite)"
+      outcome: passed
+      duration_s: 1.1
+    - name: "spec acceptance tests (5 scenarios)"
+      outcome: passed
+      duration_s: 35
+e2e_gate:
+  spec: contracts/specs/derived-arn-46d.5.spec.json
+  command: >-
+    python3 scripts/observe_fixturenet_gate.py --scenario both-pass;
+    python3 scripts/observe_fixturenet_gate.py --scenario python-versions-fails;
+    python3 scripts/observe_fixturenet_gate.py --scenario docker-rebuild-fails;
+    python3 scripts/observe_fixturenet_gate.py --scenario both-pass --report-output
+  result: passed
+  ran_at_sha: "9c85611e2b21885e043472885668d2f7"
+  mocks_in_path: false
+discrimination:
+  - mechanism: ablation
+    oracle: "scripts/observe_fixturenet_gate.py (the fixturenet gate oracle)"
+    target: "the gate's failure path (either verify script made to fail)"
+    perturbation: >
+      A forced failure of one verify script: the gate runs that script under
+      a scratch root that lacks the base-key inputs, so base-key.py exits
+      non-zero, and the gate (set -e) exits non-zero.
+    took:
+      applied:
+        observable: "the targeted verify script exits non-zero"
+        moved:
+          - "script passes (exit 0) under the real worktree root"
+          - "script fails (exit 1) under the scratch root (base-key.py FileNotFoundError)"
+      observed:
+        observable: "gate_exit_code"
+        moved:
+          - "0"
+          - "1"
+    assertions_fired:
+      - assertion: "the gate reports failure when either verify_base_key_python_versions.py or verify_base_key_docker_rebuild.py fails"
+        moved:
+          - "gate passes: both checks exit 0, gate_exit_code=0"
+          - "gate fails: a check exits 1, gate_exit_code=1"
+    pinned_at:
+      - "scripts/observe_fixturenet_gate.py"
+      - "contracts/specs/derived-arn-46d.5.spec.json"
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: true
