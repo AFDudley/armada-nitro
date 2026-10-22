@@ -1,0 +1,147 @@
+{
+  "id": "derived-arn-46d.1",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. stack/scripts/fixturenet-new never builds the fixturenet base layer itself. When no snapshot exists for the current base-key.py key, it exits non-zero immediately and prints the key and the build command, instead of running the cold base-reconcile path inline. A separate command, stack/scripts/fixturenet-base-build, is the only thing that builds the base and writes the snapshot plus its .key file; no gate job, compose job or worker script calls it, enforced by a pre-commit check. A restore compares the snapshot's .key lines against the current base-key.py output and refuses on any difference, naming the differing lines. After the full reconcile, fixturenet-new checks the manifest holds exactly the eight modules (weth, usdc, cctp, aave, lido, armada, armada_nitro, funding) and fails otherwise. The gate runs both verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py.\nWhat holds now? Describe the current, observed state. On armada-nitro commit 41dbb9e2 (introduced at 5769ef45b98c397c9320b8186475a34596f23679), stack/scripts/fixturenet-new:176-179 computes the key, and line 179 sets MODE=cold when no snapshot file exists for it, with no refusal: the cold branch (lines 238-261) runs the full base reconcile (run_reconcile base, tens of minutes) inline in the same process that called fixturenet-new, whether that caller is a worker session or a gate job. stack/scripts/fixturenet-new:264-267 prints the manifest's module list (jq '.gasUsed | keys | join(\", \")') but does not compare it against any expected set or fail on a mismatch. No pre-commit hook restricts which scripts may call a base-build step. No command compares a restored snapshot's recorded key lines against a fresh base-key.py run before accepting the restore.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read stack/scripts/fixturenet-new lines 176-182 (the MODE=cold branch sets no exit) and lines 238-261 (the cold branch's own base reconcile, run_reconcile base). Run rm -f the snapshot files under ~/deployments/.snapshots/armada-fixturenet-base-<key>.* for the current key, then run stack/scripts/fixturenet-new <name> and observe it proceeds to build the base layer instead of exiting.\n\nDecomposed child: stack/scripts/fixturenet-new never builds the fixturenet base layer itself. When no snapshot exists for the current stack/scripts/base-key.py key, the script exits non-zero immediately. It prints the key and the build command (stack/scripts/fixturenet-base-build). It does not run the cold base-reconcile path (run_reconcile base) inline. Today, on armada-nitro commit 41dbb9e2, stack/scripts/fixturenet-new:176-179 sets MODE=cold when the snapshot file is absent. The cold branch (lines 238-261) then runs the full base reconcile in the same process. To observe the fix: delete ~/deployments/.snapshots/armada-fixturenet-base-<key>.* for the current key, then run stack/scripts/fixturenet-new <name>. The script must exit non-zero, print the key and the build command, and start no base build.",
+  "restatement": "The script stack/scripts/fixturenet-new must never build the fixturenet base layer itself. When no snapshot exists for the current stack/scripts/base-key.py key, it must stop at once with a non-zero exit code. It must print the key and the build command (stack/scripts/fixturenet-base-build) so the user knows what to run. It must not run the cold base-reconcile path (run_reconcile base) in the same process. Today the script sets MODE=cold when the snapshot file is absent (lines 176-179 on armada-nitro commit 41dbb9e2) and the cold branch (lines 238-261) runs the full base reconcile inline. That behavior must go. Observation: after deleting ~/deployments/.snapshots/armada-fixturenet-base-<key>.* for the current key and running stack/scripts/fixturenet-new <name>, the script exits non-zero, prints the key and the build command, and starts no base build.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "When no snapshot ~/deployments/.snapshots/armada-fixturenet-base-<key>.* exists for the current stack/scripts/base-key.py key, stack/scripts/fixturenet-new <name> exits non-zero immediately."
+    },
+    {
+      "id": "c2",
+      "text": "In that case the script prints the key and the build command stack/scripts/fixturenet-base-build."
+    },
+    {
+      "id": "c3",
+      "text": "In that case the script does not run the cold base-reconcile path (run_reconcile base) inline and starts no base build."
+    }
+  ],
+  "goal": "fixturenet-new refuses to build the base layer and tells the user the key and the build command.",
+  "acceptance_criteria": [
+    "With the base snapshot deleted, running fixturenet-new ends with a failure exit code.",
+    "With the base snapshot deleted, the script's output shows the current key and the text stack/scripts/fixturenet-base-build.",
+    "With the base snapshot deleted, running fixturenet-new starts no base build and creates no base snapshot.",
+    "The script text no longer contains the inline base reconcile call run_reconcile base."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "With the base snapshot deleted, running fixturenet-new ends with a failure exit code."
+    },
+    {
+      "id": "c2",
+      "text": "With the base snapshot deleted, the script's output shows the current key and the text stack/scripts/fixturenet-base-build."
+    },
+    {
+      "id": "c3",
+      "text": "With the base snapshot deleted, running fixturenet-new starts no base build and creates no base snapshot."
+    },
+    {
+      "id": "c4",
+      "text": "The script text no longer contains the inline base reconcile call run_reconcile base."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "With the base snapshot deleted, running fixturenet-new ends with a failure exit code.",
+      "proves": "The script stops with a non-zero exit code when the base snapshot is missing.",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/scripts/verify-fixturenet-new-missing-base.sh",
+        "args": [
+          "verify-net"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "fixturenet_new_exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c1"
+    },
+    {
+      "description": "With the base snapshot deleted, the script's output shows the current key and the text stack/scripts/fixturenet-base-build.",
+      "proves": "The user is told the key and the build command to run.",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/scripts/verify-fixturenet-new-missing-base.sh",
+        "args": [
+          "verify-net"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "output_has_key",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "output_has_build_command",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c2"
+    },
+    {
+      "description": "With the base snapshot deleted, running fixturenet-new starts no base build and creates no base snapshot.",
+      "proves": "The script does not build the base layer inline.",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/scripts/verify-fixturenet-new-missing-base.sh",
+        "args": [
+          "verify-net"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "base_build_started",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "base_snapshot_created",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c3"
+    },
+    {
+      "description": "The script text no longer contains the inline base reconcile call run_reconcile base.",
+      "proves": "The cold inline base build path is removed from fixturenet-new.",
+      "restatement_clause_id": "c3",
+      "type": "grep_absent",
+      "pattern": "run_reconcile base",
+      "files": [
+        "stack/scripts/fixturenet-new"
+      ],
+      "clause_id": "c4"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/verify-fixturenet-new-missing-base.sh"
+  ]
+}
