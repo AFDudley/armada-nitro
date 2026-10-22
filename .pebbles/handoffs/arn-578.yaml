@@ -1,0 +1,109 @@
+status: completed
+pebble_id: arn-578
+branch: worker/arn-578
+summary: >-
+  Added the EIP-170 contract-size gate to the commit boundary. New
+  scripts/check-contract-sizes.py runs `forge build --sizes`, parses the
+  sizes report itself (not forge's exit code), and exits non-zero when a
+  contract a deploy script under script/ deploys has a runtime size above
+  24,576 bytes. It reports which contracts are over the limit in a JSON
+  stdout ({oversized_count, oversized[].contract}). Test harnesses no
+  deploy script deploys (e.g. AdjudicatorHarness) are excluded. Wired into
+  the gate as a local pre-commit hook (check-contract-sizes) in
+  .pre-commit-config.yaml, running on .sol / foundry changes. Verified all
+  five acceptance tests from contracts/specs/derived-arn-578.spec.json:
+  a deployed contract at 24,577 B fails, at 24,576 B passes, the incident
+  25,558 B report fails and names ArmadaNitroAdjudicator, and an oversized
+  AdjudicatorHarness does not fail the check.
+cost: "~30k tokens"
+commits:
+  - "afd5431c"
+files_changed:
+  - scripts/check-contract-sizes.py
+  - .pre-commit-config.yaml
+tests_added:
+  - contracts/specs/derived-arn-578.spec.json
+verify_transcript:
+  hooks:
+    - name: gate-no-host-deployment-access
+      outcome: passed
+      duration_s: 0.4
+    - name: job-no-host-deployment-path
+      outcome: skipped
+      duration_s: 0.1
+    - name: claude-md-coverage
+      outcome: passed
+      duration_s: 0.3
+    - name: reroute-main-commit
+      outcome: passed
+      duration_s: 0.1
+    - name: trailing-whitespace
+      outcome: passed
+      duration_s: 0.2
+    - name: end-of-file-fixer
+      outcome: passed
+      duration_s: 0.1
+    - name: check-yaml
+      outcome: passed
+      duration_s: 0.2
+    - name: check-merge-conflict
+      outcome: passed
+      duration_s: 0.1
+    - name: check-case-conflict
+      outcome: passed
+      duration_s: 0.1
+    - name: ruff
+      outcome: passed
+      duration_s: 1.0
+    - name: ruff-format
+      outcome: passed
+      duration_s: 0.3
+    - name: mypy
+      outcome: passed
+      duration_s: 1.5
+    - name: eslint
+      outcome: skipped
+      duration_s: 0.1
+    - name: check-contract-sizes
+      outcome: skipped
+      duration_s: 0.1
+e2e_gate:
+  spec: contracts/specs/derived-arn-578.spec.json
+  command: python3 scripts/check-contract-sizes.py --report -
+  result: passed
+  ran_at_sha: "afd5431c"
+  mocks_in_path: false
+discrimination:
+  - mechanism: red_first
+    oracle: scripts/check-contract-sizes.py (hook check-contract-sizes)
+    target: "EIP-170 gate: a deployed contract's runtime size"
+    perturbation: >-
+      Bump the ArmadaNitroAdjudicator row's runtime from 24,000 B (under
+      the 24,576 B limit) to 25,558 B (over the limit) via the stdin
+      report, so the gate must fail.
+    took:
+      applied:
+        observable: report row runtime for ArmadaNitroAdjudicator
+        moved:
+          - "24,000"
+          - "25,558"
+      observed:
+        observable: oversized_count
+        moved:
+          - "0"
+          - "1"
+    assertions_fired:
+      - assertion: oversized.0.contract
+        moved:
+          - "undefined"
+          - "ArmadaNitroAdjudicator"
+      - assertion: exit_code
+        moved:
+          - "0"
+          - "1"
+    pinned_at:
+      - scripts/check-contract-sizes.py
+      - contracts/specs/derived-arn-578.spec.json
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: not_written_invocation_scoped
