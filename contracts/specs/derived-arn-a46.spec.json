@@ -1,0 +1,121 @@
+{
+  "id": "derived-arn-a46",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/R1-adjudicator-rewrite.md's Acceptance section: the deploy script runs against a local anvil with libraries linked and does not revert.\nWhat holds now? Describe the current, observed state. No gate step runs the real deploy script against a local anvil. arn-d5a's fixturenet run showed the deploy fails once a real network enforces EIP-170, but that failure surfaces only in a full fixturenet reconcile, not in a fast gate check.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read the gate job definitions under env/gates and .exophial/gate; read script/*.s.sol that deploys ArmadaNitroAdjudicator; confirm no gate step starts anvil and runs it.\nWhat constraints apply? State them in plain prose. Runs on a local anvil, not a full fixturenet, so it stays fast enough to gate every chunk.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) env/gates, .exophial/gate, CI gate pipeline, script/*.s.sol",
+  "restatement": "The armada-nitro repository needs a fast gate check for one acceptance item in docs/tasks/R1-adjudicator-rewrite.md: \"The deploy script runs against a local anvil with libraries linked and does not revert.\" Today no gate step runs the real deploy script against a local anvil. The arn-d5a fixturenet run showed that the deploy fails when a real network enforces EIP-170. That failure shows only in a full fixturenet reconcile. The new check starts a local anvil that enforces the EIP-170 contract size limit. It then runs the real deploy script, script/Deploy.s.sol, which deploys ArmadaNitroAdjudicator, with its libraries linked. The check fails if the deploy reverts. The check uses a local anvil, not a full fixturenet, so that it is fast enough to run on every chunk. The commit gate (.pre-commit-config.yaml, run in the .exophial/gate image) runs the check.",
+  "restatement_clauses": [
+    {
+      "id": "C1",
+      "text": "The deploy script runs against a local anvil with libraries linked and does not revert."
+    },
+    {
+      "id": "C2",
+      "text": "The local anvil enforces the EIP-170 contract size limit, so a deploy that a real network rejects for size also fails the check."
+    },
+    {
+      "id": "C3",
+      "text": "A gate step runs this check, so that it runs on every chunk."
+    },
+    {
+      "id": "C4",
+      "text": "The check runs on a local anvil, not a full fixturenet, so it stays fast enough to gate every chunk."
+    }
+  ],
+  "goal": "Every chunk's gate runs script/Deploy.s.sol against a local anvil with libraries linked, enforces EIP-170, and fails when the deploy reverts.",
+  "acceptance_criteria": [
+    "Run the new deploy check. It starts a local anvil, runs script/Deploy.s.sol with libraries linked, and broadcasts the transactions. The check exits with status 0 and reports that the deploy did not revert and that the adjudicator has code at its deployed address.",
+    "The deploy check script does not raise or turn off the anvil contract size limit. The anvil it starts keeps the standard 24,576-byte limit from EIP-170.",
+    "The repository's commit gate configuration names the deploy check script, so the gate runs it on every chunk.",
+    "The deploy check script starts anvil itself and does not start or use a fixturenet or laconic-so stack."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Run the new deploy check. It starts a local anvil, runs script/Deploy.s.sol with libraries linked, and broadcasts the transactions. The check exits with status 0 and reports that the deploy did not revert and that the adjudicator has code at its deployed address."
+    },
+    {
+      "id": "c2",
+      "text": "The deploy check script does not raise or turn off the anvil contract size limit. The anvil it starts keeps the standard 24,576-byte limit from EIP-170."
+    },
+    {
+      "id": "c3",
+      "text": "The repository's commit gate configuration names the deploy check script, so the gate runs it on every chunk."
+    },
+    {
+      "id": "c4",
+      "text": "The deploy check script starts anvil itself and does not start or use a fixturenet or laconic-so stack."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Run the new deploy check. It starts a local anvil, runs script/Deploy.s.sol with libraries linked, and broadcasts the transactions. The check exits with status 0 and reports that the deploy did not revert and that the adjudicator has code at its deployed address.",
+      "proves": "The real deploy script completes on a local anvil with linked libraries and does not revert.",
+      "restatement_clause_id": "C1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/check-deploy-on-anvil.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "reverted",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "adjudicator_code_present",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c1"
+    },
+    {
+      "description": "The deploy check script does not raise or turn off the anvil contract size limit. The anvil it starts keeps the standard 24,576-byte limit from EIP-170.",
+      "proves": "The local anvil rejects an oversize contract the same way a real network does, so the check catches the arn-d5a failure.",
+      "restatement_clause_id": "C2",
+      "type": "grep_absent",
+      "pattern": "disable-code-size-limit|code-size-limit",
+      "files": [
+        "scripts/check-deploy-on-anvil.sh"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "description": "The repository's commit gate configuration names the deploy check script, so the gate runs it on every chunk.",
+      "proves": "A gate step runs the deploy check, not only a manual run or a fixturenet reconcile.",
+      "restatement_clause_id": "C3",
+      "type": "grep",
+      "pattern": "scripts/check-deploy-on-anvil\\.sh",
+      "files": [
+        ".pre-commit-config.yaml"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "description": "The deploy check script starts anvil itself and does not start or use a fixturenet or laconic-so stack.",
+      "proves": "The check depends only on a local anvil and stays fast, not on a full fixturenet reconcile.",
+      "restatement_clause_id": "C4",
+      "type": "grep_absent",
+      "pattern": "fixturenet|laconic-so",
+      "files": [
+        "scripts/check-deploy-on-anvil.sh"
+      ],
+      "clause_id": "c4"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check-deploy-on-anvil.sh"
+  ]
+}
