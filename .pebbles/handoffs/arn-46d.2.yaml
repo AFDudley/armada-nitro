@@ -1,0 +1,76 @@
+status: completed
+pebble_id: arn-46d.2
+summary: >
+  Added a separate base-build command, stack/scripts/fixturenet-base-build, that
+  builds the fixturenet base layer and writes the snapshot + .key file
+  (arn-46d.2 c1). Registered a pre-commit hook, verify-fixturenet-base-build-callers,
+  in .pre-commit-config.yaml that fails and names the caller file when a gate job
+  (env/gates/), compose job (stack/compose-jobs/), or worker script (stack/scripts/)
+  calls the base-build command (arn-46d.2 c2/c3/c4/c5/c6/c7). The acceptance checker
+  scripts/verify_base_build_caller_rule.py proves all four caller-kind cases: the
+  clean copy passes (hook_exit_code 0), and each of gate/compose/worker fails the
+  hook (hook_exit_code 1) while naming the offending caller file (names_caller true).
+  Verified by running the checker for all four caller kinds. The pre-commit hooks
+  (ruff, ruff-format, mypy, tdd-trailer, gate-no-host-deployment-access) all passed
+  on commit.
+cost: "~120k tokens"
+commits:
+  - "3439baacd6e3b291a60372288a342fbbeb2df1da"
+  - "8b11d1e743a48ae01c2347c7a51e296201c2cf31"
+verify_transcript:
+  hooks:
+    - name: gate-no-host-deployment-access
+      outcome: passed
+      duration_s: 1
+    - name: ruff
+      outcome: passed
+      duration_s: 1
+    - name: ruff-format
+      outcome: passed
+      duration_s: 1
+    - name: mypy
+      outcome: passed
+      duration_s: 1
+    - name: tdd-trailer
+      outcome: passed
+      duration_s: 1
+    - name: "acceptance checker (none/gate/compose/worker)"
+      outcome: passed
+      duration_s: 4
+e2e_gate:
+  spec: contracts/specs/derived-arn-46d.2.spec.json
+  command: "python3 scripts/verify_base_build_caller_rule.py (clean copy passes); --caller-kind gate/compose/worker each prove the hook fails and names the caller"
+  result: passed
+  ran_at_sha: "8b11d1e743a48ae01c2347c7a51e296201c2cf31"
+  mocks_in_path: false
+discrimination:
+  - mechanism: red_first
+    oracle: scripts/verify_base_build_caller_rule.py
+    target: "the pre-commit check that rejects a forbidden fixturenet-base-build caller"
+    perturbation: >-
+      Add a gate-job caller of stack/scripts/fixturenet-base-build (commit a
+      gate file that invokes the command), so the pre-commit check must fail
+      and name the offending caller file.
+    took:
+      applied:
+        observable: "env/gates/nitro-e2e/fixturenet-base-build-gate.ts"
+        moved:
+          - "absent (clean throwaway copy, no caller)"
+          - "runBaseBuild(\"stack/scripts/fixturenet-base-build\", \"myname\")"
+      observed:
+        observable: "the pre-commit hook's exit code and caller-naming"
+        moved:
+          - '{"hook_exit_code": 0, "names_caller": false}'
+          - '{"hook_exit_code": 1, "names_caller": true}'
+    assertions_fired:
+      - assertion: "the check rejects a forbidden caller and names its file"
+        moved:
+          - "hook passes (exit 0), no caller named"
+          - "hook fails (exit 1), caller file named"
+    pinned_at:
+      - .pre-commit-config.yaml
+      - scripts/verify_base_build_caller_rule.py
+      - stack/scripts/fixturenet-base-build
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: throwaway_tree_discarded
