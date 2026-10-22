@@ -1,0 +1,207 @@
+{
+  "id": "derived-arn-46d.5",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. stack/scripts/fixturenet-new never builds the fixturenet base layer itself. When no snapshot exists for the current base-key.py key, it exits non-zero immediately and prints the key and the build command, instead of running the cold base-reconcile path inline. A separate command, stack/scripts/fixturenet-base-build, is the only thing that builds the base and writes the snapshot plus its .key file; no gate job, compose job or worker script calls it, enforced by a pre-commit check. A restore compares the snapshot's .key lines against the current base-key.py output and refuses on any difference, naming the differing lines. After the full reconcile, fixturenet-new checks the manifest holds exactly the eight modules (weth, usdc, cctp, aave, lido, armada, armada_nitro, funding) and fails otherwise. The gate runs both verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py.\nWhat holds now? Describe the current, observed state. On armada-nitro commit 41dbb9e2 (introduced at 5769ef45b98c397c9320b8186475a34596f23679), stack/scripts/fixturenet-new:176-179 computes the key, and line 179 sets MODE=cold when no snapshot file exists for it, with no refusal: the cold branch (lines 238-261) runs the full base reconcile (run_reconcile base, tens of minutes) inline in the same process that called fixturenet-new, whether that caller is a worker session or a gate job. stack/scripts/fixturenet-new:264-267 prints the manifest's module list (jq '.gasUsed | keys | join(\", \")') but does not compare it against any expected set or fail on a mismatch. No pre-commit hook restricts which scripts may call a base-build step. No command compares a restored snapshot's recorded key lines against a fresh base-key.py run before accepting the restore.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read stack/scripts/fixturenet-new lines 176-182 (the MODE=cold branch sets no exit) and lines 238-261 (the cold branch's own base reconcile, run_reconcile base). Run rm -f the snapshot files under ~/deployments/.snapshots/armada-fixturenet-base-<key>.* for the current key, then run stack/scripts/fixturenet-new <name> and observe it proceeds to build the base layer instead of exiting.\n\nDecomposed child: The fixturenet gate runs both verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py. A gate run executes both scripts. The gate fails if either script fails. To observe the fix: read the gate's run output and confirm that both scripts ran.",
+  "restatement": "The fixturenet gate must run two checks every time it runs: verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py. If either check fails, the whole gate must fail. Anyone reading the output of a gate run must be able to confirm that both checks ran.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A fixturenet gate run executes verify_base_key_python_versions.py."
+    },
+    {
+      "id": "c2",
+      "text": "A fixturenet gate run executes verify_base_key_docker_rebuild.py."
+    },
+    {
+      "id": "c3",
+      "text": "The fixturenet gate fails if either verify_base_key_python_versions.py or verify_base_key_docker_rebuild.py fails."
+    },
+    {
+      "id": "c4",
+      "text": "The gate's run output shows that both verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py ran."
+    }
+  ],
+  "goal": "The fixturenet gate runs both verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py, fails when either fails, and shows both in its run output.",
+  "acceptance_criteria": [
+    "When the gate runs, the Python versions check is started and finishes.",
+    "When the gate runs, the Docker rebuild check is started and finishes.",
+    "When the Python versions check is made to fail, the gate reports failure.",
+    "When the Docker rebuild check is made to fail, the gate reports failure.",
+    "A reader of the gate's run output can find the names of both checks in it."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "When the gate runs, the Python versions check is started and finishes."
+    },
+    {
+      "id": "c2",
+      "text": "When the gate runs, the Docker rebuild check is started and finishes."
+    },
+    {
+      "id": "c3",
+      "text": "When the Python versions check is made to fail, the gate reports failure."
+    },
+    {
+      "id": "c4",
+      "text": "When the Docker rebuild check is made to fail, the gate reports failure."
+    },
+    {
+      "id": "c5",
+      "text": "A reader of the gate's run output can find the names of both checks in it."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "When the gate runs, the Python versions check is started and finishes.",
+      "proves": "The gate runs verify_base_key_python_versions.py on every run.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/observe_fixturenet_gate.py",
+        "args": [
+          "--scenario",
+          "both-pass"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "python_versions_ran",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "When the gate runs, the Docker rebuild check is started and finishes.",
+      "proves": "The gate runs verify_base_key_docker_rebuild.py on every run.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/observe_fixturenet_gate.py",
+        "args": [
+          "--scenario",
+          "both-pass"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "docker_rebuild_ran",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "When the Python versions check is made to fail, the gate reports failure.",
+      "proves": "A failure of verify_base_key_python_versions.py makes the gate fail.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/observe_fixturenet_gate.py",
+        "args": [
+          "--scenario",
+          "python-versions-fails"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "gate_exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "When the Docker rebuild check is made to fail, the gate reports failure.",
+      "proves": "A failure of verify_base_key_docker_rebuild.py makes the gate fail.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/observe_fixturenet_gate.py",
+        "args": [
+          "--scenario",
+          "docker-rebuild-fails"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "gate_exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "A reader of the gate's run output can find the names of both checks in it.",
+      "proves": "The run output of the gate confirms that both checks ran.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/observe_fixturenet_gate.py",
+        "args": [
+          "--scenario",
+          "both-pass",
+          "--report-output"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "output_names_python_versions",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "output_names_docker_rebuild",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 600,
+      "clause_id": "c5"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/observe_fixturenet_gate.py"
+  ]
+}
