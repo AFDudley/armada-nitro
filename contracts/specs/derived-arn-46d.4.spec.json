@@ -1,0 +1,137 @@
+{
+  "id": "derived-arn-46d.4",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. stack/scripts/fixturenet-new never builds the fixturenet base layer itself. When no snapshot exists for the current base-key.py key, it exits non-zero immediately and prints the key and the build command, instead of running the cold base-reconcile path inline. A separate command, stack/scripts/fixturenet-base-build, is the only thing that builds the base and writes the snapshot plus its .key file; no gate job, compose job or worker script calls it, enforced by a pre-commit check. A restore compares the snapshot's .key lines against the current base-key.py output and refuses on any difference, naming the differing lines. After the full reconcile, fixturenet-new checks the manifest holds exactly the eight modules (weth, usdc, cctp, aave, lido, armada, armada_nitro, funding) and fails otherwise. The gate runs both verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py.\nWhat holds now? Describe the current, observed state. On armada-nitro commit 41dbb9e2 (introduced at 5769ef45b98c397c9320b8186475a34596f23679), stack/scripts/fixturenet-new:176-179 computes the key, and line 179 sets MODE=cold when no snapshot file exists for it, with no refusal: the cold branch (lines 238-261) runs the full base reconcile (run_reconcile base, tens of minutes) inline in the same process that called fixturenet-new, whether that caller is a worker session or a gate job. stack/scripts/fixturenet-new:264-267 prints the manifest's module list (jq '.gasUsed | keys | join(\", \")') but does not compare it against any expected set or fail on a mismatch. No pre-commit hook restricts which scripts may call a base-build step. No command compares a restored snapshot's recorded key lines against a fresh base-key.py run before accepting the restore.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read stack/scripts/fixturenet-new lines 176-182 (the MODE=cold branch sets no exit) and lines 238-261 (the cold branch's own base reconcile, run_reconcile base). Run rm -f the snapshot files under ~/deployments/.snapshots/armada-fixturenet-base-<key>.* for the current key, then run stack/scripts/fixturenet-new <name> and observe it proceeds to build the base layer instead of exiting.\n\nDecomposed child: After the full reconcile, stack/scripts/fixturenet-new checks that the manifest holds exactly the eight modules: weth, usdc, cctp, aave, lido, armada, armada_nitro, funding. It fails otherwise. Today stack/scripts/fixturenet-new:264-267 prints the module list (jq '.gasUsed | keys | join(\", \")') but does not compare it against any expected set. To observe the fix: run the script against a manifest with a ninth module or with one of the eight missing. The script must exit non-zero.",
+  "restatement": "The fixturenet-new script must verify, after the full reconcile, that the manifest holds exactly the eight modules weth, usdc, cctp, aave, lido, armada, armada_nitro, funding. Today it only prints the module list (the jq '.gasUsed | keys | join(\", \")' at stack/scripts/fixturenet-new:264-267) and never compares it with an expected set. The script must compare the actual set with the expected set and exit non-zero on any difference. A ninth module is a difference. A missing module is a difference. A manifest with exactly the eight must not trigger this failure.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "After the full reconcile, stack/scripts/fixturenet-new accepts a manifest that holds exactly the eight modules weth, usdc, cctp, aave, lido, armada, armada_nitro, funding, and the module check does not fail."
+    },
+    {
+      "id": "c2",
+      "text": "Run against a manifest with a ninth module in addition to the eight, stack/scripts/fixturenet-new exits non-zero."
+    },
+    {
+      "id": "c3",
+      "text": "Run against a manifest where one of the eight modules (weth, usdc, cctp, aave, lido, armada, armada_nitro, funding) is missing, stack/scripts/fixturenet-new exits non-zero."
+    }
+  ],
+  "goal": "fixturenet-new fails with a non-zero exit when the manifest module set differs from the eight expected modules.",
+  "acceptance_criteria": [
+    "With a manifest holding exactly the eight expected modules, the module check passes and the script reports a zero exit status.",
+    "With a manifest holding the eight modules plus a ninth one, the script stops with a non-zero exit status.",
+    "With a manifest that lacks one of the eight modules, the script stops with a non-zero exit status."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "With a manifest holding exactly the eight expected modules, the module check passes and the script reports a zero exit status."
+    },
+    {
+      "id": "c2",
+      "text": "With a manifest holding the eight modules plus a ninth one, the script stops with a non-zero exit status."
+    },
+    {
+      "id": "c3",
+      "text": "With a manifest that lacks one of the eight modules, the script stops with a non-zero exit status."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "With a manifest holding exactly the eight expected modules, the module check passes and the script reports a zero exit status.",
+      "proves": "The check does not reject the correct set of eight modules.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/scripts/probe_module_check.sh",
+        "args": [
+          "exact_eight"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "script_exit",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "With a manifest holding the eight modules plus a ninth one, the script stops with a non-zero exit status.",
+      "proves": "An extra module in the manifest makes the script fail.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/scripts/probe_module_check.sh",
+        "args": [
+          "ninth_module"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "script_exit",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "With a manifest that lacks one of the eight modules, the script stops with a non-zero exit status.",
+      "proves": "A missing module in the manifest makes the script fail.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/scripts/probe_module_check.sh",
+        "args": [
+          "missing_module"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "script_exit",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c3"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/probe_module_check.sh"
+  ]
+}
