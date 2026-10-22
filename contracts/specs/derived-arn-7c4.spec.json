@@ -1,0 +1,182 @@
+{
+  "id": "derived-arn-7c4",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. concludeAndTransferAllAssets finalizes a channel (sets its status to finalized) and leaves every asset's holdings[asset][channelId] as the pre-conclude commitment, with no bulk payout. transferAllAssets reverts with 'Use transfer(assetIndex, ...)'. A subsequent per-asset transfer on the finalized channel pays out correctly, for a two-asset channel each paid by its own transfer. No in-repo caller depends on the reverted bulk path.\nWhat holds now? Describe the current, observed state. NitroAdjudicator's _transferAllAssetsBody does raw uint256 arithmetic on holdings[asset][channelId]. After N1a that slot holds a bytes32 commitment, not an amount, so the inherited bulk finalization path cannot run.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run forge test --match-contract ArmadaNitroAdjudicatorTest. One test calls concludeAndTransferAllAssets and checks the channel is finalized and every holdings slot is untouched. A second test calls transfer per asset on the finalized channel for a two-asset channel and checks each pays out. A third test calls transferAllAssets on a finalized channel and checks it reverts with 'Use transfer(assetIndex, ...)'. The full forge test suite and the armada-nitro-e2e gate pass on a fresh fixturenet.\nWhat constraints apply? State them in plain prose. S1's _conclude-only override must not move or record any commitment. The S2 revert cannot be bypassed via the base MultiAssetHolder or NitroAdjudicator selector. Every redirected or removed caller is accounted for, with no silent fallback to the bulk path. Out of scope: the N7 gate updates that prove the per-asset flow end to end on the fixturenet.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) src/ArmadaNitroAdjudicator.sol (concludeAndTransferAllAssets and transferAllAssets overrides)",
+  "restatement": "In src/ArmadaNitroAdjudicator.sol, concludeAndTransferAllAssets must only finalize the channel. It must set the status to finalized and leave every holdings[asset][channelId] slot as the pre-conclude commitment, with no bulk payout. transferAllAssets must revert with 'Use transfer(assetIndex, ...)', and no base MultiAssetHolder or NitroAdjudicator selector may bypass that revert. On a finalized two-asset channel, a per-asset transfer must pay each asset out correctly. No in-repo caller may depend on the bulk path, and nothing may silently fall back to it. The full forge suite and the armada-nitro-e2e gate must pass on a fresh fixturenet. The N7 gate updates are out of scope.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "concludeAndTransferAllAssets finalizes the channel (sets its status to finalized) and leaves every asset's holdings[asset][channelId] as the pre-conclude commitment, with no bulk payout. The conclude-only override must not move or record any commitment."
+    },
+    {
+      "id": "c2",
+      "text": "transferAllAssets reverts with 'Use transfer(assetIndex, ...)'."
+    },
+    {
+      "id": "c3",
+      "text": "The S2 revert cannot be bypassed via the base MultiAssetHolder or NitroAdjudicator selector."
+    },
+    {
+      "id": "c4",
+      "text": "A subsequent per-asset transfer on the finalized channel pays out correctly, for a two-asset channel each asset paid by its own transfer."
+    },
+    {
+      "id": "c5",
+      "text": "No in-repo caller depends on the reverted bulk path. Every redirected or removed caller is accounted for, with no silent fallback to the bulk path."
+    },
+    {
+      "id": "c6",
+      "text": "The full forge test suite and the armada-nitro-e2e gate pass on a fresh fixturenet (forge test --match-contract ArmadaNitroAdjudicatorTest included)."
+    }
+  ],
+  "goal": "The adjudicator finalizes a channel without paying out in bulk. The bulk payout function reverts, and each asset is paid by its own per-asset transfer.",
+  "acceptance_criteria": [
+    "After concluding a two-asset channel, the channel shows as finalized. Every holdings slot still holds the same commitment as before. No money moved.",
+    "Calling the bulk payout on a finalized channel fails with the message 'Use transfer(assetIndex, ...)'.",
+    "Calling every bulk payout entry point on the adjudicator, including those inherited from the base contracts, fails on a finalized channel. No holdings change.",
+    "On a finalized two-asset channel, one transfer per asset pays each asset to its recipients. Each asset is paid by its own transfer.",
+    "A report lists every place in the repo that calls the bulk payout path. The report shows zero such callers.",
+    "The full contract test suite and the armada-nitro-e2e gate run on a fresh test network. Both finish with no failures."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After concluding a two-asset channel, the channel shows as finalized. Every holdings slot still holds the same commitment as before. No money moved."
+    },
+    {
+      "id": "c2",
+      "text": "Calling the bulk payout on a finalized channel fails with the message 'Use transfer(assetIndex, ...)'."
+    },
+    {
+      "id": "c3",
+      "text": "Calling every bulk payout entry point on the adjudicator, including those inherited from the base contracts, fails on a finalized channel. No holdings change."
+    },
+    {
+      "id": "c4",
+      "text": "On a finalized two-asset channel, one transfer per asset pays each asset to its recipients. Each asset is paid by its own transfer."
+    },
+    {
+      "id": "c5",
+      "text": "A report lists every place in the repo that calls the bulk payout path. The report shows zero such callers."
+    },
+    {
+      "id": "c6",
+      "text": "The full contract test suite and the armada-nitro-e2e gate run on a fresh test network. Both finish with no failures."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "After concluding a two-asset channel, the channel shows as finalized. Every holdings slot still holds the same commitment as before. No money moved.",
+      "proves": "Concluding only finalizes the channel and never pays out or changes any holdings slot.",
+      "restatement_clause_id": "c1",
+      "test": "test_concludeAndTransferAllAssets_finalizesAndLeavesHoldingsUntouched",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "Calling the bulk payout on a finalized channel fails with the message 'Use transfer(assetIndex, ...)'.",
+      "proves": "The bulk payout function is closed and gives the stated error message.",
+      "restatement_clause_id": "c2",
+      "test": "test_transferAllAssets_revertsWithUseTransferMessage",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "Calling every bulk payout entry point on the adjudicator, including those inherited from the base contracts, fails on a finalized channel. No holdings change.",
+      "proves": "No inherited entry point can reach the bulk payout path.",
+      "restatement_clause_id": "c3",
+      "test": "test_inheritedBulkSelectorsCannotBypassRevert",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "On a finalized two-asset channel, one transfer per asset pays each asset to its recipients. Each asset is paid by its own transfer.",
+      "proves": "Per-asset transfer still pays out correctly after the bulk path is closed.",
+      "restatement_clause_id": "c4",
+      "test": "test_perAssetTransfer_paysEachAssetOnFinalizedChannel",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "A report lists every place in the repo that calls the bulk payout path. The report shows zero such callers.",
+      "proves": "No in-repo caller still depends on the reverted bulk path.",
+      "restatement_clause_id": "c5",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/report_bulk_path_callers.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "bulk_path_caller_count",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "The full contract test suite and the armada-nitro-e2e gate run on a fresh test network. Both finish with no failures.",
+      "proves": "The change works end to end and breaks no existing behavior.",
+      "restatement_clause_id": "c6",
+      "when": {
+        "interpreter": "bash",
+        "script": "scripts/run_full_suite_and_e2e.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "forge_failed",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "e2e_failed",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/report_bulk_path_callers.sh",
+    "scripts/run_full_suite_and_e2e.sh"
+  ]
+}
