@@ -248,3 +248,9 @@ repos:
         language: system
         pass_filenames: false
         files: \.sol$|^foundry\.(toml|lock)$
+      - id: check-contract-sizes
+        name: EIP-170 contract size gate (24,576 B runtime)
+        entry: python3 scripts/check-contract-sizes.py
+        language: system
+        pass_filenames: false
+        files: \.sol$|^foundry\.(toml|lock)$
