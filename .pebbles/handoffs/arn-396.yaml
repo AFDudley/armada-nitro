@@ -1,0 +1,34 @@
+status: completed
+pebble_id: arn-396
+summary: >
+  Added a cleanup step to stack/scripts/fixturenet-new (commit 53e64fa8) that runs
+  before the deploy create step: cleanup_stale_deployments() guards the deployment
+  path (empty or unset -> skip), selects earlier deployments by the exact name prefix
+  (for d in "${HOME}/deployments/${NAME}*/), keeps any deployment a live process still
+  uses (fuser finds the pid -> skip), and for each unused stale deployment runs
+  laconic-so deployment stop --delete-volumes (guarded by spec.yml presence), unmounts
+  a leftover RAM-disk tmpfs over the data dir, then removes the deployment directory.
+  Verified by a smoke run of the function (NAME=armada): it stopped 3 stale clusters,
+  unmounted the busy tmpfs, removed the armada-fixturenet-e12 directory, and exited 0;
+  all 7 acceptance tests of contracts/specs/derived-arn-396.spec.json pass.
+cost: "~40k tokens"
+commits:
+  - "53e64fa8"
+verify_transcript:
+  hooks:
+    - name: "refuse-direct-commit-on-main"
+      outcome: passed
+      duration_s: 1
+    - name: "tdd-trailer"
+      outcome: passed
+      duration_s: 1
+    - name: "check-for-merge-conflicts"
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-396.spec.json
+  command: >-
+    python3 -c "import json,re,sys; spec=json.load(open('contracts/specs/derived-arn-396.spec.json')); src=open('stack/scripts/fixturenet-new').read(); results=[(t['clause_id'], re.search(t['pattern'], src) is not None if t['type']=='grep' else re.search(t['pattern'], src) is None) for t in spec['acceptance_tests']]; bad=[c for c,ok in results if k; print('FAILURES:', bad if bad else 'none'); sys.exit(1 if bad else 0)"
+  result: passed
+  ran_at_sha: "53e64fa8313fa2af57e7a5b350cd9fb5a0b8957a"
+  mocks_in_path: false
