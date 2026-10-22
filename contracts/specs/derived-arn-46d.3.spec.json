@@ -1,0 +1,154 @@
+{
+  "id": "derived-arn-46d.3",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. stack/scripts/fixturenet-new never builds the fixturenet base layer itself. When no snapshot exists for the current base-key.py key, it exits non-zero immediately and prints the key and the build command, instead of running the cold base-reconcile path inline. A separate command, stack/scripts/fixturenet-base-build, is the only thing that builds the base and writes the snapshot plus its .key file; no gate job, compose job or worker script calls it, enforced by a pre-commit check. A restore compares the snapshot's .key lines against the current base-key.py output and refuses on any difference, naming the differing lines. After the full reconcile, fixturenet-new checks the manifest holds exactly the eight modules (weth, usdc, cctp, aave, lido, armada, armada_nitro, funding) and fails otherwise. The gate runs both verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py.\nWhat holds now? Describe the current, observed state. On armada-nitro commit 41dbb9e2 (introduced at 5769ef45b98c397c9320b8186475a34596f23679), stack/scripts/fixturenet-new:176-179 computes the key, and line 179 sets MODE=cold when no snapshot file exists for it, with no refusal: the cold branch (lines 238-261) runs the full base reconcile (run_reconcile base, tens of minutes) inline in the same process that called fixturenet-new, whether that caller is a worker session or a gate job. stack/scripts/fixturenet-new:264-267 prints the manifest's module list (jq '.gasUsed | keys | join(\", \")') but does not compare it against any expected set or fail on a mismatch. No pre-commit hook restricts which scripts may call a base-build step. No command compares a restored snapshot's recorded key lines against a fresh base-key.py run before accepting the restore.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read stack/scripts/fixturenet-new lines 176-182 (the MODE=cold branch sets no exit) and lines 238-261 (the cold branch's own base reconcile, run_reconcile base). Run rm -f the snapshot files under ~/deployments/.snapshots/armada-fixturenet-base-<key>.* for the current key, then run stack/scripts/fixturenet-new <name> and observe it proceeds to build the base layer instead of exiting.\n\nDecomposed child: A restore of a fixturenet base snapshot compares the .key lines recorded with the snapshot against the current stack/scripts/base-key.py output. The restore refuses on any difference. The refusal names the differing lines. Today no command compares a restored snapshot's recorded key lines against a fresh base-key.py run before it accepts the restore. To observe the fix: change one line in a snapshot's .key file, then run a restore. The restore must refuse and name that line.",
+  "restatement": "Before a fixturenet base snapshot restore is accepted, the restore must compare the .key lines recorded with the snapshot against a fresh run of stack/scripts/base-key.py. If any line differs, the restore must refuse and must name each differing line. A snapshot whose recorded key lines match the fresh output restores normally. A person can see the fix by changing one line in a snapshot's .key file and running a restore. The restore then refuses and names that line.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A restore of a fixturenet base snapshot compares the .key lines recorded with the snapshot against the current stack/scripts/base-key.py output before it accepts the restore."
+    },
+    {
+      "id": "c2",
+      "text": "The restore refuses on any difference between the recorded .key lines and the current stack/scripts/base-key.py output."
+    },
+    {
+      "id": "c3",
+      "text": "The refusal names the differing lines. After one line in a snapshot's .key file is changed, the restore refuses and names that line."
+    }
+  ],
+  "goal": "A fixturenet snapshot restore refuses when the snapshot's recorded .key lines differ from the current stack/scripts/base-key.py output, and the refusal names the differing lines.",
+  "acceptance_criteria": [
+    "A snapshot whose recorded key lines match the current base-key.py output is restored without refusal. The restore reports that it compared the recorded lines against a fresh base-key.py run.",
+    "After one line in a snapshot's .key file is changed, the restore refuses and does not accept the snapshot.",
+    "After one line in a snapshot's .key file is changed, the refusal message shows that changed line. It does not show lines that are unchanged."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A snapshot whose recorded key lines match the current base-key.py output is restored without refusal. The restore reports that it compared the recorded lines against a fresh base-key.py run."
+    },
+    {
+      "id": "c2",
+      "text": "After one line in a snapshot's .key file is changed, the restore refuses and does not accept the snapshot."
+    },
+    {
+      "id": "c3",
+      "text": "After one line in a snapshot's .key file is changed, the refusal message shows that changed line. It does not show lines that are unchanged."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "A snapshot whose recorded key lines match the current base-key.py output is restored without refusal. The restore reports that it compared the recorded lines against a fresh base-key.py run.",
+      "proves": "The restore performs the comparison against fresh base-key.py output, and a matching snapshot is accepted.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_restore_key_diff.py",
+        "args": [
+          "--case",
+          "unchanged"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "compared_with_fresh_base_key",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "restore_accepted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "After one line in a snapshot's .key file is changed, the restore refuses and does not accept the snapshot.",
+      "proves": "The restore refuses on any difference between the recorded key lines and the fresh base-key.py output.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_restore_key_diff.py",
+        "args": [
+          "--case",
+          "one-line-changed"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "restore_refused",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "restore_accepted",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "restore_exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "After one line in a snapshot's .key file is changed, the refusal message shows that changed line. It does not show lines that are unchanged.",
+      "proves": "The refusal names the differing line and only the differing lines.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check_restore_key_diff.py",
+        "args": [
+          "--case",
+          "one-line-changed"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "refusal_names_changed_line",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "refusal_names_unchanged_line",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check_restore_key_diff.py"
+  ]
+}
