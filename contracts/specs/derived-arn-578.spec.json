@@ -1,0 +1,207 @@
+{
+  "id": "derived-arn-578",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/R1-adjudicator-rewrite.md's Acceptance section: forge build --sizes shows every contract a deploy script deploys at or below 24,576 bytes runtime (EIP-170), and the gate fails when one is not. The gate parses the sizes report itself; it does not rely only on forge build --sizes's own exit code.\nWhat holds now? Describe the current, observed state. No gate step runs forge build --sizes or parses its report. forge test does not enforce EIP-170, so ArmadaNitroAdjudicator merged to integrated at 25,558 bytes runtime (982 bytes over the limit) with every check green.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read the gate job definitions under env/gates and .exophial/gate; run forge build --sizes on integrated and see it exits non-zero but no gate step runs it.\nWhat constraints apply? State them in plain prose. Applies to every non-test contract a deploy script deploys, not to test harnesses (for example AdjudicatorHarness).\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) env/gates, .exophial/gate, CI gate pipeline",
+  "restatement": "The armada-nitro commit gate must enforce the EIP-170 contract size limit. Today the gate runs `pre-commit run --all-files`, and no hook in it runs `forge build --sizes` or reads its report. Because `forge test` does not enforce EIP-170, ArmadaNitroAdjudicator merged to integrated at 25,558 bytes runtime, 982 bytes over the limit, with every check green. The fix adds a size check to the gate. The check runs `forge build --sizes`, parses the sizes report itself, and fails when any contract that a deploy script under script/ deploys has a runtime size above 24,576 bytes. It passes when every such contract is at or below 24,576 bytes. The check does not rely only on the exit code of `forge build --sizes`. Test harnesses that no deploy script deploys (for example AdjudicatorHarness) are out of scope and do not fail the check.",
+  "restatement_clauses": [
+    {
+      "id": "C1",
+      "text": "The commit gate (`pre-commit run --all-files`, configured in .pre-commit-config.yaml) runs a contract size check, scripts/check-contract-sizes.py, that runs `forge build --sizes`."
+    },
+    {
+      "id": "C2",
+      "text": "The size check fails (non-zero exit) when a contract a deploy script deploys, for example ArmadaNitroAdjudicator, has a runtime size above 24,576 bytes."
+    },
+    {
+      "id": "C3",
+      "text": "The size check passes (exit 0) when every contract a deploy script deploys is at or below 24,576 bytes runtime, including a contract at exactly 24,576 bytes."
+    },
+    {
+      "id": "C4",
+      "text": "The size check parses the `forge build --sizes` report itself and reports which contracts are over the limit; it does not rely only on the exit code of `forge build --sizes`."
+    },
+    {
+      "id": "C5",
+      "text": "The size check applies to every non-test contract a deploy script deploys, not to test harnesses (for example AdjudicatorHarness); an oversized test harness does not fail the check."
+    }
+  ],
+  "goal": "The commit gate fails when any contract that a deploy script deploys has a runtime size above 24,576 bytes (EIP-170), judged from the parsed `forge build --sizes` report.",
+  "acceptance_criteria": [
+    "The commit gate configuration file names the contract size check, so every gate run executes it.",
+    "Given a sizes report where ArmadaNitroAdjudicator is 24,577 bytes runtime, the size check fails and counts one oversized contract.",
+    "Given a sizes report where ArmadaNitroAdjudicator is exactly 24,576 bytes runtime, the size check passes and counts no oversized contract.",
+    "Given the sizes report line from the incident (ArmadaNitroAdjudicator at 25,558 bytes) as text, with no forge run and so no forge exit code, the size check reads the report, fails, and names ArmadaNitroAdjudicator as the first oversized contract.",
+    "Given a sizes report where the test harness AdjudicatorHarness is 30,000 bytes but ArmadaNitroAdjudicator is 24,000 bytes, the size check passes and counts no oversized contract."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The commit gate configuration file names the contract size check, so every gate run executes it."
+    },
+    {
+      "id": "c2",
+      "text": "Given a sizes report where ArmadaNitroAdjudicator is 24,577 bytes runtime, the size check fails and counts one oversized contract."
+    },
+    {
+      "id": "c3",
+      "text": "Given a sizes report where ArmadaNitroAdjudicator is exactly 24,576 bytes runtime, the size check passes and counts no oversized contract."
+    },
+    {
+      "id": "c4",
+      "text": "Given the sizes report line from the incident (ArmadaNitroAdjudicator at 25,558 bytes) as text, with no forge run and so no forge exit code, the size check reads the report, fails, and names ArmadaNitroAdjudicator as the first oversized contract."
+    },
+    {
+      "id": "c5",
+      "text": "Given a sizes report where the test harness AdjudicatorHarness is 30,000 bytes but ArmadaNitroAdjudicator is 24,000 bytes, the size check passes and counts no oversized contract."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "grep",
+      "description": "The commit gate configuration file names the contract size check, so every gate run executes it.",
+      "proves": "The gate runs the size check on every commit (C1).",
+      "restatement_clause_id": "C1",
+      "pattern": "check-contract-sizes",
+      "files": [
+        ".pre-commit-config.yaml"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "Given a sizes report where ArmadaNitroAdjudicator is 24,577 bytes runtime, the size check fails and counts one oversized contract.",
+      "proves": "A deployed contract one byte over the 24,576-byte limit fails the check (C2).",
+      "restatement_clause_id": "C2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-contract-sizes.py",
+        "args": [
+          "--report",
+          "-"
+        ],
+        "stdin": "| Contract | Runtime Size (B) | Initcode Size (B) | Runtime Margin (B) | Initcode Margin (B) |\n|---|---|---|---|---|\n| ArmadaNitroAdjudicator | 24,577 | 25,000 | -1 | 24,152 |\n"
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "oversized_count",
+          "op": "eq",
+          "value": 1
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "Given a sizes report where ArmadaNitroAdjudicator is exactly 24,576 bytes runtime, the size check passes and counts no oversized contract.",
+      "proves": "A deployed contract at exactly the limit passes the check (C3).",
+      "restatement_clause_id": "C3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-contract-sizes.py",
+        "args": [
+          "--report",
+          "-"
+        ],
+        "stdin": "| Contract | Runtime Size (B) | Initcode Size (B) | Runtime Margin (B) | Initcode Margin (B) |\n|---|---|---|---|---|\n| ArmadaNitroAdjudicator | 24,576 | 25,000 | 0 | 24,152 |\n"
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "oversized_count",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "Given the sizes report line from the incident (ArmadaNitroAdjudicator at 25,558 bytes) as text, with no forge run and so no forge exit code, the size check reads the report, fails, and names ArmadaNitroAdjudicator as the first oversized contract.",
+      "proves": "The check judges from the parsed report text, not from the forge exit code (C4).",
+      "restatement_clause_id": "C4",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-contract-sizes.py",
+        "args": [
+          "--report",
+          "-"
+        ],
+        "stdin": "| Contract | Runtime Size (B) | Initcode Size (B) | Runtime Margin (B) | Initcode Margin (B) |\n|---|---|---|---|---|\n| ArmadaNitroAdjudicator | 25,558 | 26,100 | -982 | 23,052 |\n"
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "oversized_count",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "observe": "stdout_json",
+          "field": "oversized.0.contract",
+          "op": "eq",
+          "value": "ArmadaNitroAdjudicator"
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "Given a sizes report where the test harness AdjudicatorHarness is 30,000 bytes but ArmadaNitroAdjudicator is 24,000 bytes, the size check passes and counts no oversized contract.",
+      "proves": "An oversized test harness that no deploy script deploys does not fail the check (C5).",
+      "restatement_clause_id": "C5",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-contract-sizes.py",
+        "args": [
+          "--report",
+          "-"
+        ],
+        "stdin": "| Contract | Runtime Size (B) | Initcode Size (B) | Runtime Margin (B) | Initcode Margin (B) |\n|---|---|---|---|---|\n| AdjudicatorHarness | 30,000 | 31,000 | -5,424 | 18,152 |\n| ArmadaNitroAdjudicator | 24,000 | 25,000 | 576 | 24,152 |\n"
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "oversized_count",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 120,
+      "clause_id": "c5"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/check-contract-sizes.py"
+  ]
+}
