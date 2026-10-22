@@ -6,6 +6,7 @@ containers:
 pods:
   - armada-fixturenet
 jobs:
+  - armada-fixturenet-gate
   - armada-env-reconcile
   - armada-env-verify
   - armada-nitro-e2e

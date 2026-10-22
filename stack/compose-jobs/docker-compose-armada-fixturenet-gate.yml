@@ -1,0 +1,39 @@
+# armada-fixturenet-gate (arn-46d.5): the fixturenet gate.
+#
+# Runs both base-key verify scripts, in order, under `set -e`, so the gate
+# exits non-zero when either script exits non-zero. The gate's stdout names
+# both scripts (the "[fixturenet-gate]" lines) so a reader of the run output
+# can confirm both checks ran:
+#
+#   1. stack/scripts/verify_base_key_python_versions.py
+#   2. stack/scripts/verify_base_key_docker_rebuild.py
+#
+# The gate is self-contained: it reads only committed repo files and the
+# local docker daemon, so the job needs no host networking and no fixturenet
+# state. It runs in the env image at /src/armada-nitro.
+services:
+  armada-fixturenet-gate:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # base-key.py normalises env/lido TypeScript with the repo's node_modules
+        # prettier; the env image excludes node_modules (.dockerignore), so the
+        # container installs it before computing the key lines.
+        [ -d node_modules/.bin ] || npm ci
+
+        # 1. Base-key python-versions check.
+        echo "[fixturenet-gate] verify_base_key_python_versions.py"
+        python3 /src/armada-nitro/stack/scripts/verify_base_key_python_versions.py \
+          --root /src/armada-nitro \
+          --python-a "$${JG_PYTHON_A:-python3}" --python-b "$${JG_PYTHON_B:-python3}
+        # 2. Base-key docker-rebuild check.
+        echo "[fixturenet-gate] verify_base_key_docker_rebuild.py"
+        python3 /src/armada-nitro/stack/scripts/verify_base_key_docker_rebuild.py \
+          --root /src/armada-nitro
+    environment:
+      JG_PYTHON_A: ${JG_PYTHON_A:-python3}
+      JG_PYTHON_B: ${JG_PYTHON_B:-python3}
