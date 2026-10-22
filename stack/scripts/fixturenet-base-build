@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# fixturenet-base-build <name>
+#
+# Build the fixturenet base layer (network + weth, usdc, cctp, aave, lido,
+# armada) and write its snapshot + .key file under ~/deployments/.snapshots/.
+# This is the ONE command that builds the base; no gate job, compose job or
+# worker script calls it (enforced by the pre-commit check in
+# .pre-commit-config.yaml).
+#
+# What it does, in order:
+#   1. Create the deployment (deploy init + create) if its dir is absent, then
+#      mount a capped tmpfs over data/ (FIXTURENET_DATA_SIZE, default 3G).
+#   2. Start the chain and wait for blocks.
+#   3. Deliver the committed base target into the armada_env volume (seen as
+#      /env) and select it with RECONCILER_TARGET.
+#   4. Run the base reconcile (the ~24 min base-layer build).
+#   5. Snapshot the base layer (fixturenet-base-snapshot), which writes the
+#      .tar.zst snapshot and its auditable .key file, then prunes old ones.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
+# shellcheck source=stack/scripts/fixturenet-base-common.sh
+source "${SCRIPT_DIR}/fixturenet-base-common.sh"
+
+LACONIC="${LACONIC_SO:-$(command -v laconic-so || true)}"
+if [ -z "$LACONIC" ]; then
+  echo "fixturenet-base-build: laconic-so not found on PATH; set LACONIC_SO or add it to PATH" >&2
+  exit 1
+fi
+
+STACK="stack/stacks/armada-nitro-fixturenet"
+CONFIG="stack/config/deployment-config.example.env"
+
+usage() { echo "usage: $0 <name>" >&2; exit 2; }
+[ $# -eq 1 ] || usage
+NAME="$1"
+DEP="${HOME}/deployments/${NAME}"
+SPEC="${DEP}-spec.yml"
+
+now() { date +%s; }
+
+# Resolve this deployment's geth RPC (random host port, discovered via docker
+# port). Mirrors fixturenet-new's resolve_geth_rpc.
+rpc_port() {
+  local cluster ctr line
+  cluster=$(awk '/^cluster-id:' "${DEP}/deployment.yml" 2>/dev/null || true)
+  if [ -z "$cluster" ]; then
+    echo "fixturenet-base-build: no cluster-id in ${DEP}/deployment.yml" >&2
+    return 1
+  fi
+  ctr="${cluster}-armada-fixturenet-geth-1"
+  line=$(docker port "${ctr}" 8545 2>/dev/null || true)
+  if [ -z "$line" ]; then
+    echo "fixturenet-base-build: no published 8545 for ${ctr}" >&2
+    return 1
+  fi
+  echo "http://$(echo "${line#*->}" | tr -d '[:space:]')"
+}
+
+wait_for_blocks() {
+  local deadline=$(( $(now) + 180 ))
+  local rpc=$(rpc_port) || return 1
+  local b0="" b1
+  while [ "$(now)" -lt "$deadline" ]; do
+    b1=$(curl -s --max-time 3 -H 'Content-Type: application/json' \
+           --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "$rpc" 2>/dev/null \
+           | jq -r '.result // empty' 2>/dev/null || true)
+    if [ -n "$b1" ]; then
+      if [ -z "$b0" ]; then
+        b0="$b1"
+      elif [ "$b1" != "$b0" ]; then
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  echo "fixturenet-base-build: no new block within 180s" >&2
+  return 1
+}
+
+# 1. Create the deployment if absent, then mount the RAM disk.
+if [ ! -e "$DEP" ]; then
+  echo "fixturenet-base-build: creating deployment ${DEP} ..."
+  "$LACONIC" --stack "$STACK" deploy init \
+    --map-ports-to-host localhost-fixed-random \
+    --config-file "${REPO_ROOT}/${CONFIG}" \
+    --output "$SPEC"
+  "$LACONIC" --stack "$STACK" deploy create \
+    --spec-file "$SPEC" --deployment-dir "$DEP"
+fi
+
+# RAM disk: mount a capped tmpfs over data/ (only if not already tmpfs).
+DATA_SIZE="${FIXTURENET_DATA_SIZE:-3G}"
+data_fs() { stat -f -c %T "${DEP}/data"; }
+if [ "$(data_fs)" != tmpfs ]; then
+  if sudo find "${DEP}/data" -mindepth 1 -not -type d -print -quit | grep -q .; then
+    echo "fixturenet-base-build: ${DEP}/data holds files -- refusing to mount the RAM disk" >&2
+    exit 1
+  fi
+  sudo mount -t tmpfs -o "size=${DATA_SIZE},mode=0700" tmpfs "${DEP}/data"
+  if [ "$(data_fs)" != tmpfs ]; then
+    echo "fixturenet-base-build: ${DEP}/data is not a tmpfs after mounting" >&2
+    exit 1
+  fi
+fi
+
+# 2. Start the chain.
+echo "fixturenet-base-build: starting ${DEP} ..."
+"$LACONIC" deployment --dir "$DEP" start
+wait_for_blocks
+echo "fixturenet-base-build: chain is producing blocks"
+
+# 3. Install the base target into the armada_env volume.
+echo "fixturenet-base-build: installing base target into armada_env volume ..."
+sudo mkdir -p "${DEP}/data/armada_env"
+sudo cp "${REPO_ROOT}/env/targets/fixturenet-base.json" \
+          "${DEP}/data/armada_env/${BASE_TARGET_IN_ENV}"
+
+# 4. Run the base reconcile (the actual base-layer build, ~24 min).
+echo "fixturenet-base-build: running base reconcile ..."
+RECONCILER_TARGET="${BASE_TARGET_IN_ENV}" \
+  "$LACONIC" deployment --dir "$DEP" run-job armada-env-reconcile
+
+# 5. Snapshot the base layer (writes the .tar.zst + .key file, prunes old ones).
+echo "fixturenet-base-build: snapshotting the base layer ..."
+"${SCRIPT_DIR}/fixturenet-base-snapshot" "$DEP"
+echo "fixturenet-base-build: DONE"

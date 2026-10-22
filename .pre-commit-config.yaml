@@ -40,12 +40,26 @@ repos:
         language: pygrep
         entry: '\bsudo\b|\bchmod\b|\bchown\b|deployments/[^\s"'']*/data\b|armada_env'
         files: ^(scripts|env/gates|stack/scripts)/
-        exclude: ^stack/scripts/(fixturenet-new|fixturenet-recover|fixturenet-base-snapshot|fixturenet-base-common\.sh|base-key\.py)$|\.md$
+        exclude: ^stack/scripts/(fixturenet-new|fixturenet-recover|fixturenet-base-snapshot|fixturenet-base-common\.sh|base-key\.py|fixturenet-base-build)$|\.md$
       - id: job-no-host-deployment-path
         name: Compose jobs name no host deployment data path
         language: pygrep
         entry: 'deployments/[^\s"'']*/data\b|\.\./data/|/home/|\.worktrees/'
         files: ^stack/compose-jobs/
+
+  # arn-46d.2: fixturenet-base-build is the ONLY thing that builds the
+  # fixturenet base layer. No gate job (env/gates/), compose job
+  # (stack/compose-jobs/) or worker script (stack/scripts/) may call it.
+  # This pygrep hook fails (non-zero) and names the offending caller file.
+  # The command file itself is excluded so the clean-copy check still passes.
+  - repo: local
+    hooks:
+      - id: verify-fixturenet-base-build-callers
+        name: No gate/compose/worker caller of fixturenet-base-build
+        entry: fixturenet-base-build
+        language: pygrep
+        files: "^(env/gates/|stack/compose-jobs/|stack/scripts/)"
+        exclude: "^stack/scripts/fixturenet-base-build$"
 
   - repo: local
     hooks:
