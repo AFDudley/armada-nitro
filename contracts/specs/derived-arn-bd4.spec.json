@@ -1,0 +1,207 @@
+{
+  "id": "derived-arn-bd4",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. Two runs of fixturenet-new on the same armada-nitro commit compute the same base cache key, so a base snapshot written by one run is restored by the next run on the warm path. The key depends only on the committed sources, not on the host python version and not on local build output.\nWhat holds now? Describe the current, observed state. On one armada-nitro commit, with env/reconciler files git-unchanged (last commit 2026-09-30, clean working tree), stack/scripts/base-key.py piped to sha256sum then cut to 16 hex produced: with python 3.12.3, 5a47353c5b21cd7d; with python 3.14.3, dde2799b6ae48521. At an earlier time on the same commit, python 3.14.3 produced d1d7469b02423dee; between that time and now the cerc/armada-nitro-env stage image IDs changed while the env/reconciler files stayed identical. deployments/.snapshots holds two base snapshot key files, fdaad8d29e3f6615 and 4c66d5314e294fd0; the current base-key computation equals neither.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run stack/scripts/base-key.py --root . piped to sha256sum then cut -c1-16, first with python 3.12.3 then with python 3.14.3; the keys differ on the same commit. Run a cold fixturenet-new, then recompute with the same python; the key differs again. Compare the current computation to the .key files in deployments/.snapshots; it matches neither fdaad8d29e3f6615 nor 4c66d5314e294fd0.\nWhat constraints apply? State them in plain prose. The d5a acceptance must still stand up the real fixturenet; it must not be weakened.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) stack/scripts/base-key.py, which calls docker image inspect for local image IDs at line 109 and hashes python ast output; used by stack/scripts/fixturenet-base-common.sh compute_base_key and stack/scripts/fixturenet-new",
+  "restatement": "The base cache key that fixturenet-new computes for an armada-nitro commit must be a pure function of the committed sources. It must not change with the host python version. It must not change with local build output such as local docker image IDs. Two runs on the same commit then compute the same key. A base snapshot that one run writes is then restored by the next run on the warm path. The d5a acceptance must still stand up the real fixturenet.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "On one armada-nitro commit with a clean working tree, running stack/scripts/base-key.py --root . piped to sha256sum then cut -c1-16 with python 3.12.3 and with python 3.14.3 gives the same 16 hex key."
+    },
+    {
+      "id": "c2",
+      "text": "The key does not depend on local build output: when the cerc/armada-nitro-env stage image IDs change and the env/reconciler files stay identical, the key stays the same."
+    },
+    {
+      "id": "c3",
+      "text": "Two runs of fixturenet-new on the same armada-nitro commit compute the same base cache key, and a base snapshot key file written by the first run in deployments/.snapshots equals the key the next run computes, so the next run restores it on the warm path."
+    },
+    {
+      "id": "c4",
+      "text": "The d5a acceptance must still stand up the real fixturenet and must not be weakened."
+    }
+  ],
+  "goal": "Make stack/scripts/base-key.py produce one key per commit, independent of python version and local image IDs, so warm-path snapshot reuse works.",
+  "acceptance_criteria": [
+    "The same commit gives the same 16-character key when computed under python 3.12.3 and under python 3.14.3.",
+    "After the local environment image IDs are changed with the same source files, the computed key stays the same.",
+    "A first run writes a base snapshot, and a second run on the same commit computes the same key, finds that snapshot and takes the warm path.",
+    "The d5a acceptance run still brings up the real fixturenet, with every expected service running."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The same commit gives the same 16-character key when computed under python 3.12.3 and under python 3.14.3."
+    },
+    {
+      "id": "c2",
+      "text": "After the local environment image IDs are changed with the same source files, the computed key stays the same."
+    },
+    {
+      "id": "c3",
+      "text": "A first run writes a base snapshot, and a second run on the same commit computes the same key, finds that snapshot and takes the warm path."
+    },
+    {
+      "id": "c4",
+      "text": "The d5a acceptance run still brings up the real fixturenet, with every expected service running."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "The same commit gives the same 16-character key when computed under python 3.12.3 and under python 3.14.3.",
+      "proves": "The key no longer depends on the python version.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify_base_key_stability.py",
+        "args": [
+          "--root",
+          ".",
+          "--mode",
+          "python-versions",
+          "--pythons",
+          "3.12.3,3.14.3"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "keys_equal",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "key_length",
+          "op": "eq",
+          "value": 16
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "After the local environment image IDs are changed with the same source files, the computed key stays the same.",
+      "proves": "The key does not depend on local build output such as image IDs.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify_base_key_stability.py",
+        "args": [
+          "--root",
+          ".",
+          "--mode",
+          "image-ids"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "keys_equal",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "A first run writes a base snapshot, and a second run on the same commit computes the same key, finds that snapshot and takes the warm path.",
+      "proves": "A snapshot written by one run is restored by the next run.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify_base_key_stability.py",
+        "args": [
+          "--root",
+          ".",
+          "--mode",
+          "warm-path"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "keys_equal",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "second_run_path",
+          "op": "eq",
+          "value": "warm"
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "The d5a acceptance run still brings up the real fixturenet, with every expected service running.",
+      "proves": "The fix did not weaken the d5a acceptance.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "bash",
+        "script": "stack/scripts/verify_d5a_acceptance.sh",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "real_fixturenet_started",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "all_services_running",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c4"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "stack/scripts/verify_base_key_stability.py",
+    "stack/scripts/verify_d5a_acceptance.sh"
+  ]
+}
