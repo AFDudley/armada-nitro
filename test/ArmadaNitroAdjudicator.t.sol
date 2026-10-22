@@ -55,6 +55,7 @@ contract N2aPool is IArmadaPool {
 
     /// @dev N2b: counts transactOwned calls (the c1 test asserts "exactly one").
     uint256 public transactOwnedCalls;
+    bytes32[] public lastNullifiers;
 
     function setPreimage(bytes32 commitment, CommitmentPreimage memory preimage) external {
         preimages[commitment] = preimage;
@@ -72,11 +73,18 @@ contract N2aPool is IArmadaPool {
         return preimages[commitment];
     }
 
+    function lastNullifierCount() external view returns (uint256) {
+        return lastNullifiers.length;
+    }
+
     /// @dev N2b: count transactOwned calls so a test can assert "exactly one spend", and
     /// register each output's preimage (mirroring the real pool's bookkeeping) so a test can
     /// verify a mint through `preimageOf` exactly as it would against the real pool.
     function transactOwned(Transaction[] calldata txs) external {
         transactOwnedCalls++;
+        if (txs.length > 0) {
+            lastNullifiers = txs[0].nullifiers;
+        }
         for (uint256 t = 0; t < txs.length; t++) {
             CommitmentPreimage[] memory outputs = txs[t].boundParams.publicOutputs;
             for (uint256 i = 0; i < outputs.length; i++) {
@@ -104,6 +112,15 @@ contract AdjudicatorHarness is ArmadaNitroAdjudicator {
 
     function setHoldingsLock(bytes32 channelId, uint256 value) external {
         holdingsLock[channelId] = value;
+    }
+
+    function exposedMintTransferPayout(
+        address asset,
+        bytes32 oldCommitment,
+        Outcome.Allocation[] memory exitAllocations,
+        uint256 remainder
+    ) external returns (bytes32) {
+        return _mintTransferPayout(asset, oldCommitment, exitAllocations, remainder);
     }
 }
 
@@ -749,6 +766,9 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
         // exactly one transactOwned spend that holds the payout.
         assertEq(n2aPool.transactOwnedCalls(), 1, 'exactly one transactOwned spend');
         assertEq(n2aAdjudicator.heldValue(address(usdc), channelId), 0, 'full payout zeroes the holding');
+        // L223: the spend nullifies exactly the prior holding commitment (not empty, not extra).
+        assertEq(n2aPool.lastNullifierCount(), 1, 'spend nullifies exactly the prior holding');
+        assertEq(n2aPool.lastNullifiers(0), txs[0].commitments[0], 'nullifier is the spent holding commitment');
     }
 
     /// @dev N2b c2: the payout note exists, has the allocated amount, and is provable via
@@ -1189,6 +1209,26 @@ contract ArmadaNitroAdjudicatorTest is ArmadaFixture, INitroTypes {
             })
         );
         return pool.preimageOf(commitment);
+    }
+
+    /// @dev L212: a non-SHIELD allocation to an internal destination (non-zero high bits) is
+    /// rejected with 'Internal destination not supported'. Exercises the require the SHIELD fold
+    /// keeps for the raw-asset path; the mutation `!=` -> `==` is caught here.
+    function test_nonShieldInternalDestinationReverts() public {
+        N2aPool pool_ = new N2aPool();
+        address[] memory assets_ = new address[](1);
+        assets_[0] = address(usdc);
+        AdjudicatorHarness harness = new AdjudicatorHarness(IArmadaPool(address(pool_)), assets_);
+
+        Outcome.Allocation[] memory allocs = new Outcome.Allocation[](1);
+        allocs[0] = Outcome.Allocation({
+            destination: keccak256('internal-channel'),
+            amount: 10,
+            allocationType: 0,
+            metadata: ''
+        });
+        vm.expectRevert('Internal destination not supported');
+        harness.exposedMintTransferPayout(address(usdc), bytes32(0), allocs, 0);
     }
 
 }
