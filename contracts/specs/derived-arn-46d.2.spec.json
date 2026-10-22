@@ -1,0 +1,247 @@
+{
+  "id": "derived-arn-46d.2",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. stack/scripts/fixturenet-new never builds the fixturenet base layer itself. When no snapshot exists for the current base-key.py key, it exits non-zero immediately and prints the key and the build command, instead of running the cold base-reconcile path inline. A separate command, stack/scripts/fixturenet-base-build, is the only thing that builds the base and writes the snapshot plus its .key file; no gate job, compose job or worker script calls it, enforced by a pre-commit check. A restore compares the snapshot's .key lines against the current base-key.py output and refuses on any difference, naming the differing lines. After the full reconcile, fixturenet-new checks the manifest holds exactly the eight modules (weth, usdc, cctp, aave, lido, armada, armada_nitro, funding) and fails otherwise. The gate runs both verify_base_key_python_versions.py and verify_base_key_docker_rebuild.py.\nWhat holds now? Describe the current, observed state. On armada-nitro commit 41dbb9e2 (introduced at 5769ef45b98c397c9320b8186475a34596f23679), stack/scripts/fixturenet-new:176-179 computes the key, and line 179 sets MODE=cold when no snapshot file exists for it, with no refusal: the cold branch (lines 238-261) runs the full base reconcile (run_reconcile base, tens of minutes) inline in the same process that called fixturenet-new, whether that caller is a worker session or a gate job. stack/scripts/fixturenet-new:264-267 prints the manifest's module list (jq '.gasUsed | keys | join(\", \")') but does not compare it against any expected set or fail on a mismatch. No pre-commit hook restricts which scripts may call a base-build step. No command compares a restored snapshot's recorded key lines against a fresh base-key.py run before accepting the restore.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Read stack/scripts/fixturenet-new lines 176-182 (the MODE=cold branch sets no exit) and lines 238-261 (the cold branch's own base reconcile, run_reconcile base). Run rm -f the snapshot files under ~/deployments/.snapshots/armada-fixturenet-base-<key>.* for the current key, then run stack/scripts/fixturenet-new <name> and observe it proceeds to build the base layer instead of exiting.\n\nDecomposed child: A separate command, stack/scripts/fixturenet-base-build, is the only thing that builds the fixturenet base layer. It writes the snapshot and its .key file. No gate job, compose job or worker script calls it. A pre-commit check enforces this rule. Today no pre-commit hook restricts which scripts may call a base-build step. To observe the fix: add a call to stack/scripts/fixturenet-base-build to a gate job, a compose job or a worker script, then run pre-commit. The check must fail and name the offending caller.",
+  "restatement": "The command stack/scripts/fixturenet-base-build is the only thing allowed to build the fixturenet base layer. It writes the snapshot and its .key file. No gate job, compose job or worker script may call it. A pre-commit check must enforce this rule. Today no pre-commit hook restricts which scripts may call a base-build step. After the fix, if a person adds a call to stack/scripts/fixturenet-base-build to a gate job, a compose job or a worker script and runs pre-commit, the check fails and names the offending caller.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "stack/scripts/fixturenet-base-build is a separate command and is the only thing that builds the fixturenet base layer, writing the snapshot and its .key file."
+    },
+    {
+      "id": "c2",
+      "text": "No gate job, compose job or worker script calls stack/scripts/fixturenet-base-build, and a pre-commit check enforces this rule."
+    },
+    {
+      "id": "c3",
+      "text": "If a call to stack/scripts/fixturenet-base-build is added to a gate job, a compose job or a worker script, then running pre-commit fails."
+    },
+    {
+      "id": "c4",
+      "text": "The failing pre-commit check names the offending caller."
+    }
+  ],
+  "goal": "Add a pre-commit check that fails, and names the caller, when a gate job, compose job or worker script calls stack/scripts/fixturenet-base-build.",
+  "acceptance_criteria": [
+    "The separate base-build command exists at stack/scripts/fixturenet-base-build.",
+    "The pre-commit configuration contains a check that mentions fixturenet-base-build.",
+    "In a clean throwaway copy of the repository with no extra caller, the pre-commit check passes.",
+    "A gate job that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails.",
+    "A compose job that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails.",
+    "A worker script that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails.",
+    "After a forbidden call is added, the failure message printed by pre-commit contains the path of the file that holds the call."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The separate base-build command exists at stack/scripts/fixturenet-base-build."
+    },
+    {
+      "id": "c2",
+      "text": "The pre-commit configuration contains a check that mentions fixturenet-base-build."
+    },
+    {
+      "id": "c3",
+      "text": "In a clean throwaway copy of the repository with no extra caller, the pre-commit check passes."
+    },
+    {
+      "id": "c4",
+      "text": "A gate job that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails."
+    },
+    {
+      "id": "c5",
+      "text": "A compose job that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails."
+    },
+    {
+      "id": "c6",
+      "text": "A worker script that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails."
+    },
+    {
+      "id": "c7",
+      "text": "After a forbidden call is added, the failure message printed by pre-commit contains the path of the file that holds the call."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "file_exists",
+      "description": "The separate base-build command exists at stack/scripts/fixturenet-base-build.",
+      "proves": "The one allowed base-build command is present in the repository.",
+      "restatement_clause_id": "c1",
+      "path": "stack/scripts/fixturenet-base-build",
+      "clause_id": "c1"
+    },
+    {
+      "type": "grep",
+      "description": "The pre-commit configuration contains a check that mentions fixturenet-base-build.",
+      "proves": "A pre-commit check about callers of the base-build command is registered.",
+      "restatement_clause_id": "c2",
+      "pattern": "fixturenet-base-build",
+      "files": [
+        ".pre-commit-config.yaml"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "In a clean throwaway copy of the repository with no extra caller, the pre-commit check passes.",
+      "proves": "The check does not block a repository where nothing calls the base-build command.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/verify_base_build_caller_rule.py",
+        "args": [
+          "--caller-kind",
+          "none"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hook_exit_code",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "A gate job that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails.",
+      "proves": "A call from a gate job is rejected.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/verify_base_build_caller_rule.py",
+        "args": [
+          "--caller-kind",
+          "gate"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hook_exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c4"
+    },
+    {
+      "type": "behavior",
+      "description": "A compose job that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails.",
+      "proves": "A call from a compose job is rejected.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/verify_base_build_caller_rule.py",
+        "args": [
+          "--caller-kind",
+          "compose"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hook_exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c5"
+    },
+    {
+      "type": "behavior",
+      "description": "A worker script that calls stack/scripts/fixturenet-base-build is added in a throwaway copy. The pre-commit check fails.",
+      "proves": "A call from a worker script is rejected.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/verify_base_build_caller_rule.py",
+        "args": [
+          "--caller-kind",
+          "worker"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "hook_exit_code",
+          "op": "ne",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c6"
+    },
+    {
+      "type": "behavior",
+      "description": "After a forbidden call is added, the failure message printed by pre-commit contains the path of the file that holds the call.",
+      "proves": "The failing check names the offending caller.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/verify_base_build_caller_rule.py",
+        "args": [
+          "--caller-kind",
+          "gate"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "names_caller",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c7"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "scripts/verify_base_build_caller_rule.py"
+  ]
+}
