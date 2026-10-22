@@ -1,0 +1,135 @@
+{
+  "id": "derived-arn-501",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. A finalized channel's SHIELD-allocation payout is one more output of N1b's single transactOwned spend on the pool, not a separate pool.shield call against a raw ERC-20 balance. The pool records a preimage for every payout note, so every payout is provable later. A SHIELD allocation to a plain recipient pays a note of the allocated amount. Zero-amount allocations are skipped. The ETH or raw-asset _transferAsset path stays unchanged.\nWhat holds now? Describe the current, observed state. The adjudicator routes a SHIELD payout through _executeSingleAssetExit, which calls pool.shield against a raw ERC-20 balance. N1a removed that balance; holdings is now a bytes32 commitment, so the old pool.shield path cannot stand.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run forge test --match-contract ArmadaNitroAdjudicatorTest. One test funds a finalized channel and calls transfer with one SHIELD allocation to a plain recipient, then checks pool.preimageOf on the resulting commitment shows a note of the allocated amount. The command grep -n pool.shield src/ArmadaNitroAdjudicator.sol returns nothing. The full forge test suite compiles and passes.\nWhat constraints apply? State them in plain prose. There is no protocol fee on a payout (operator ruling 2026-10-22): a payout is a plain output with no fee tag and no cumulativeFees coupling. Do not change the ETH or raw-asset _transferAsset path. This chunk adds no new pool view; transactOwned and preimageOf are already on IArmadaPool after N1b and N2a.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) src/ArmadaNitroAdjudicator.sol, the SHIELD branch of the transfer and payout path (_executeSingleAssetExit)",
+  "restatement": "When a finalized channel pays out a SHIELD allocation, the adjudicator must pay it as one more output of the single transactOwned spend on the pool. It must not make a separate pool.shield call against a raw ERC-20 balance. The old path cannot work because holdings is now a bytes32 commitment. The pool records a preimage for every payout note, so each payout can be proved later. A SHIELD allocation to a plain recipient pays a note of the allocated amount. Zero-amount allocations are skipped. A payout carries no protocol fee. The ETH and raw-asset _transferAsset path stays unchanged. The whole forge suite compiles and passes.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "A SHIELD payout is one more output of N1b's single transactOwned spend on the pool. It is not a separate pool.shield call. The command grep -n pool.shield src/ArmadaNitroAdjudicator.sol returns nothing."
+    },
+    {
+      "id": "c2",
+      "text": "A SHIELD allocation to a plain recipient on a finalized channel pays a note of the allocated amount. pool.preimageOf on the resulting commitment shows that note, so every payout is provable."
+    },
+    {
+      "id": "c3",
+      "text": "Zero-amount SHIELD allocations are skipped."
+    },
+    {
+      "id": "c4",
+      "text": "The ETH or raw-asset _transferAsset path stays unchanged."
+    },
+    {
+      "id": "c5",
+      "text": "A payout has no protocol fee. It is a plain output with no fee tag and no cumulativeFees coupling."
+    },
+    {
+      "id": "c6",
+      "text": "The full forge test suite compiles and passes, including forge test --match-contract ArmadaNitroAdjudicatorTest."
+    }
+  ],
+  "goal": "Route SHIELD payouts in src/ArmadaNitroAdjudicator.sol through the single transactOwned spend so each payout has a provable preimage.",
+  "acceptance_criteria": [
+    "With a pool that rejects any direct shield call, a finalized channel with one SHIELD allocation still pays out. The pool sees exactly one transactOwned spend that holds the payout.",
+    "A test funds a finalized channel and calls transfer with one SHIELD allocation to a plain recipient. The note recorded for the resulting commitment has the allocated amount.",
+    "A finalized channel has one zero-amount SHIELD allocation and one non-zero SHIELD allocation. Only the non-zero allocation produces a payout note.",
+    "A finalized channel pays an ETH allocation and a raw-asset allocation. Each recipient receives the exact amount through the old transfer path, and no pool note is created.",
+    "A SHIELD payout of a known amount creates a note of exactly that amount. The fee total on the pool does not change.",
+    "The adjudicator test contract ArmadaNitroAdjudicatorTest compiles and every test in it passes."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "With a pool that rejects any direct shield call, a finalized channel with one SHIELD allocation still pays out. The pool sees exactly one transactOwned spend that holds the payout."
+    },
+    {
+      "id": "c2",
+      "text": "A test funds a finalized channel and calls transfer with one SHIELD allocation to a plain recipient. The note recorded for the resulting commitment has the allocated amount."
+    },
+    {
+      "id": "c3",
+      "text": "A finalized channel has one zero-amount SHIELD allocation and one non-zero SHIELD allocation. Only the non-zero allocation produces a payout note."
+    },
+    {
+      "id": "c4",
+      "text": "A finalized channel pays an ETH allocation and a raw-asset allocation. Each recipient receives the exact amount through the old transfer path, and no pool note is created."
+    },
+    {
+      "id": "c5",
+      "text": "A SHIELD payout of a known amount creates a note of exactly that amount. The fee total on the pool does not change."
+    },
+    {
+      "id": "c6",
+      "text": "The adjudicator test contract ArmadaNitroAdjudicatorTest compiles and every test in it passes."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "With a pool that rejects any direct shield call, a finalized channel with one SHIELD allocation still pays out. The pool sees exactly one transactOwned spend that holds the payout.",
+      "proves": "The SHIELD payout goes through one transactOwned spend and never through a separate pool.shield call.",
+      "restatement_clause_id": "c1",
+      "test": "test_shieldPayoutIsSingleTransactOwnedOutput",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c1"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A test funds a finalized channel and calls transfer with one SHIELD allocation to a plain recipient. The note recorded for the resulting commitment has the allocated amount.",
+      "proves": "The payout note exists, has the allocated amount, and can be proved through pool.preimageOf.",
+      "restatement_clause_id": "c2",
+      "test": "test_shieldPayoutRecordsPreimageOfAllocatedAmount",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c2"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A finalized channel has one zero-amount SHIELD allocation and one non-zero SHIELD allocation. Only the non-zero allocation produces a payout note.",
+      "proves": "Zero-amount SHIELD allocations are skipped and create no note.",
+      "restatement_clause_id": "c3",
+      "test": "test_zeroAmountShieldAllocationSkipped",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A finalized channel pays an ETH allocation and a raw-asset allocation. Each recipient receives the exact amount through the old transfer path, and no pool note is created.",
+      "proves": "The ETH and raw-asset payout path still behaves as before.",
+      "restatement_clause_id": "c4",
+      "test": "test_ethAndRawAssetPayoutPathUnchanged",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "A SHIELD payout of a known amount creates a note of exactly that amount. The fee total on the pool does not change.",
+      "proves": "A payout takes no protocol fee and does not change cumulativeFees.",
+      "restatement_clause_id": "c5",
+      "test": "test_shieldPayoutTakesNoFee",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "forge_mutation_gated_test",
+      "description": "The adjudicator test contract ArmadaNitroAdjudicatorTest compiles and every test in it passes.",
+      "proves": "The change builds and the adjudicator suite passes.",
+      "restatement_clause_id": "c6",
+      "test": "ArmadaNitroAdjudicatorTest",
+      "mutation_targets": [
+        "src/ArmadaNitroAdjudicator.sol"
+      ],
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "critical"
+}
