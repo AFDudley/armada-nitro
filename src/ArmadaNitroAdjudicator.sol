@@ -1,20 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFormat.sol';
-import {PoseidonT4} from 'armada/privacy-pool/types/PoseidonLibs.sol';
 import {NitroAdjudicator} from './nitro/NitroAdjudicator.sol';
 import {MultiAssetHolder} from './nitro/MultiAssetHolder.sol';
+import {CommitmentHoldings} from './armada/libraries/CommitmentHoldings.sol';
+import {PoolSpend} from './armada/libraries/PoolSpend.sol';
 import {
     IArmadaPool,
-    BoundParams,
-    CommitmentCiphertext,
     CommitmentPreimage,
-    G1Point,
-    G2Point,
-    SnarkProof,
-    TokenData,
     TokenType,
     Transaction,
     UnshieldType
@@ -32,6 +26,13 @@ uint8 constant SHIELD_ALLOCATION_TYPE = 3;
  * allocated amount) as one more output of the same single `transactOwned` spend that pays every
  * other allocation -- never a separate shield call. Participants may be EOAs or EIP-1271
  * contracts (see NitroUtils.isAuthorizedBy).
+ * @dev R1 rewrite: every `pool.transactOwned` spend (component (b), `PoolSpend`) and the
+ * commitment-holdings read (component (a), `CommitmentHoldings`) live in external libraries
+ * linked at deploy time -- `internal` library functions inline into the caller and give no size
+ * relief, so every function this contract delegates to is `public` on its library
+ * (docs/tasks/R1-adjudicator-rewrite.md). Neither library reads or writes this contract's
+ * storage directly; this contract reads `holdings` itself and writes back whatever the library
+ * returns.
  */
 contract ArmadaNitroAdjudicator is NitroAdjudicator {
     /// @notice Allocation type for a payout that shields a fresh note in the pool.
@@ -48,18 +49,9 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         return configuredAssets[asset];
     }
 
-    /**
-     * @dev N1a: the held amount of the channel collateral note. Empty commitment -> 0; a set
-     * commitment reads the pool's preimage live through `preimageOf` (never a cached or passed-in
-     * amount). The pool's `uint120` value is cast to `uint256` with SafeCast.
-     */
+    /// @dev N1a: see `CommitmentHoldings.heldValue`.
     function heldValue(address asset, bytes32 channelId) public view virtual override returns (uint256) {
-        bytes32 commitment = holdings[asset][channelId];
-        if (uint256(commitment) == 0) {
-            return 0;
-        }
-        CommitmentPreimage memory preimage = pool.preimageOf(commitment);
-        return SafeCast.toUint256(int256(uint256(preimage.value)));
+        return CommitmentHoldings.heldValue(pool, holdings[asset][channelId]);
     }
 
     constructor(IArmadaPool pool_, address[] memory assets_) {
@@ -78,7 +70,6 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
     function depositBinding(bytes32 channelId, uint256 expectedHeld) public pure returns (bytes32) {
         return keccak256(abi.encode(channelId, expectedHeld));
     }
-
 
     /**
      * @notice Fund `channelId` from a shielded note.
@@ -153,7 +144,7 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
     function _executeSingleAssetExit(
         Outcome.SingleAssetExit memory singleAssetExit
     ) internal override {
-        _mintPayoutCommitmentsNoChannel(singleAssetExit.asset, singleAssetExit.allocations);
+        PoolSpend.mintPayoutCommitmentsNoChannel(pool, singleAssetExit.asset, singleAssetExit.allocations, SHIELD);
     }
 
     /**
@@ -183,99 +174,20 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
         emit AllocationUpdated(channelId, asset, initialHoldings, heldValue(asset, channelId));
     }
 
-    /// @dev N1b/N2b: the single transactOwned spend for `_settleTransferExit`, factored out to
-    /// keep that function under the local-variable limit. Nullifies `oldCommitment` (if set) and
-    /// mints one commitment per non-zero `exitAllocations` entry (SHIELD and non-SHIELD external
-    /// folded into the same spend, c1), plus a remainder commitment back to this adjudicator when
-    /// `remainder > 0`; returns the new holding (the remainder commitment, or `bytes32(0)` when
-    /// nothing remains).
+    /// @dev N1b/N2b: thin wrapper the test harness exposes directly; the real spend lives in
+    /// `PoolSpend.mintTransferPayout`.
     function _mintTransferPayout(
         address asset,
         bytes32 oldCommitment,
         Outcome.Allocation[] memory exitAllocations,
         uint256 remainder
     ) internal returns (bytes32) {
-        uint256 payoutCount = 0;
-        for (uint256 i = 0; i < exitAllocations.length; i++) {
-            if (exitAllocations[i].amount > 0) payoutCount++;
-        }
-        if (payoutCount == 0 && remainder == 0) {
-            return bytes32(0);
-        }
-
-        uint256 outputCount = payoutCount + (remainder > 0 ? 1 : 0);
-        CommitmentPreimage[] memory outputs = new CommitmentPreimage[](outputCount);
-        uint256 k = 0;
-        for (uint256 i = 0; i < exitAllocations.length; i++) {
-            Outcome.Allocation memory a = exitAllocations[i];
-            if (a.amount == 0) continue;
-            if (uint8(a.allocationType) != SHIELD) {
-                require(_isExternalDestination(a.destination), 'Internal destination not supported');
-            }
-            outputs[k++] = _notePreimage(asset, a.destination, a.amount);
-        }
-        bytes32 newHolding;
-        if (remainder > 0) {
-            CommitmentPreimage memory remainderPreimage = _notePreimage(asset, _addressToBytes32(address(this)), remainder);
-            outputs[payoutCount] = remainderPreimage;
-            newHolding = _hashCommitment(remainderPreimage);
-        }
-        bytes32[] memory nullifiers = oldCommitment == bytes32(0) ? new bytes32[](0) : _singleton(oldCommitment);
-        _mintOwnedCommitments(nullifiers, outputs);
-        return newHolding;
-    }
-
-    /// @dev N1b/N2b: the non-SHIELD-plus-SHIELD half of a generic (channelId-less) exit, used by
-    /// NitroAdjudicator's transferAllAssets/concludeAndTransferAllAssets. Mints one un-nullified
-    /// owned commitment per non-zero allocation in a single transactOwned call (SHIELD and
-    /// non-SHIELD external folded together, c1); every non-SHIELD allocation must be an external
-    /// destination (channel-to-channel is out of this family's scope, see the brief).
-    function _mintPayoutCommitmentsNoChannel(
-        address asset,
-        Outcome.Allocation[] memory allocations
-    ) internal {
-        uint256 payoutCount = 0;
-        for (uint256 j = 0; j < allocations.length; j++) {
-            if (allocations[j].amount > 0) payoutCount++;
-        }
-        if (payoutCount == 0) return;
-        CommitmentPreimage[] memory outputs = new CommitmentPreimage[](payoutCount);
-        uint256 k = 0;
-        for (uint256 j = 0; j < allocations.length; j++) {
-            Outcome.Allocation memory a = allocations[j];
-            if (a.amount == 0) continue;
-            if (uint8(a.allocationType) != SHIELD) {
-                require(_isExternalDestination(a.destination), 'Internal destination not supported');
-            }
-            outputs[k++] = _notePreimage(asset, a.destination, a.amount);
-        }
-        // N1b: no nullifier spent here -- this caller has no channel-keyed commitment context to
-        // spend; the real ERC20 backing each output stays locked in the adjudicator's own wallet
-        // (as it already was, via depositFromNote), redeemable later by the owning destination
-        // through its own transactOwned call.
-        _mintOwnedCommitments(new bytes32[](0), outputs);
-    }
-
-    /// @dev N2b: a payout commitment's preimage (npk = the allocation's destination, value = the
-    /// allocated amount). The pool records a preimage for every payout commitment, so every
-    /// payout is provable later via `pool.preimageOf` (c2).
-    function _notePreimage(
-        address asset,
-        bytes32 npk,
-        uint256 value
-    ) internal pure returns (CommitmentPreimage memory) {
-        return CommitmentPreimage({
-            npk: npk,
-            token: TokenData({tokenType: TokenType.ERC20, tokenAddress: asset, tokenSubID: 0}),
-            value: SafeCast.toUint120(value)
-        });
+        return PoolSpend.mintTransferPayout(pool, asset, oldCommitment, exitAllocations, remainder, SHIELD);
     }
 
     /**
-     * @dev N1b: move `guaranteeAmount` into `targetChannelId`'s commitment. Spends the target
-     * channel's current commitment (if any; a never-funded target has none) and mints a fresh
-     * owned commitment, through `pool.transactOwned`, worth its prior held value plus
-     * `guaranteeAmount`.
+     * @dev N1b: move `guaranteeAmount` into `targetChannelId`'s commitment via
+     * `PoolSpend.settleReclaim`.
      */
     function _settleReclaimExit(
         address asset,
@@ -284,84 +196,12 @@ contract ArmadaNitroAdjudicator is NitroAdjudicator {
     ) internal override {
         bytes32 oldCommitment = holdings[asset][targetChannelId];
         uint256 priorHeld = heldValue(asset, targetChannelId);
-        CommitmentPreimage memory newPreimage = CommitmentPreimage({
-            npk: _addressToBytes32(address(this)),
-            token: TokenData({tokenType: TokenType.ERC20, tokenAddress: asset, tokenSubID: 0}),
-            value: SafeCast.toUint120(priorHeld + guaranteeAmount)
-        });
-        CommitmentPreimage[] memory outputs = new CommitmentPreimage[](1);
-        outputs[0] = newPreimage;
-        bytes32[] memory nullifiers = oldCommitment == bytes32(0) ? new bytes32[](0) : _singleton(oldCommitment);
-        _mintOwnedCommitments(nullifiers, outputs);
-        holdings[asset][targetChannelId] = _hashCommitment(newPreimage);
-    }
-
-    /**
-     * @dev N1b: submit one `pool.transactOwned` transaction that nullifies `nullifiers` (0 or 1
-     * entries here) and mints one fresh owned commitment per `outputs` entry, each hashed with
-     * the pool's own Poseidon-based commitment hash so the pool's `_validatePublicOutputs` check
-     * (every public output hashes to its commitment) passes.
-     */
-    function _mintOwnedCommitments(
-        bytes32[] memory nullifiers,
-        CommitmentPreimage[] memory outputs
-    ) internal {
-        uint256 n = outputs.length;
-        bytes32[] memory commitments = new bytes32[](n);
-        CommitmentCiphertext[] memory ciphertexts = new CommitmentCiphertext[](n);
-        for (uint256 i = 0; i < n; i++) {
-            commitments[i] = _hashCommitment(outputs[i]);
-            ciphertexts[i] = CommitmentCiphertext({
-                ciphertext: [bytes32(0), bytes32(0), bytes32(0), bytes32(0)],
-                blindedSenderViewingKey: bytes32(0),
-                blindedReceiverViewingKey: bytes32(0),
-                annotationData: '',
-                memo: ''
-            });
-        }
-
-        Transaction[] memory txs = new Transaction[](1);
-        txs[0] = Transaction({
-            proof: SnarkProof({
-                a: G1Point(0, 0),
-                b: G2Point([uint256(0), 0], [uint256(0), 0]),
-                c: G1Point(0, 0)
-            }),
-            merkleRoot: pool.merkleRoot(),
-            nullifiers: nullifiers,
-            commitments: commitments,
-            boundParams: BoundParams({
-                treeNumber: uint16(pool.treeNumber()),
-                minGasPrice: 0,
-                unshield: UnshieldType.NONE,
-                chainID: uint64(block.chainid),
-                adaptContract: address(this),
-                adaptParams: bytes32(0),
-                commitmentCiphertext: ciphertexts,
-                ownerField: _addressToBytes32(address(this)),
-                publicOutputs: outputs
-            }),
-            unshieldPreimage: CommitmentPreimage({
-                npk: bytes32(0),
-                token: TokenData({tokenType: TokenType.ERC20, tokenAddress: address(0), tokenSubID: 0}),
-                value: 0
-            })
-        });
-        pool.transactOwned(txs);
-    }
-
-    /// @dev N1b: the pool's commitment hash (Poseidon of npk, token id, value) -- mirrors
-    /// TransactModule._hashCommitment, which the pool itself uses to validate publicOutputs.
-    function _hashCommitment(CommitmentPreimage memory preimage) internal pure returns (bytes32) {
-        return PoseidonT4.poseidon([
-            preimage.npk,
-            bytes32(uint256(uint160(preimage.token.tokenAddress))),
-            bytes32(uint256(preimage.value))
-        ]);
-    }
-
-    function _singleton(bytes32 value) internal pure returns (bytes32[] memory out) {
-        out = new bytes32[](1);
-        out[0] = value;
+        holdings[asset][targetChannelId] = PoolSpend.settleReclaim(
+            pool,
+            asset,
+            oldCommitment,
+            priorHeld,
+            guaranteeAmount
+        );
     }
 }

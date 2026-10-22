@@ -128,3 +128,21 @@ Chunks, each a separate `exophial intake` filing once this brief merges:
 - The mutation-gated tests re-run against the rewrite branch catch the 7 (or more, per the
   re-run) offsets listed above.
 - arn-1ea closes when this set merges.
+
+## Measured sizes
+
+arn-274 (component (d)): `script/Deploy.s.sol` deploys `ArmadaNitroAdjudicator` with the two
+libraries, `CommitmentHoldings` (a) and `PoolSpend` (b), linked at deploy time -- `forge script
+... --broadcast` deploys and links both libraries automatically; no deploy script carries an
+unlinked library placeholder into production. `forge build --sizes` measures every contract the
+deploy script deploys (the adjudicator, the two libraries, `ConsensusApp` and `HubCustodian`),
+all at or below the 24,576-byte EIP-170 limit:
+
+- **ArmadaNitroAdjudicator**: 21,913 bytes runtime, margin 2,663 bytes below the 24,576-byte limit.
+- **CommitmentHoldings**: 680 bytes runtime, margin 23,896 bytes below the limit.
+- **PoolSpend**: 6,392 bytes runtime, margin 18,184 bytes below the limit.
+- **ConsensusApp**: 2,337 bytes runtime, margin 22,239 bytes below the limit.
+- **HubCustodian**: 4,328 bytes runtime, margin 20,248 bytes below the limit.
+
+The largest deployed contract (ArmadaNitroAdjudicator at 21,913 bytes) carries a 2,663-byte
+margin under the limit, closing the 982-byte overage the Operator ruling recorded.
