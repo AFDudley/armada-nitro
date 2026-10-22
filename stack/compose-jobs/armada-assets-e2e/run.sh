@@ -15,7 +15,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
+REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../../.." &>/dev/null && pwd)
 
 DEP_NAME="${ARMADA_ASSETS_DEP_NAME:-armada-assets-e2e}"
 DEP="${HOME}/deployments/${DEP_NAME}"
