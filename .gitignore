@@ -34,6 +34,11 @@ node_modules/
 .pebbles/reducer_ledger.jsonl
 .exophial/*
 !.exophial/config.yaml
+# The commit-boundary gate's build-system declaration (D49.2): tracked so the
+# container the judged commit is graded in is built from the judged commit.
+!.exophial/gate/
+!.exophial/gate/Dockerfile
+!.exophial/gate/fetch-submodules.sh
 # exophial omp worker settings, written into each worker worktree
 .omp-config.yml
 

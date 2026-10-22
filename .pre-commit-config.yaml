@@ -6,7 +6,12 @@
 # src/nitro/ is vendored go-nitro (see README): kept byte-identical to upstream.
 # docs/references/nitro/sources/ holds retrieved specification copies: kept
 # byte-identical to their checksums in docs/references/nitro/README.md.
-exclude: ^(src/nitro/|docs/references/nitro/sources/)
+# lib/ is the forge submodules (vendored dependencies). On the host they are git
+# submodules, so pre-commit never descends into them. The commit-boundary gate
+# runs in a container built from the judged commit, where fetch-submodules.sh
+# materializes them as plain files for forge; excluding lib/ keeps the gate from
+# linting or reformatting vendored sources, matching the host.
+exclude: ^(src/nitro/|docs/references/nitro/sources/|lib/)
 
 repos:
   # === Exophial-vendored gates ===
