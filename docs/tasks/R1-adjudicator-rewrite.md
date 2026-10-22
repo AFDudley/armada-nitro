@@ -2,6 +2,13 @@ Chunk R1 · Family F4 · Route 5090
 Depends on: arn-1ea, N1a, N1b, N2a, N2b (behavior already merged into ArmadaNitroAdjudicator.sol
 on `integrated`). Supersedes arn-7c4 (N3).
 
+Status: done. The library split (components (a)-(d) below) landed as part of arn-a46's deploy-on-
+anvil gate, which needed the real deploy script to not revert against a local anvil enforcing
+EIP-170. `src/armada/libraries/CommitmentHoldings.sol` (a) and `src/armada/libraries/PoolSpend.sol`
+(b) hold the logic that used to live on `ArmadaNitroAdjudicator` directly; `forge build --sizes`
+now measures the adjudicator's runtime at 21,913 bytes (2,663-byte margin under the 24,576 EIP-170
+limit).
+
 Read `src/ArmadaNitroAdjudicator.sol`, `src/nitro/MultiAssetHolder.sol`,
 `src/nitro/NitroAdjudicator.sol`, `test/ArmadaNitroAdjudicator.t.sol`,
 `docs/tasks/N1a-multiassetholder-commitment-storage.md`,
@@ -13,9 +20,10 @@ Repo: `armada-nitro`. Branch: `integrated` (work in a `task/R1-*` branch cut fro
 
 ## Operator ruling
 
-ArmadaNitroAdjudicator is rewritten, not repaired. `forge build --sizes` on `integrated` measures
-its runtime size at 25,558 bytes, 982 bytes over the EIP-170 limit of 24,576 (arn-1ea). No
-fixturenet can deploy `armada_nitro` from `integrated` while this holds.
+ArmadaNitroAdjudicator is rewritten, not repaired. `forge build --sizes` on `integrated` measured
+its runtime size at 25,558 bytes, 982 bytes over the EIP-170 limit of 24,576 (arn-1ea); no
+fixturenet could deploy `armada_nitro` from `integrated` while that held. The library split below
+has since landed (see Status above); the adjudicator now measures 21,913 bytes.
 
 ## Behavior (unchanged)
 

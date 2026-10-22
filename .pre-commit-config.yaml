@@ -248,3 +248,19 @@ repos:
         language: system
         pass_filenames: false
         files: \.sol$|^foundry\.(toml|lock)$
+
+  # === Solidity: real deploy script against a local anvil (arn-a46) ===
+  # docs/tasks/R1-adjudicator-rewrite.md's acceptance: "the deploy script runs against a local
+  # anvil with libraries linked and does not revert." arn-d5a's fixturenet-reconcile run showed
+  # this deploy fails once a real network enforces EIP-170 (ArmadaNitroAdjudicator over the
+  # 24,576-byte limit), but that failure surfaced only in a full reconcile, not a fast gate
+  # check. This hook starts its own local anvil (default EIP-170 limit, never disabled) and
+  # runs script/Deploy.s.sol for real, so the gate catches the same failure on every chunk.
+  - repo: local
+    hooks:
+      - id: check-deploy-on-anvil
+        name: Deploy script runs on a local anvil (libraries linked, EIP-170 enforced) without reverting
+        entry: scripts/check-deploy-on-anvil.sh
+        language: system
+        pass_filenames: false
+        files: \.sol$|^foundry\.(toml|lock)$|^scripts/check-deploy-on-anvil\.sh$
