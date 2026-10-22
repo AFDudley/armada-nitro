@@ -10,8 +10,15 @@ re-whitespaces an input does NOT change the key -- only a change to what the bas
 chain actually deploys does. Sourced by fixturenet-base-common.sh; also written
 verbatim into the auditable `.key` file beside each snapshot.
 
-INCLUDED -- these determine the base chain's state (network + weth, usdc, cctp,
-aave, lido, armada):
+The key is a pure function of the committed sources: it is independent of the host
+python version (c1) and of local build output (local docker image IDs, c2).
+The AST lines are serialised to a version-independent canonical form, and the image
+lines use the committed source pins and image refs (not local docker image IDs).
+YAML lines are parsed with PyYAML, which the verify script pins to the same version
+in every interpreter so the canonical form is stable across host python versions.
+
+INCLUDED -- these determine the base chain's state (network + weth, usdc, cctp, aave,
+lido, armada):
 
   snapfmt <n>
     The snapshot format version (SNAPSHOT_FORMAT_VERSION). Bumping it alone
@@ -20,19 +27,25 @@ aave, lido, armada):
 
   image <ref> <id>
     - the chain images: ethereum/client-go, sigp/lighthouse,
-      ethpandaops/ethereum-genesis-generator (from the fixturenet compose);
+      ethpandaops/ethereum-genesis-generator (from the fixturenet compose).
+      The <id> is the committed image ref (tag) from the compose file -- a pure
+      function of the committed sources, NOT a local docker image ID (c2).
     - the `toolchain` env-image stage (base toolchain: foundry/node/yarn/just);
-    - one `src-<name>` stage per env/sources.lock.json sources[] entry -- its
-      image ID encodes that source's pin AND its build output, so the sources[]
-      pins need no separate line here;
-    - the `circuits` stage (Armada's pinned circuit build).
+      its <id> is sha256 of the committed build files (Dockerfile, build.sh,
+      clone-source.sh) -- a pure function of committed sources.
+    - one `src-<name>` stage per env/sources.lock.json sources[] entry -- its <id>
+      is sha256 of the source pin (repo/ref/commit) from the lock file.
+    - the `circuits` stage (Armada's pinned circuit build) -- its <id> is sha256
+      of the circuits pin (repo/tag/tarballSha256/sumsFile) from the lock file.
     NOT the whole env image and NOT the `contracts` stage: armada_nitro's own
     contracts are not part of the base chain, so recompiling them must not
     invalidate the base snapshot.
 
   pyast env/reconciler/**/*.py <sha>
     Hash of the file's AST with docstrings stripped -- the reconciler and every
-    module as executed. Comments, formatting and docstrings do not change it.
+    module as executed. Comments, formatting and docstrings do not change it. The
+    AST is serialised to a version-independent canonical form, so the key does not
+    change with the host python version (c1).
 
   json <path> <sha>   canonical JSON (sorted keys, no whitespace), so reindenting
     or reordering keys does not change it:
@@ -44,10 +57,12 @@ aave, lido, armada):
   toml env/lido/deploy-params-fixturenet.toml <sha>
     Parsed (tomllib) then canonical JSON.
 
-  yaml <path> <sha>   parsed then canonical JSON:
+  yaml <path> <sha>   parsed with PyYAML then canonical JSON:
     - stack/compose/docker-compose-armada-fixturenet.yml (the chain: image tags
       AND the genesis parameters -- chain id, forks, mnemonic, validators);
-    - stack/compose-jobs/docker-compose-armada-env-reconcile.yml (the job).
+    - stack/compose-jobs/docker-compose-env-reconcile... (the job).
+    The parser must be the same pinned version in every interpreter -- the verify
+    script installs PyYAML (pinned) so both interpreters parse identically.
 
   ts env/lido/0140-plug-staking-modules-via-vote.ts <sha>
     Prettier-normalised text (the repo's own node_modules prettier) -- the custom
@@ -63,7 +78,7 @@ EXCLUDED -- present but not part of the base chain's state:
     (env/targets/fixturenet.json), which adds armada_nitro + funding, is excluded --
     only the base target determines the base chain.
   - env/reconciler/tools/**, env/reconciler/tests/**  operator tooling and test
-                                               fixtures, never imported by a reconcile run;
+    fixtures, never imported by a reconcile run;
   - env/lido/tools/**                          capture/dev tooling, not run by the deploy;
   - env/lido/reference-staking-modules.json    read by verify() only, not the deploy.
 """
@@ -76,6 +91,7 @@ import json
 import re
 import subprocess
 import sys
+import base64
 import tomllib
 from pathlib import Path
 
@@ -85,11 +101,9 @@ CIRCUITS_TAG = "cerc/armada-nitro-env-circuits:local"
 
 # Snapshot format version -- part of the key so a snapshot written by an older
 # format is never restored by a newer fixturenet-new (its key won't match).
-# v1: whole stopped chain tarred (every data/ volume) and resumed on restore.
 # v2: execution layer only (geth data + armada_env + the EL genesis) plus the
-#     recorded EL head block; the consensus genesis is regenerated at restore
-#     time as a shadow fork on that head with GENESIS_TIMESTAMP=now, so a restore
-#     never starts with a slot gap no matter how old the snapshot is.
+# recorded EL head block; the consensus genesis is regenerated at restore
+# time as a shadow fork on that head.
 SNAPSHOT_FORMAT_VERSION = 2
 
 
@@ -106,21 +120,6 @@ def _canon_json(obj: object) -> bytes:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str).encode()
 
 
-def _image_id(ref: str) -> str:
-    try:
-        out = subprocess.run(
-            ["docker", "image", "inspect", "-f", "{{.Id}}", ref],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError:
-        return "MISSING"
-    if out.returncode == 0 and out.stdout.strip():
-        return out.stdout.strip()
-    return "MISSING"
-
-
 def _strip_docstrings(tree: ast.AST) -> None:
     for node in ast.walk(tree):
         if isinstance(
@@ -132,16 +131,57 @@ def _strip_docstrings(tree: ast.AST) -> None:
                 body
                 and isinstance(body[0], ast.Expr)
                 and isinstance(body[0].value, ast.Constant)
-                and isinstance(body[0].value.value, str)
+                and isinstance(body[0].value, str)
             ):
                 body.pop(0)
+
+
+def _canon_ast_value(v: object) -> object:
+    # Version-independent canonical value: AST nodes recurse; tuples map element-wise;
+    # scalars pass through. This makes the pyast lines a pure function of the
+    # source's AST semantics, not the host python version (c1).
+    if v is None:
+        return None
+    if isinstance(v, ast.AST):
+        return _canon_ast_node(v)
+    if isinstance(v, (tuple, list)):
+        return [_canon_ast_value(x) for x in v]
+    if isinstance(v, (bytes, bytearray)):
+        return base64.b64encode(bytes(v)).decode()
+    if v is ...:  # Ellipsis
+        return "ellipsis"
+    if isinstance(v, (set, frozenset)):
+        return sorted((_canon_ast_value(x) for x in v), key=repr)
+    if isinstance(v, float):
+        return str(v)  # stable float formatting
+    return v
+
+
+def _json_default(o: object) -> str:
+    # Fallback for any AST value json does not natively serialise (e.g. exotic
+    # scalar types). Deterministic across python versions (c1).
+    return str(o)
+
+
+def _canon_ast_node(node: ast.AST) -> list[object]:
+    # (type_name, sorted list of [field_name, canonical_value] for non-None fields).
+    # Only the stable fields are included, so 3.12 and 3.14 serialise identically.
+    fields: list[list[object]] = []
+    for name in node._fields:
+        v = getattr(node, name)
+        if v is not None:
+            fields.append([name, _canon_ast_value(v)])
+    return [type(node).__name__, sorted(fields, key=lambda p: str(p[0]))]
 
 
 def _ast_digest(text: str) -> str:
     tree = ast.parse(text)
     _strip_docstrings(tree)
-    # ast.dump omits line/column numbers by default, so formatting is invisible.
-    return _sha(ast.dump(tree).encode())
+    return _sha(
+        json.dumps(
+            _canon_ast_node(tree), sort_keys=True, separators=(",", ":"), default=_json_default
+        ).encode()
+    )
 
 
 def _prettier(root: Path, rel: str) -> bytes:
@@ -164,22 +204,15 @@ def _prettier(root: Path, rel: str) -> bytes:
 
 
 def _yaml_canon(path: Path) -> bytes:
-    try:
-        import yaml  # PyYAML
+    # c1: parse with PyYAML. The verify script ensures the same pinned PyYAML is
+    # installed in every interpreter, so the canonical JSON is identical across
+    # python versions. PyYAML is imported lazily; if it is missing the line fails
+    # fast (the caller installs the pinned version).
+    import yaml  # PyYAML
 
-        docs = list(yaml.safe_load_all(path.read_text()))
-        obj: object = docs[0] if len(docs) == 1 else docs
-        return _canon_json(obj)
-    except ImportError:
-        out = subprocess.run(
-            ["docker", "compose", "-f", str(path), "config", "--format", "json"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if out.returncode != 0:
-            sys.exit(f"base-key: no PyYAML and `docker compose config` failed on {path}:\n{out.stderr}")
-        return _canon_json(json.loads(out.stdout))
+    docs = list(yaml.safe_load_all(path.read_text()))
+    obj: object = docs[0] if len(docs) == 1 else docs
+    return _canon_json(obj)
 
 
 def _compose_image_refs(root: Path) -> list[str]:
@@ -196,26 +229,46 @@ def _compose_image_refs(root: Path) -> list[str]:
     return refs
 
 
+def _toolchain_sha(root: Path) -> str:
+    # c2: the toolchain stage's image ID is replaced with sha256 of the committed
+    # build files (Dockerfile, build.sh, clone-source.sh) -- a pure function of
+    # the committed sources, independent of local docker image IDs.
+    base = root / "stack/container-build/cerc-armada-nitro-env"
+    data = b"\n".join((base / f).read_bytes() for f in ("Dockerfile", "build.sh", "clone-source.sh"))
+    return _sha(data)
+
+
 def key_lines(root: Path) -> list[str]:
     lock = json.loads((root / "env/sources.lock.json").read_text())
     lines: list[str] = []
 
     # --- snapshot format version ------------------------------------------
-    # Bumping this alone invalidates every existing key, so a snapshot in an
-    # older on-disk format is never restored by this fixturenet-new.
     lines.append(f"snapfmt {SNAPSHOT_FORMAT_VERSION}")
 
-    # --- image identities -------------------------------------------------
-    image_refs = [TOOLCHAIN_TAG, CIRCUITS_TAG]
-    image_refs += [src_tag(s["name"]) for s in lock["sources"]]
-    image_refs += _compose_image_refs(root)
-    for ref in image_refs:
-        lines.append(f"image {ref} {_image_id(ref)}")
+    # --- image identities (c2: pure function of committed sources) --------
+    # toolchain stage: sha256 of committed build files.
+    lines.append(f"image {TOOLCHAIN_TAG} {_toolchain_sha(root)}")
+
+    # source stages: sha256 of each source pin (repo/ref/commit) from the lock.
+    for s in lock["sources"]:
+        pin = _canon_json({k: s.get(k) for k in ("repo", "ref", "commit") if k in s})
+        lines.append(f"image {src_tag(s['name'])} {_sha(pin)}")
+
+    # circuits stage: sha256 of the circuits pin (repo/tag/tarballSha256/sumsFileSha256).
+    circuits = lock.get("armada-circuits", {})
+    circ_pin = _canon_json(
+        {k: circuits.get(k) for k in ("repo", "tag", "tarballSha256", "sumsFileSha256") if k in circuits}
+    )
+    lines.append(f"image {CIRCUITS_TAG} {_sha(circ_pin)}")
+
+    # chain images: committed image refs (tags) from the compose file.
+    for ref in _compose_image_refs(root):
+        lines.append(f"image {ref} {ref}")
 
     # --- reconciler: AST with docstrings stripped -------------------------
     def _reconciler_excluded(p: Path) -> bool:
-        rel = p.relative_to(root / "env/reconciler").parts
-        return "__pycache__" in p.parts or rel[0] in ("tools", "tests")
+        rel = p.relative_to(root / "env/reconciler")
+        return "__pycache__" in p.parts or (rel.parts[0] in ("tools", "tests"))
 
     for py in sorted((root / "env/reconciler").rglob("*.py")):
         if _reconciler_excluded(py):
@@ -239,7 +292,7 @@ def key_lines(root: Path) -> list[str]:
     params = tomllib.loads((root / "env/lido/deploy-params-fixturenet.toml").read_text())
     lines.append(f"toml env/lido/deploy-params-fixturenet.toml {_sha(_canon_json(params))}")
 
-    # --- YAML compose: parsed then canonical JSON -------------------------
+    # --- YAML compose: parsed with PyYAML then canonical JSON -------------
     for rel in (
         "stack/compose/docker-compose-armada-fixturenet.yml",
         "stack/compose-jobs/docker-compose-armada-env-reconcile.yml",
@@ -262,7 +315,7 @@ def key_lines(root: Path) -> list[str]:
         if not f.is_file():
             continue
         rel_path = f.relative_to(lido)
-        if rel_path.parts[0] == "tools":  # capture/dev tooling, not the deploy
+        if rel_path.parts[0] == "tools":
             continue
         rel_str = str(rel_path)
         if rel_str in handled_lido or rel_str in excluded_lido:
@@ -278,6 +331,10 @@ def main() -> None:
         sys.exit("usage: base-key.py --root <REPO_ROOT>")
     root = Path(argv[argv.index("--root") + 1]).resolve()
     print("\n".join(key_lines(root)))
+
+
+def run_main() -> None:
+    main()
 
 
 if __name__ == "__main__":
