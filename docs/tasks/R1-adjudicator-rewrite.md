@@ -103,21 +103,28 @@ without that re-run.
 
 ## Chunking
 
-Split the rewrite into chunks of 9 points or fewer (`armada-laconic/engineering/chunk-rules.md`).
-Chunks, each a separate `exophial intake` filing once this brief merges:
+One chunk covers components (a), (b) and (c) together, in one branch: the commitment-holdings
+library, the pool-spend library, and the new adjudicator contract that uses both. They land
+together because the commit-boundary gate (arn-578) runs `forge build --sizes` on the whole
+build on every `.sol` commit; a branch that adds a library but leaves the old, oversized
+`ArmadaNitroAdjudicator.sol` in place fails that gate on the worker's own first commit, before
+any merge attempt. Only a branch that both adds the libraries and replaces the old file passes.
+This exceeds the 9-point single-5090 cap (`armada-laconic/engineering/chunk-rules.md` rule 1,
+`armada-laconic/engineering/build-plan.md` "Routing"), so it starts on Sonnet rather than
+splitting, the same way `armada-laconic/engineering/build-plan.md` routes N1 and N2 (each over 9
+points, both marked "Sonnet (audit-critical)").
 
-1. Commitment-holdings library (a): the per-asset, per-channel commitment storage read/write,
-   `heldValue`, `isAsset`, preimage/hash helpers, built against N1a's behavior and tests. Closes
-   the `heldValue` mutant (old offset 2549). ~6 points.
-2. Pool-spend library (b): every `transactOwned` call — deposit (N2a), transfer/payout (N1b,
-   N2b), reclaim, minting owned commitments — built against N1b/N2a/N2b's behavior and tests.
-   Closes the five `_mintTransferPayout` mutants (old offsets 11666, 11738, 11843, 12171, 12743).
-   ~9 points.
-3. New adjudicator contract (c): the N3 finalize-only conclude and the bulk-path reverts, on the
-   upstream base, using libraries (a) and (b). Closes the constructor mutant (old offset 2921).
-   Carries N3's behavior and tests (arn-7c4, superseded). ~8 points.
-4. Deploy script (d): links libraries (a) and (b) at deploy time, plus the `forge build --sizes`
-   acceptance record for every deployed contract. ~4 points.
+1. Commitment-holdings library, pool-spend library, new adjudicator contract (components a, b,
+   c): the per-asset, per-channel commitment storage read/write, `heldValue`, `isAsset`,
+   preimage/hash helpers (a, built against N1a's behavior and tests); every `transactOwned`
+   call — deposit (N2a), transfer/payout (N1b, N2b), reclaim, minting owned commitments (b, built
+   against N1b/N2a/N2b's behavior and tests); the N3 finalize-only conclude and the bulk-path
+   reverts on the upstream base, using libraries (a) and (b) (c, carries N3's behavior and tests,
+   arn-7c4 superseded). Closes all 7 confirmed mutant misses: `heldValue` (old offset 2549),
+   the constructor (old offset 2921), and the five `_mintTransferPayout` misses (old offsets
+   11666, 11738, 11843, 12171, 12743). ~23 points, Sonnet.
+2. Deploy script (d): links libraries (a) and (b) at deploy time, plus the `forge build --sizes`
+   acceptance record for every deployed contract. Depends on chunk 1. ~4 points, 5090.
 
 ## Acceptance
 
