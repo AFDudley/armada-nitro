@@ -248,9 +248,15 @@ repos:
         language: system
         pass_filenames: false
         files: \.sol$|^foundry\.(toml|lock)$
-      - id: check-contract-sizes
-        name: EIP-170 contract size gate (24,576 B runtime)
-        entry: python3 scripts/check-contract-sizes.py
+      - id: check-deployed-contract-sizes
+        name: EIP-170 deployed-contract size gate (24,576 B runtime)
+        entry: python3 scripts/check-deployed-contract-sizes.py --script script/Deploy.s.sol --limit 24576
+        language: system
+        pass_filenames: false
+        files: \.sol$|^foundry\.(toml|lock)$
+      - id: check-adjudicator-deploy-linked
+        name: real deploy on local anvil, libraries linked
+        entry: python3 scripts/check-adjudicator-deploy-linked.py --script script/Deploy.s.sol
         language: system
         pass_filenames: false
         files: \.sol$|^foundry\.(toml|lock)$
