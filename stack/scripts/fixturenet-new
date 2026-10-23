@@ -177,6 +177,12 @@ t0=$(now)
 KEY=$(compute_base_key "$REPO_ROOT")
 SNAP=$(snap_path "$KEY")
 if [ -f "$SNAP" ]; then MODE=warm; else MODE=cold; fi
+if [ "$MODE" = cold ]; then
+  echo "fixturenet-new: COLD: no base snapshot for key=${KEY} (${SNAP})"
+  echo "  build the base layer with: stack/scripts/fixturenet-base-build"
+  echo "  (fixturenet-new never builds the base layer itself)"
+  exit 1
+fi
 echo "=============================================================="
 echo "fixturenet-new: name=${NAME} key=${KEY} mode=${MODE}"
 echo "  snapshot: ${SNAP} $( [ "$MODE" = warm ] && echo '(present -> RESTORE)' || echo '(absent -> BUILD BASE)')"
@@ -231,30 +237,6 @@ if [ "$MODE" = warm ]; then
   echo "fixturenet-new: restore took $(secs $(($(now)-tr)))"
   "$LACONIC" deployment --dir "$DEP" start
   wait_for_blocks
-  tf=$(now)
-  run_frost_keygen
-  run_reconcile full
-  echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
-else
-  # ---- COLD: build the base layer, snapshot it, then finish the full run ----
-  # data/ is a fresh RAM disk: create the volume dirs the bind mounts need.
-  for v in armada_env $SNAP_ALL_VOLUMES; do sudo mkdir -p "${DEP}/data/${v}"; done
-  "$LACONIC" deployment --dir "$DEP" start
-  wait_for_blocks
-  # Deliver the committed base target into the armada_env volume (seen as /env)
-  # and select it with RECONCILER_TARGET; the image's default full target is
-  # untouched for the full reconcile below.
-  echo "fixturenet-new: installing base target into armada_env volume"
-  sudo cp "${REPO_ROOT}/env/targets/fixturenet-base.json" \
-          "${DEP}/data/armada_env/${BASE_TARGET_IN_ENV}"
-  tb=$(now)
-  run_reconcile base "/env/${BASE_TARGET_IN_ENV}"
-  echo "fixturenet-new: base reconcile took $(secs $(($(now)-tb)))"
-  echo "fixturenet-new: snapshotting the base layer ..."
-  ts=$(now)
-  "${SCRIPT_DIR}/fixturenet-base-snapshot" "$DEP"
-  echo "fixturenet-new: snapshot took $(secs $(($(now)-ts)))"
-  wait_for_blocks   # the snapshot stopped/restarted the chain
   tf=$(now)
   run_frost_keygen
   run_reconcile full
