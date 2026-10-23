@@ -19,6 +19,16 @@
 # EXOPHIAL_ORACLE_DATA_DIRS declares `.npm` so the real npm cache is reachable,
 # but a bare `--offline` still risks ENOTCACHED on a cold cache; armada-poc's
 # own gate uses the same non-offline `npm ci --legacy-peer-deps` shape.
+#
+# base-key.py's YAML-canonicalisation step (_yaml_canon) needs PyYAML. This
+# is a uv project (pyproject.toml); the oracle's hermetic env puts
+# <root>/.venv/bin first on PATH, so a bare `python3` here is the project
+# venv, never the host system interpreter -- a venv with no PyYAML synced
+# (fresh or stale) fails `import yaml` regardless of what the host's own
+# system python3 has. `uv sync --locked` (pyyaml==6.0.1, pyproject.toml
+# dependencies) gives the venv the pin stack/scripts/verify_base_key_python_versions.py
+# already uses for every OTHER interpreter it checks.
 set -e
 sh .exophial/gate/fetch-submodules.sh
 npm ci --legacy-peer-deps --ignore-scripts
+uv sync --locked
