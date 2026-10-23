@@ -50,6 +50,12 @@ COPY --from=ghcr.io/foundry-rs/foundry:v1.8.3 \
 #     exophial-reroute-main-commit) that the local hooks call. ---
 RUN uv tool install pre-commit==4.5.1
 
+# --- PyYAML 6.0.1, pinned to stack/scripts/verify_base_key_python_versions.py's
+#     PINNED_PYYAML. stack/scripts/base-key.py (sourced by fixturenet-base-common.sh,
+#     and its verify_base_key_* gate checks) parses YAML compose files with it; the
+#     base image's python3 has no PyYAML by default. ---
+RUN python3 -m pip install --break-system-packages pyyaml==6.0.1
+
 WORKDIR /gate
 COPY . .
 
