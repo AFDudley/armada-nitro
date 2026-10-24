@@ -41,35 +41,37 @@ services:
         cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
         (cd /src/armada-poc && \
           MANIFEST_PATH="$${MANIFEST_PATH}" \
-          DEPOSITS_PATH="$${DEPOSITS_PATH}" \
+          DEPOSITS_OUTPUT="$${DEPOSITS_PATH}" \
           HUB_RPC="$${HUB_RPC}" DEPLOY_ENV=local CCTP_MODE=real \
-            npx hardhat run scripts/gates/prepare.ts)
+            npx hardhat run scripts/gates/prepare.ts --network hub)
 
         # Resolve on-chain addresses and the test-account key from the armada_env volume.
-        ADJUDICATOR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()))["armadaNitro"]["adjudicator"])' "$${MANIFEST_PATH}")"
-        POOL="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()))["armada"]["pool"])' "$${MANIFEST_PATH}")"
-        USDC="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()))["armada"]["usdc"])' "$${MANIFEST_PATH}")"
+        ADJUDICATOR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["armadaNitro"]["adjudicator"])' "$${MANIFEST_PATH}")"
+        POOL="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["armada"]["pool"])' "$${MANIFEST_PATH}")"
+        USDC="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["armada"]["usdc"])' "$${MANIFEST_PATH}")"
         USER_ADDR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["testAccounts"][0]["address"])' "$${MANIFEST_PATH}")"
-        USER_KEY="$(cat "$${KEYS_DIR}/keys/$USER_ADDR.key")"
+        USER_KEY="$(cat "$${KEYS_DIR}/keys/$${USER_ADDR}.key")"
 
         # Read the pool's real ERC-20 (USDC) balance before the deposit.
-        BEFORE="$(cast call "$USDC" "balanceOf(address)" "$POOL" --rpc-url "$${HUB_RPC}")"
+        BEFORE="$(cast call "$${USDC}" "balanceOf(address)(uint256)" "$${POOL}" --rpc-url "$${HUB_RPC}" | awk '{print $1}')"
 
         # Fund the channel: send the real-proof depositFromNote caldata (pre-encoded by prepare.ts)
         # to the adjudicator from the test account.
         DEPOSIT_RESULT="ok"
-        if ! cast send "$ADJUDICATOR" \
-            "$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()))[0]["caldata"])' "$${DEPOSITS_PATH}")" \
-            --rpc-url "$${HUB_RPC}" --uuid-key "$USER_KEY" >/dev/null 2>&1; then
+        DEPOSIT_ERROR=""
+        if ! DEPOSIT_ERROR="$(cast send "$${ADJUDICATOR}" \
+            "$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["deposits"][0]["calldata"])' "$${DEPOSITS_PATH}")" \
+            --rpc-url "$${HUB_RPC}" --private-key "$${USER_KEY}" 2>&1 >/dev/null)"; then
           DEPOSIT_RESULT="revert"
+          echo "R2-deposit-conserves: depositFromNote reverted: $${DEPOSIT_ERROR}" >&2
         fi
 
         # Re-read the pool's real ERC-20 balance after the deposit.
-        AFTER="$(cast call "$USDC" "balanceOf(address)" "$POOL" --rpc-url "$${HUB_RPC}")"
+        AFTER="$(cast call "$${USDC}" "balanceOf(address)(uint256)" "$${POOL}" --rpc-url "$${HUB_RPC}" | awk '{print $1}')"
 
         # Report: does the pool's token balance fall? (It must not -- a note deposit conserves it.)
-        BALANCE_FELLS=$(python3 -c 'import sys; sys.stdout.write("true" if int(sys.argv[1]) > int(sys.argv[2]) else "false")' "$BEFORE" "$AFTER")
-        echo "{\"balanceOf_before\": $BEFORE, \"balanceOf_after\": $AFTER, \"depositFromNote\": \"$DEPOSIT_RESULT\", \"balance_fell\": $BALANCE_FELLS}"
+        BALANCE_FELLS=$(python3 -c 'import sys; sys.stdout.write("true" if int(sys.argv[1]) > int(sys.argv[2]) else "false")' "$${BEFORE}" "$${AFTER}")
+        echo "{\"balanceOf_before\": $${BEFORE}, \"balanceOf_after\": $${AFTER}, \"depositFromNote\": \"$${DEPOSIT_RESULT}\", \"balance_fell\": $${BALANCE_FELLS}}"
     environment:
       HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
       MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
