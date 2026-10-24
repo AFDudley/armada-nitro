@@ -1,0 +1,194 @@
+{
+  "id": "derived-arn-920",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/R2-fixturenet-defect-scenarios.md scenario (c): conclude a source channel holding a guarantee allocation and its target, reclaim the guarantee. The pool's total token balance for the reclaimed asset is the same before and after, matching Safety.lean's notedValue_conserved theorem (reclaim instance).\nWhat holds now? Describe the current, observed state. The reclaim mints extra value: _settleReclaimExit calls PoolSpend.settleReclaim, which mints priorHeld + guaranteeAmount for the target from one input of priorHeld -- nothing debits the source (departures-found.md item 2).\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the scenario on a real fixturenet; the pool's total balance for the reclaimed asset after the reclaim call exceeds the balance before by the guarantee amount.\nWhat constraints apply? State them in plain prose. Runs on the real fixturenet, real proofs, no VERIFICATION_BYPASS. Not part of the commit-boundary gate. Expected to report FAIL today, citing departure item 2; passes once the adjudicator rewrite lands.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) stack/compose-jobs/docker-compose-R2-reclaim-conserves.yml, stack/scripts/verify-r2-reclaim-conserves.py",
+  "restatement": "Add a defect scenario that runs on a real fixturenet. It concludes a source channel holding a guarantee allocation and its target, then reclaims the guarantee. It compares the pool's total token balance for the reclaimed asset before and after the reclaim call. The expectation is that the two balances are equal, as in the Safety.lean notedValue_conserved theorem (reclaim instance). Today the reclaim mints extra value: _settleReclaimExit calls PoolSpend.settleReclaim, which mints priorHeld + guaranteeAmount for the target from one input of priorHeld, and nothing debits the source (departures-found.md item 2). So the pool's balance after the reclaim exceeds the balance before by the guarantee amount. The scenario must run with real proofs and no VERIFICATION_BYPASS, and it must stay outside the commit-boundary gate. It must run and report its result. Today it is expected to report FAIL and cite departure item 2. It passes only after the adjudicator rewrite.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The files stack/compose-jobs/docker-compose-R2-reclaim-conserves.yml and stack/scripts/verify-r2-reclaim-conserves.py exist."
+    },
+    {
+      "id": "c2",
+      "text": "The scenario runs on a real fixturenet: it concludes a source channel holding a guarantee allocation and its target, calls the reclaim, and reports the pool's total token balance for the reclaimed asset before and after the reclaim call."
+    },
+    {
+      "id": "c3",
+      "text": "The scenario reports a result verdict: it reports conserved only if the pool balance after the reclaim equals the balance before, and otherwise reports FAIL with the difference. Today the after balance exceeds the before balance by the guarantee amount. The scenario is judged on running and reporting, not on passing today."
+    },
+    {
+      "id": "c4",
+      "text": "When the scenario reports FAIL, it cites departures-found.md item 2 (_settleReclaimExit / PoolSpend.settleReclaim minting priorHeld + guaranteeAmount with no source debit)."
+    },
+    {
+      "id": "c5",
+      "text": "The scenario uses real proofs and does not use VERIFICATION_BYPASS."
+    },
+    {
+      "id": "c6",
+      "text": "The scenario is not part of the commit-boundary gate: the pre-commit configuration does not reference it."
+    }
+  ],
+  "goal": "A runnable fixturenet scenario that reports whether a guarantee reclaim keeps the pool's total balance unchanged, and cites departure item 2 when it does not.",
+  "acceptance_criteria": [
+    "The R2 reclaim compose job file is present in the stack directory.",
+    "The R2 reclaim verification script is present in the stack scripts directory.",
+    "Running the scenario on the fixturenet finishes and prints the pool balance for the reclaimed asset before and after the reclaim call.",
+    "The scenario prints a result that says conserved or FAIL, and the result matches the balance comparison. The scenario is not required to pass.",
+    "The script text cites departures-found.md item 2 as the reason for a FAIL report.",
+    "Neither the script nor the compose job mentions VERIFICATION_BYPASS.",
+    "The pre-commit configuration does not name the R2 reclaim scenario."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The R2 reclaim compose job file is present in the stack directory."
+    },
+    {
+      "id": "c2",
+      "text": "The R2 reclaim verification script is present in the stack scripts directory."
+    },
+    {
+      "id": "c3",
+      "text": "Running the scenario on the fixturenet finishes and prints the pool balance for the reclaimed asset before and after the reclaim call."
+    },
+    {
+      "id": "c4",
+      "text": "The scenario prints a result that says conserved or FAIL, and the result matches the balance comparison. The scenario is not required to pass."
+    },
+    {
+      "id": "c5",
+      "text": "The script text cites departures-found.md item 2 as the reason for a FAIL report."
+    },
+    {
+      "id": "c6",
+      "text": "Neither the script nor the compose job mentions VERIFICATION_BYPASS."
+    },
+    {
+      "id": "c7",
+      "text": "The pre-commit configuration does not name the R2 reclaim scenario."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "file_exists",
+      "description": "The R2 reclaim compose job file is present in the stack directory.",
+      "proves": "The compose job deliverable exists.",
+      "restatement_clause_id": "c1",
+      "path": "stack/compose-jobs/docker-compose-R2-reclaim-conserves.yml",
+      "clause_id": "c1"
+    },
+    {
+      "type": "file_exists",
+      "description": "The R2 reclaim verification script is present in the stack scripts directory.",
+      "proves": "The verification script deliverable exists.",
+      "restatement_clause_id": "c1",
+      "path": "stack/scripts/verify-r2-reclaim-conserves.py",
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the scenario on the fixturenet finishes and prints the pool balance for the reclaimed asset before and after the reclaim call.",
+      "proves": "The scenario really performs the reclaim and observes both balances.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-r2-reclaim-conserves.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "reclaim_called",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "balance_before",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "balance_after",
+          "op": "ge",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "The scenario prints a result that says conserved or FAIL, and the result matches the balance comparison. The scenario is not required to pass.",
+      "proves": "The scenario reports its verdict, and the verdict is true to the observed balances.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-r2-reclaim-conserves.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "result_reported",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "verdict_matches_balances",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep",
+      "description": "The script text cites departures-found.md item 2 as the reason for a FAIL report.",
+      "proves": "A FAIL report points to the known defect.",
+      "restatement_clause_id": "c4",
+      "pattern": "departures-found\\.md.*item 2",
+      "files": [
+        "stack/scripts/verify-r2-reclaim-conserves.py"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep_absent",
+      "description": "Neither the script nor the compose job mentions VERIFICATION_BYPASS.",
+      "proves": "The scenario does not skip proof checks.",
+      "restatement_clause_id": "c5",
+      "pattern": "VERIFICATION_BYPASS",
+      "files": [
+        "stack/scripts/verify-r2-reclaim-conserves.py",
+        "stack/compose-jobs/docker-compose-R2-reclaim-conserves.yml"
+      ],
+      "clause_id": "c6"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The pre-commit configuration does not name the R2 reclaim scenario.",
+      "proves": "The scenario is outside the commit-boundary gate.",
+      "restatement_clause_id": "c6",
+      "pattern": "r2-reclaim-conserves|R2-reclaim-conserves",
+      "files": [
+        ".pre-commit-config.yaml"
+      ],
+      "clause_id": "c7"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/verify-r2-reclaim-conserves.py"
+  ]
+}
