@@ -1,0 +1,82 @@
+# R2 scenario (b): a deposit conserves the pool's balance.
+#
+# Proves the Lean theorem notedValue_conserved (deposit instance): record the pool's real
+# ERC-20 (USDC) balance, fund a channel with a real-proof depositFromNote, re-read the
+# balance. The pool's token balance must NOT fall (a note deposit is a shield, not a spend).
+#
+# Mirrors docker-compose-armada-disclosure.yml: image cerc/armada-nitro-env:${ARMADA_IMAGE_TAG},
+# reads the deployment's manifest from the mounted armada_env volume, resolves the RPC via the
+# compose service name (armada-fixturenet-geth:8545, no host networking), and prints exactly
+# one JSON result line to stdout:
+#   {"balanceOf_before": <int>, "balanceOf_after": <int>, "depositFromNote": "ok"|"revert",
+#    "balance_fell": <bool>}
+#
+# All state (manifest, test-account keys) comes from the armada_env volume at /env; the job
+# reaches the fixturenet only via the deployment's own docker network and geth RPC -- never by
+# touching the deployment's own data directory (job-no-host-deployment-path).
+services:
+  R2-deposit-conserves:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    # No host networking: every $VAR in the command block below is written $$VAR (docker compose's
+    # escape for a literal $) and read from the container's real environment (set once, with
+    # defaults, by the environment: section) -- same rule as docker-compose-armada-nitro-e2e.yml.
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Fund the test account (reconciler mints only the shortfall) so depositFromNote has USDC
+        # to shield (same funding step as the nitro-e2e job).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (E9); verify rather than download.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # Build the real-proof deposit (stage 1): env/gates/nitro-e2e/prepare.ts writes
+        # {channelId, channelNonce, amount, caldata, proofTimeMs} to DEPOSITS_PATH.
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        (cd /src/armada-poc && \
+          MANIFEST_PATH="$${MANIFEST_PATH}" \
+          DEPOSITS_PATH="$${DEPOSITS_PATH}" \
+          HUB_RPC="$${HUB_RPC}" DEPLOY_ENV=local CCTP_MODE=real \
+            npx hardhat run scripts/gates/prepare.ts)
+
+        # Resolve on-chain addresses and the test-account key from the armada_env volume.
+        ADJUDICATOR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()))["armadaNitro"]["adjudicator"])' "$${MANIFEST_PATH}")"
+        POOL="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()))["armada"]["pool"])' "$${MANIFEST_PATH}")"
+        USDC="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()))["armada"]["usdc"])' "$${MANIFEST_PATH}")"
+        USER_ADDR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["testAccounts"][0]["address"])' "$${MANIFEST_PATH}")"
+        USER_KEY="$(cat "$${KEYS_DIR}/keys/$USER_ADDR.key")"
+
+        # Read the pool's real ERC-20 (USDC) balance before the deposit.
+        BEFORE="$(cast call "$USDC" "balanceOf(address)" "$POOL" --rpc-url "$${HUB_RPC}")"
+
+        # Fund the channel: send the real-proof depositFromNote caldata (pre-encoded by prepare.ts)
+        # to the adjudicator from the test account.
+        DEPOSIT_RESULT="ok"
+        if ! cast send "$ADJUDICATOR" \
+            "$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()))[0]["caldata"])' "$${DEPOSITS_PATH}")" \
+            --rpc-url "$${HUB_RPC}" --uuid-key "$USER_KEY" >/dev/null 2>&1; then
+          DEPOSIT_RESULT="revert"
+        fi
+
+        # Re-read the pool's real ERC-20 balance after the deposit.
+        AFTER="$(cast call "$USDC" "balanceOf(address)" "$POOL" --rpc-url "$${HUB_RPC}")"
+
+        # Report: does the pool's token balance fall? (It must not -- a note deposit conserves it.)
+        BALANCE_FELLS=$(python3 -c 'import sys; sys.stdout.write("true" if int(sys.argv[1]) > int(sys.argv[2]) else "false")' "$BEFORE" "$AFTER")
+        echo "{\"balanceOf_before\": $BEFORE, \"balanceOf_after\": $AFTER, \"depositFromNote\": \"$DEPOSIT_RESULT\", \"balance_fell\": $BALANCE_FELLS}"
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/r2-deposit-conserves/deposits.json}
+      KEYS_DIR: ${KEYS_DIR:-/env}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
