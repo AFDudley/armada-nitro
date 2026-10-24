@@ -5,11 +5,12 @@
 # cached base layer (weth, usdc, cctp, aave, lido, armada + the chain) when one
 # exists for the current inputs, so only armada_nitro + funding get deployed.
 #
-# Two paths, chosen by whether a snapshot exists for the computed cache key:
+# fixturenet-new NEVER builds the base layer itself (arn-46d.1). It checks
+# whether a snapshot exists for the computed cache key:
 #   warm (snapshot present): restore the snapshot, start, run the full reconcile
 #         -- base modules report "present, 0"; armada_nitro + funding deploy.
-#   cold (no snapshot):      start a fresh chain, run the BASE reconcile (~24m),
-#         snapshot it, then run the full reconcile.
+#   cold (no snapshot):      print the key and the build command
+#         (stack/scripts/fixturenet-base-build) and exit non-zero.
 #
 # The chain lives only in RAM: this script mounts a capped tmpfs over data/
 # (size FIXTURENET_DATA_SIZE, default 3G) after `deploy create` and before
@@ -23,6 +24,20 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 REPO_ROOT=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
 # shellcheck source=stack/scripts/fixturenet-base-common.sh
 source "${SCRIPT_DIR}/fixturenet-base-common.sh"
+
+# fixturenet-new never builds the fixturenet base layer itself (arn-46d.1):
+# check for a base snapshot FIRST, before resolving laconic-so or building the
+# armada-nitro images -- refusing a cold start must not depend on docker, a
+# clean image build, or any other expensive/fragile work below.
+KEY=$(compute_base_key "$REPO_ROOT")
+SNAP=$(snap_path "$KEY")
+if [ ! -f "$SNAP" ]; then
+  echo "fixturenet-new: COLD: no base snapshot for key=${KEY} (${SNAP})"
+  echo "  build the base layer with: stack/scripts/fixturenet-base-build"
+  echo "  (fixturenet-new never builds the base layer itself)"
+  exit 1
+fi
+MODE=warm
 
 # Resolve laconic-so from LACONIC_SO, else the PATH copy. The exophial oracle
 # grading env exposes it through EXOPHIAL_ORACLE_TOOLCHAIN_BINARIES, and a
@@ -174,12 +189,9 @@ run_reconcile() {  # run_reconcile <label> [RECONCILER_TARGET-in-container]
 }
 
 t0=$(now)
-KEY=$(compute_base_key "$REPO_ROOT")
-SNAP=$(snap_path "$KEY")
-if [ -f "$SNAP" ]; then MODE=warm; else MODE=cold; fi
 echo "=============================================================="
 echo "fixturenet-new: name=${NAME} key=${KEY} mode=${MODE}"
-echo "  snapshot: ${SNAP} $( [ "$MODE" = warm ] && echo '(present -> RESTORE)' || echo '(absent -> BUILD BASE)')"
+echo "  snapshot: ${SNAP} (present -> RESTORE)"
 echo "=============================================================="
 
 # arn-396: remove stale same-prefix deployments an earlier run left behind
@@ -219,47 +231,22 @@ if [ "$(data_fs)" != tmpfs ]; then
 fi
 echo "fixturenet-new: RAM disk OK: ${DEP}/data is a tmpfs, $(df -h --output=size "${DEP}/data" | tail -1 | tr -d ' ')"
 
-if [ "$MODE" = warm ]; then
-  # ---- WARM: restore the EL-only base snapshot, then only armada_nitro + funding.
-  # restore_snapshot puts geth's data + armada_env + the EL genesis back and hands
-  # the recorded head to the genesis container's shadow-fork step; `start` then
-  # regenerates the consensus genesis (slot 0 on geth's head, genesis time = now)
-  # so the beacon + validators come up fresh with no slot gap. -------------------
-  echo "fixturenet-new: restoring ${SNAP} into ${DEP}/data (EL-only; CL genesis regenerated with a shadow fork) ..."
-  tr=$(now)
-  restore_snapshot "$DEP" "$SNAP"
-  echo "fixturenet-new: restore took $(secs $(($(now)-tr)))"
-  "$LACONIC" deployment --dir "$DEP" start
-  wait_for_blocks
-  tf=$(now)
-  run_frost_keygen
-  run_reconcile full
-  echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
-else
-  # ---- COLD: build the base layer, snapshot it, then finish the full run ----
-  # data/ is a fresh RAM disk: create the volume dirs the bind mounts need.
-  for v in armada_env $SNAP_ALL_VOLUMES; do sudo mkdir -p "${DEP}/data/${v}"; done
-  "$LACONIC" deployment --dir "$DEP" start
-  wait_for_blocks
-  # Deliver the committed base target into the armada_env volume (seen as /env)
-  # and select it with RECONCILER_TARGET; the image's default full target is
-  # untouched for the full reconcile below.
-  echo "fixturenet-new: installing base target into armada_env volume"
-  sudo cp "${REPO_ROOT}/env/targets/fixturenet-base.json" \
-          "${DEP}/data/armada_env/${BASE_TARGET_IN_ENV}"
-  tb=$(now)
-  run_reconcile base "/env/${BASE_TARGET_IN_ENV}"
-  echo "fixturenet-new: base reconcile took $(secs $(($(now)-tb)))"
-  echo "fixturenet-new: snapshotting the base layer ..."
-  ts=$(now)
-  "${SCRIPT_DIR}/fixturenet-base-snapshot" "$DEP"
-  echo "fixturenet-new: snapshot took $(secs $(($(now)-ts)))"
-  wait_for_blocks   # the snapshot stopped/restarted the chain
-  tf=$(now)
-  run_frost_keygen
-  run_reconcile full
-  echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
-fi
+# Restore the EL-only base snapshot (every reachable MODE here is "warm": the
+# cold case already exited above), then run only armada_nitro + funding.
+# restore_snapshot puts geth's data + armada_env + the EL genesis back and hands
+# the recorded head to the genesis container's shadow-fork step; `start` then
+# regenerates the consensus genesis (slot 0 on geth's head, genesis time = now)
+# so the beacon + validators come up fresh with no slot gap. -------------------
+echo "fixturenet-new: restoring ${SNAP} into ${DEP}/data (EL-only; CL genesis regenerated with a shadow fork) ..."
+tr=$(now)
+restore_snapshot "$DEP" "$SNAP"
+echo "fixturenet-new: restore took $(secs $(($(now)-tr)))"
+"$LACONIC" deployment --dir "$DEP" start
+wait_for_blocks
+tf=$(now)
+run_frost_keygen
+run_reconcile full
+echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
 
 echo "=============================================================="
 echo "fixturenet-new: DONE name=${NAME} mode=${MODE} key=${KEY}"
