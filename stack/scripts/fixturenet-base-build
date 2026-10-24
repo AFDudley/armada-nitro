@@ -44,6 +44,24 @@ CONFIG="stack/config/deployment-config.example.env"
 DATA_SIZE="${FIXTURENET_DATA_SIZE:-3G}"
 RPC=""
 
+# Jobs name their image as cerc/armada-nitro-{env,foundry}:${ARMADA_IMAGE_TAG}
+# (arn-895): the image built from this checkout's committed content (git archive
+# HEAD), tagged with HEAD's sha. Build it if missing and export the tag so every
+# run-job below resolves to it. Dropped during the extraction from fixturenet-new's
+# cold path -- the armada-env-reconcile job's own compose file interpolates
+# ${ARMADA_IMAGE_TAG} into its image reference, so running without this left
+# ARMADA_IMAGE_TAG unset, defaulting to blank, and docker rejected the resulting
+# "cerc/armada-nitro-env:" reference as malformed.
+export ARMADA_IMAGE_TAG
+ARMADA_IMAGE_TAG=$(git -C "$REPO_ROOT" rev-parse HEAD)
+export CERC_CONTAINER_BASE_DIR="${CERC_CONTAINER_BASE_DIR:-${HOME}/src/stack-orchestrator/stack_orchestrator/data/container-build}"
+for kind in env foundry; do
+  if ! docker image inspect "cerc/armada-nitro-${kind}:${ARMADA_IMAGE_TAG}" >/dev/null 2>&1; then
+    echo "fixturenet-base-build: building cerc/armada-nitro-${kind}:${ARMADA_IMAGE_TAG} ..."
+    bash "${REPO_ROOT}/stack/container-build/cerc-armada-nitro-${kind}/build.sh" >/dev/null
+  fi
+done
+
 now() { date +%s; }
 secs() { local s=$1; printf '%dm%02ds' $((s/60)) $((s%60)); }
 
@@ -52,9 +70,9 @@ secs() { local s=$1; printf '%dm%02ds' $((s/60)) $((s%60)); }
 # container (named "<cluster-id>-armada-fixturenet-geth-1").
 resolve_geth_rpc() {
   local cluster ctr line
-  cluster=$(awk '/^cluster-id: {print $2}' "${DEP}/deployment.yml" 2>/dev/null || true)
+  cluster=$(awk '/^cluster-id:/{print $2}' "${DEP}/deployment.yml" 2>/dev/null || true)
   if [ -z "${cluster}" ]; then
-    echo "fixturenet-base-build: no cluster-id in ${DEP}/data or deployment.yml" >&2
+    echo "fixturenet-base-build: no cluster-id in ${DEP}/deployment.yml" >&2
     return 1
   fi
   ctr="${cluster}-armada-fixturenet-geth-1"
@@ -64,6 +82,7 @@ resolve_geth_rpc() {
     return 1
   fi
   RPC="http://$(echo "${line#*->}" | tr -d "[:space:]")"
+  echo "fixturenet-base-build: geth RPC = ${RPC} (docker port)"
   return 0
 }
 
@@ -76,19 +95,32 @@ wait_for_blocks() {
   b0=""
   while [ "$(now)" -lt "$deadline" ]; do
     b1=$(curl -s --max-time 3 -H 'Content-Type: application/json' \
-           --data '{"jsonrpc":"2.0","id":1,"method": "eth_blockNumber","params":[]}' \
+           --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
            "$RPC" 2>/dev/null | jq -r '.result // empty' 2>/dev/null || true)
     if [ -n "$b1" ]; then
       if [ -z "$b0" ]; then b0="$b1"
       elif [ "$b1" != "$b0" ]; then
         echo "fixturenet-base-build: blocks advancing ($((b0)) -> $((b1)))"
         return 0
-    fi
+      fi
     fi
     sleep 2
   done
   echo "fixturenet-base-build: FAILED: no new block within 180s (last=${b1:-none})" >&2
   return 1
+}
+
+# Run the base reconcile, tee its output to a log, and report the per-module
+# results the reconciler prints (the same shape fixturenet-new's run_reconcile
+# uses for the cold path).
+run_base_reconcile() {
+  mkdir -p "${REPO_ROOT}/.scratch"
+  local log="${REPO_ROOT}/.scratch/fixturenet-base-build-${NAME}-base.log"
+  echo "fixturenet-base-build: base reconcile ..."
+  RECONCILER_TARGET="/env/${BASE_TARGET_IN_ENV}" "$LACONIC" deployment --dir "$DEP" \
+    run-job armada-env-reconcile 2>&1 | tee "$log"
+  echo "fixturenet-base-build: base reconcile module results:"
+  grep -E '^(weth|usdc|cctp|aave|lido|armada|armada_nitro|funding), ' "$log" | sed 's/^/    /' || true
 }
 
 # 1. Ensure the deployment exists (init + create if missing).
@@ -100,23 +132,25 @@ if [ ! -e "$DEP" ]; then
     --output "$SPEC"
   "$LACONIC" --stack "$STACK" deploy create \
     --spec-file "$SPEC" --deployment-dir "$DEP"
-  ...
+else
+  echo "fixturenet-base-build: ${DEP} exists -- resuming (skipping init/create)"
 fi
 
 # 2. Mount the RAM disk over data/ (refuse if data/ on disk holds files).
-if [ "$(stat -f -c %T "${DEP}/data")" != tmpfs ]; then
-  if sudo find "${DEP}/data" -mindepth 1 -not -type d -print -q 2>/dev/null | grep -q .; then
+data_fs() { stat -f -c %T "${DEP}/data"; }
+if [ "$(data_fs)" != tmpfs ]; then
+  if sudo find "${DEP}/data" -mindepth 1 -not -type d -print -quit | grep -q .; then
     echo "fixturenet-base-build: ${DEP}/data on disk holds files -- refusing to mount the RAM disk over them" >&2
     exit 1
   fi
   sudo find "${DEP}/data" -mindepth 1 -depth -type d -empty -delete
   sudo mount -t tmpfs -o "size=${DATA_SIZE},mode=0700" tmpfs "${DEP}/data"
 fi
-if [ "$(stat -f -c %T "${DEP}/data")" != tmpfs ]; then
-  echo "fixturenet-base-build: ${DEP}/data is not a tmpfs after mounting" >&2
+if [ "$(data_fs)" != tmpfs ]; then
+  echo "fixturenet-base-build: ${DEP}/data is $(data_fs), not a tmpfs, after mounting" >&2
   exit 1
 fi
-echo "fixturenet-base-build: RAM disk OK: ${DEP}/data is a tmpfs"
+echo "fixturenet-base-build: RAM disk OK: ${DEP}/data is a tmpfs, $(df -h --output=size "${DEP}/data" | tail -1 | tr -d ' ')"
 
 # 3. Start the deployment, create the volume dirs, wait for at least one new block.
 echo "fixturenet-base-build: starting ${DEP} ..."
@@ -130,18 +164,16 @@ sudo cp "${REPO_ROOT}/env/targets/fixturenet-base.json" \
         "${DEP}/data/armada_env/${BASE_TARGET_IN_ENV}"
 
 # 5. Run the base reconcile (armada-env-reconcile with RECONCILER_TARGET).
-echo "fixturenet-base-build: base reconcile ..."
 tb=$(now)
-RECONCILER_TARGET="/env/${BASE_TARGET_IN_ENV}" \
-  "$LACONIC" deployment --dir "$DEP" run-job armada-env-reconcile
-echo "fixturenet-base-build: base reconcile took $(secs $(now - tb))"
+run_base_reconcile
+echo "fixturenet-base-build: base reconcile took $(secs $(($(now)-tb)))"
 
 # 6. Snapshot the base layer: fixturenet-base-snapshot halts block production,
 #    records geth's head, and writes the snapshot + .key file.
 echo "fixturenet-base-build: snapshotting the base layer ..."
 ts=$(now)
 "${SCRIPT_DIR}/fixturenet-base-snapshot" "$DEP"
-echo "fixturenet-base-build: base build took $(secs $(now - ts))"
+echo "fixturenet-base-build: base build took $(secs $(($(now)-ts)))"
 
 KEY=$(compute_base_key "$REPO_ROOT")
 echo "fixturenet-base-build: DONE"
