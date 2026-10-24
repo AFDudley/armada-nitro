@@ -30,6 +30,12 @@ __pycache__/
 # Lint tooling (package.json devDependencies)
 node_modules/
 
+# npm cache written locally by prepare-oracle-env.sh's `npm ci` when a grading
+# or dev run's HOME happened to resolve to the repo root instead of a real
+# user HOME (arn-46d.1's own worker capture accidentally committed 237 of
+# these cache entries; never repo content).
+.npm/
+
 # exophial runtime state (config.yaml is tracked)
 .pebbles/reducer_ledger.jsonl
 .exophial/*
