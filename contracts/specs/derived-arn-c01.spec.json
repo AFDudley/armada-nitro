@@ -1,0 +1,150 @@
+{
+  "id": "derived-arn-c01",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/R2-fixturenet-defect-scenarios.md scenario (d): conclude a channel, call transferAllAssets on it. The call reverts, matching Safety.lean's bulk_paths_never_succeed theorem.\nWhat holds now? Describe the current, observed state. transferAllAssets succeeds: neither it nor concludeAndTransferAllAssets is overridden, so both inherited calls succeed and mint real spendable notes to every payee with no debit anywhere in the pool (PoolSpend.mintPayoutCommitmentsNoChannel, nullifiers := [], departures-found.md item 5/8).\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the scenario on a real fixturenet; the transferAllAssets call against a concluded channel does not revert.\nWhat constraints apply? State them in plain prose. Runs on the real fixturenet, real proofs, no VERIFICATION_BYPASS. Not part of the commit-boundary gate. Expected to report FAIL today, citing departure item 5/8; passes once the adjudicator rewrite lands.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) stack/compose-jobs/docker-compose-R2-bulk-reverts.yml, stack/scripts/verify-r2-bulk-reverts.py",
+  "restatement": "The repository must gain a runnable scenario (d) check from docs/tasks/R2-fixturenet-defect-scenarios.md. It is a compose job plus a verify script. On a real fixturenet, with real proofs and no verification bypass, it concludes a channel and calls transferAllAssets on it. The expected rule is that the call reverts, as Safety.lean's bulk_paths_never_succeed theorem requires. Today the call succeeds and mints spendable notes to every payee with no debit in the pool. So the check reports FAIL and cites departure item 5/8. It will report PASS once the adjudicator rewrite is done. The acceptance is that the check runs and reports its result, not that it passes today. It is not part of the commit-boundary gate.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The compose job file stack/compose-jobs/docker-compose-R2-bulk-reverts.yml exists."
+    },
+    {
+      "id": "c2",
+      "text": "The script stack/scripts/verify-r2-bulk-reverts.py exists."
+    },
+    {
+      "id": "c3",
+      "text": "When run, the script runs the scenario on a real fixturenet. It concludes a channel, calls transferAllAssets on it, and reports a result (PASS or FAIL) for whether the call reverted."
+    },
+    {
+      "id": "c4",
+      "text": "The script cites departure item 5/8 in its report, so a FAIL today points to the cause: transferAllAssets succeeds and mints payee notes with nullifiers := [] and no pool debit."
+    },
+    {
+      "id": "c5",
+      "text": "The check is not part of the commit-boundary gate: the pre-commit configuration does not reference verify-r2-bulk-reverts."
+    },
+    {
+      "id": "c6",
+      "text": "The check uses real proofs and never sets VERIFICATION_BYPASS: neither the compose job nor the script turns on VERIFICATION_BYPASS."
+    }
+  ],
+  "goal": "Add the scenario (d) fixturenet check: it concludes a channel, calls transferAllAssets, and reports whether the call reverted.",
+  "acceptance_criteria": [
+    "The compose job file for the bulk-reverts scenario is present in the repository.",
+    "The verify script for the bulk-reverts scenario is present in the repository.",
+    "Running the verify script against a real fixturenet finishes and prints a report. The report says it ran on the fixturenet and gives a non-empty result for the transferAllAssets call on a concluded channel.",
+    "The script text names departure item 5/8 as the cited cause of a FAIL.",
+    "The pre-commit configuration does not mention the bulk-reverts check.",
+    "Neither the compose job nor the script turns on the verification bypass."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The compose job file for the bulk-reverts scenario is present in the repository."
+    },
+    {
+      "id": "c2",
+      "text": "The verify script for the bulk-reverts scenario is present in the repository."
+    },
+    {
+      "id": "c3",
+      "text": "Running the verify script against a real fixturenet finishes and prints a report. The report says it ran on the fixturenet and gives a non-empty result for the transferAllAssets call on a concluded channel."
+    },
+    {
+      "id": "c4",
+      "text": "The script text names departure item 5/8 as the cited cause of a FAIL."
+    },
+    {
+      "id": "c5",
+      "text": "The pre-commit configuration does not mention the bulk-reverts check."
+    },
+    {
+      "id": "c6",
+      "text": "Neither the compose job nor the script turns on the verification bypass."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "file_exists",
+      "description": "The compose job file for the bulk-reverts scenario is present in the repository.",
+      "proves": "The compose job named in the request exists.",
+      "restatement_clause_id": "c1",
+      "path": "stack/compose-jobs/docker-compose-R2-bulk-reverts.yml",
+      "clause_id": "c1"
+    },
+    {
+      "type": "file_exists",
+      "description": "The verify script for the bulk-reverts scenario is present in the repository.",
+      "proves": "The verify script named in the request exists.",
+      "restatement_clause_id": "c2",
+      "path": "stack/scripts/verify-r2-bulk-reverts.py",
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the verify script against a real fixturenet finishes and prints a report. The report says it ran on the fixturenet and gives a non-empty result for the transferAllAssets call on a concluded channel.",
+      "proves": "The check runs and reports its result, whether PASS or FAIL, without requiring that it passes today.",
+      "restatement_clause_id": "c3",
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-r2-bulk-reverts.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "ran_on_fixturenet",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "result",
+          "op": "ne",
+          "value": ""
+        }
+      ],
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep",
+      "description": "The script text names departure item 5/8 as the cited cause of a FAIL.",
+      "proves": "A FAIL report points to departure item 5/8.",
+      "restatement_clause_id": "c4",
+      "pattern": "5/8",
+      "files": [
+        "stack/scripts/verify-r2-bulk-reverts.py"
+      ],
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The pre-commit configuration does not mention the bulk-reverts check.",
+      "proves": "The check is kept out of the commit-boundary gate.",
+      "restatement_clause_id": "c5",
+      "pattern": "verify-r2-bulk-reverts",
+      "files": [
+        ".pre-commit-config.yaml"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep_absent",
+      "description": "Neither the compose job nor the script turns on the verification bypass.",
+      "proves": "The check runs with real proofs and no bypass.",
+      "restatement_clause_id": "c6",
+      "pattern": "VERIFICATION_BYPASS\\s*[=:]\\s*[\"']?(1|true|True)",
+      "files": [
+        "stack/compose-jobs/docker-compose-R2-bulk-reverts.yml",
+        "stack/scripts/verify-r2-bulk-reverts.py"
+      ],
+      "clause_id": "c6"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/verify-r2-bulk-reverts.py"
+  ]
+}
