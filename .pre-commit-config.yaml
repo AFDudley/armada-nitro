@@ -51,6 +51,26 @@ repos:
         language: pygrep
         entry: '\bfixturenet-base-build\b'
         files: ^(env/gates/|stack/compose-jobs/|scripts/)
+        exclude: ^scripts/verify_base_build_caller_rule\.py$
+
+  # arn-46d.2: fixturenet-base-build-standalone (above) covers env/gates/,
+  # stack/compose-jobs/ and scripts/ (top-level); this hook additionally
+  # covers stack/scripts/ specifically -- the worker-script test case in
+  # derived-arn-46d.2.spec.json plants its caller at
+  # stack/scripts/fixturenet-base-build-worker, which the hook above's
+  # files: pattern does not reach. Kept narrower by its own files: list so
+  # it adds coverage, not duplicate noise, over the existing hook.
+  # Excludes fixturenet-new and verify-fixturenet-new-missing-base.sh (arn-46d.1):
+  # both legitimately print/check the literal string "fixturenet-base-build" in
+  # the refusal message and its own proof, never invoke it.
+  - repo: local
+    hooks:
+      - id: verify-fixturenet-base-build-callers
+        name: No gate/compose/worker caller of fixturenet-base-build
+        entry: fixturenet-base-build
+        language: pygrep
+        files: "^(env/gates/|stack/compose-jobs/|stack/scripts/)"
+        exclude: "^stack/scripts/(fixturenet-base-build|fixturenet-new|verify-fixturenet-new-missing-base\\.sh)$"
 
   - repo: local
     hooks:
