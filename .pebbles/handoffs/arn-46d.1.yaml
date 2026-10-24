@@ -1,0 +1,76 @@
+status: completed
+pebble_id: arn-46d.1
+branch: worker/arn-46d-2e-1
+summary: >-
+  stack/scripts/fixturenet-new now refuses a cold start: when no base
+  snapshot exists for the current base-key.py key, it exits non-zero
+  immediately, prints the key and the build command
+  (stack/scripts/fixturenet-base-build), and never runs the cold
+  base-reconcile path inline (the text 'run_reconcile base' is removed from
+  the script). The cold check runs first, right after sourcing
+  fixturenet-base-common.sh, before resolving laconic-so and before the
+  armada-nitro env/foundry image build, so the refusal cannot be masked by
+  an unrelated docker-image-build failure -- the exact condition (no image
+  built for the judged commit) that caused two earlier gate attempts
+  (f88a956c, ed7084ad) to fail only on the key/build-command output while
+  the exit-code and no-base-build checks still passed. Added
+  stack/scripts/fixturenet-base-build as the standalone command that
+  builds the base layer and writes the snapshot plus its auditable .key
+  file. Added the pre-commit hook fixturenet-base-build-standalone, which
+  enforces that no gate job, compose job or worker script calls it, and
+  exempted the new file from the gate-no-host-deployment-access hook (it
+  legitimately manages the deployment via sudo/armada_env, like
+  fixturenet-new and fixturenet-base-snapshot already are). Added the
+  oracle stack/scripts/verify-fixturenet-new-missing-base.sh. Verified by
+  running the oracle directly (repeatable, exact JSON:
+  fixturenet_new_exit_code=1, output_has_key=true,
+  output_has_build_command=true, base_build_started=false,
+  base_snapshot_created=false -- all four spec predicates satisfied) with
+  no cerc/armada-nitro-{env,foundry} image built for the current commit
+  (reproducing the prior failure condition), confirming grep_absent on
+  'run_reconcile base', and red-first proving the new pre-commit hook: a
+  temporary worker script calling fixturenet-base-build made the hook
+  fail, removing it made the hook pass again.
+cost: "~95k tokens"
+commits:
+  - "b97f2a5e"
+verify_transcript:
+  hooks:
+    - name: verify-fixturenet-new-missing-base
+      outcome: passed
+      duration_s: 3
+    - name: fixturenet-base-build-standalone
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-46d.1.spec.json
+  command: bash stack/scripts/verify-fixturenet-new-missing-base.sh verify-net
+  result: passed
+  ran_at_sha: "b97f2a5e"
+  mocks_in_path: false
+discrimination:
+  - mechanism: red_first
+    oracle: "fixturenet-base-build-standalone (wired pre-commit hook, .pre-commit-config.yaml)"
+    target: "scripts/.tmp-arn-46d-call.sh"
+    perturbation: "created + staged a temp worker script (scripts/.tmp-arn-46d-call.sh) whose body calls 'stack/scripts/fixturenet-base-build verify-net', then removed it"
+    took:
+      applied:
+        observable: "the staged temp worker script contains the text 'fixturenet-base-build'"
+        moved:
+          - "no worker script references fixturenet-base-build"
+          - "scripts/.tmp-arn-46d-call.sh:1:stack/scripts/fixturenet-base-build verify-net"
+      observed:
+        observable: "the pre-commit hook reports the matching line and exits non-zero"
+        moved:
+          - "No gate job, compose job or worker script calls fixturenet-base-build: (no files to check) Skipped, exit 0"
+          - "hook Failed: scripts/.tmp-arn-46d-call.sh:1:stack/scripts/fixturenet-base-build verify-net, exit 1"
+    assertions_fired:
+      - assertion: "a worker script that calls fixturenet-base-build makes the pre-commit hook fail"
+        moved:
+          - "clean: no gate job, compose job or worker script calls it (hook skipped, exit 0)"
+          - "worker script calls it: the hook flags the file and exits 1"
+    pinned_at:
+      - ".pre-commit-config.yaml"
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: true
