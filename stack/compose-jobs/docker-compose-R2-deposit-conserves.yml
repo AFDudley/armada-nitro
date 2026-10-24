@@ -9,7 +9,7 @@
 # compose service name (armada-fixturenet-geth:8545, no host networking), and prints exactly
 # one JSON result line to stdout:
 #   {"balanceOf_before": <int>, "balanceOf_after": <int>, "depositFromNote": "ok"|"revert",
-#    "balance_fell": <bool>}
+#    "balance_fell": <bool>, "transactionHash": <string>, "revertData": <string, empty when ok>}
 #
 # All state (manifest, test-account keys) comes from the armada_env volume at /env; the job
 # reaches the fixturenet only via the deployment's own docker network and geth RPC -- never by
@@ -57,13 +57,28 @@ services:
 
         # Fund the channel: send the real-proof depositFromNote caldata (pre-encoded by prepare.ts)
         # to the adjudicator from the test account.
+        DEPOSIT_CALLDATA="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["deposits"][0]["calldata"])' "$${DEPOSITS_PATH}")"
+
+        # Dry run first: a plain `cast call` returns the contract's own revert data directly
+        # (no gas spent, nothing mined), the clean diagnostic for the ERROR report below.
+        REVERT_DATA=""
+        if ! CALL_OUT="$(cast call "$${ADJUDICATOR}" "$${DEPOSIT_CALLDATA}" --from "$${USER_ADDR}" --rpc-url "$${HUB_RPC}" 2>&1)"; then
+          REVERT_DATA="$${CALL_OUT}"
+        fi
+
+        # Broadcast for real regardless of the dry run's own outcome, with an explicit gas limit
+        # so the transaction is always actually mined (never refused at the gas-estimation stage) --
+        # every attempt gets a real transaction hash, whether it lands or reverts on-chain.
         DEPOSIT_RESULT="ok"
-        DEPOSIT_ERROR=""
-        if ! DEPOSIT_ERROR="$(cast send "$${ADJUDICATOR}" \
-            "$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["deposits"][0]["calldata"])' "$${DEPOSITS_PATH}")" \
-            --rpc-url "$${HUB_RPC}" --private-key "$${USER_KEY}" 2>&1 >/dev/null)"; then
-          DEPOSIT_RESULT="revert"
-          echo "R2-deposit-conserves: depositFromNote reverted: $${DEPOSIT_ERROR}" >&2
+        TX_HASH=""
+        SEND_JSON="$(cast send "$${ADJUDICATOR}" "$${DEPOSIT_CALLDATA}" \
+            --rpc-url "$${HUB_RPC}" --private-key "$${USER_KEY}" --gas-limit 2000000 --json 2>&1)"
+        TX_HASH="$(echo "$${SEND_JSON}" | python3 -c 'import json,sys; r = json.loads(sys.stdin.read()); sys.stdout.write(r.get("transactionHash") or ""); sys.exit(0 if r.get("status") == "0x1" else 1)')" || DEPOSIT_RESULT="revert"
+        if [ "$${DEPOSIT_RESULT}" = "revert" ] && [ -z "$${REVERT_DATA}" ]; then
+          REVERT_DATA="$${SEND_JSON}"
+        fi
+        if [ "$${DEPOSIT_RESULT}" = "revert" ]; then
+          echo "R2-deposit-conserves: depositFromNote reverted (tx $${TX_HASH}): $${REVERT_DATA}" >&2
         fi
 
         # Re-read the pool's real ERC-20 balance after the deposit.
@@ -71,7 +86,7 @@ services:
 
         # Report: does the pool's token balance fall? (It must not -- a note deposit conserves it.)
         BALANCE_FELLS=$(python3 -c 'import sys; sys.stdout.write("true" if int(sys.argv[1]) > int(sys.argv[2]) else "false")' "$${BEFORE}" "$${AFTER}")
-        echo "{\"balanceOf_before\": $${BEFORE}, \"balanceOf_after\": $${AFTER}, \"depositFromNote\": \"$${DEPOSIT_RESULT}\", \"balance_fell\": $${BALANCE_FELLS}}"
+        python3 -c 'import json,sys; print(json.dumps({"balanceOf_before": int(sys.argv[1]), "balanceOf_after": int(sys.argv[2]), "depositFromNote": sys.argv[3], "balance_fell": sys.argv[4] == "true", "transactionHash": sys.argv[5], "revertData": sys.argv[6]}))' "$${BEFORE}" "$${AFTER}" "$${DEPOSIT_RESULT}" "$${BALANCE_FELLS}" "$${TX_HASH}" "$${REVERT_DATA}"
     environment:
       HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
       MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}

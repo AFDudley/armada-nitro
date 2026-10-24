@@ -100,6 +100,52 @@ def teardown(dep: Path, env: dict[str, str]) -> None:
     )
 
 
+def compute_outcome(job_result: dict[str, object]) -> dict[str, object]:
+    """The scenario's own verdict, pure: given the job's raw JSON result, decide PASS, FAIL or
+    ERROR. Three outcomes, never two: PASS (the deposit succeeded and the pool's token balance
+    did not fall), FAIL (the deposit succeeded and the balance fell -- departure item 1), ERROR
+    (the deposit reverted before reaching the pool -- not evidence for or against departure item
+    1 either way; the transaction hash and revert data are the evidence to investigate next, not
+    a conservation result)."""
+    balance_of_before = int(str(job_result.get("balanceOf_before", 0)))
+    balance_of_after = int(str(job_result.get("balanceOf_after", 0)))
+    deposit_from_note = str(job_result.get("depositFromNote", "ok"))
+    balance_fell = job_result.get("balance_fell") is True or balance_of_after < balance_of_before
+    transaction_hash = str(job_result.get("transactionHash", ""))
+    revert_data = str(job_result.get("revertData", ""))
+
+    if deposit_from_note == "revert":
+        result = "ERROR"
+        departure = (
+            "depositFromNote reverted before reaching the pool -- not evidence for or "
+            "against departure item 1 (departures-found.md); the transaction hash and "
+            "revert data above are the evidence to investigate, not a conservation result."
+        )
+    elif balance_fell:
+        # The pool's token balance must NOT fall (notedValue_conserved, deposit instance).
+        result = "FAIL"
+        departure = (
+            "departure item 1 (departures-found.md): depositFromNote requires "
+            "UnshieldType.NORMAL (ArmadaNitroAdjudicator.sol), so real ERC-20 leaves the "
+            "pool -- an unshield, not a contract-owned spend; the resulting commitment is "
+            "never inserted as a leaf."
+        )
+    else:
+        result = "PASS"
+        departure = "item 1 (departures-found.md)"
+
+    return {
+        "balanceOf_before": balance_of_before,
+        "balanceOf_after": balance_of_after,
+        "depositFromNote": deposit_from_note,
+        "balance_fell": balance_fell,
+        "transactionHash": transaction_hash,
+        "revertData": revert_data,
+        "result": result,
+        "departure": departure,
+    }
+
+
 def main() -> int:
     name = f"r2-deposit-conserves-{int(time.time())}-{uuid.uuid4().hex[:6]}"
     dep = Path(os.environ["HOME"]) / "deployments" / name
@@ -114,32 +160,8 @@ def main() -> int:
     run(["bash", str(REPO_ROOT / "stack/scripts/fixturenet-new"), name], env=env)
 
     try:
-        # Run the scenario job and read back its JSON result.
-        job_result = run_job(dep, env)
-        balance_of_before = int(str(job_result.get("balanceOf_before", 0)))
-        balance_of_after = int(str(job_result.get("balanceOf_after", 0)))
-        deposit_from_note = str(job_result.get("depositFromNote", "ok"))
-        balance_fell = job_result.get("balance_fell") is True or balance_of_after < balance_of_before
-
-        # The pool's token balance must NOT fall (notedValue_conserved, deposit instance).
-        result = "PASS"
-        departure = "item 1 (departures-found.md)"
-        if balance_fell:
-            result = "FAIL"
-            departure = (
-                "departure item 1 (departures-found.md): depositFromNote requires "
-                "UnshieldType.NORMAL (ArmadaNitroAdjudicator.sol), so real ERC-20 leaves the "
-                "pool -- an unshield, not a contract-owned spend; the resulting commitment is "
-                "never inserted as a leaf."
-            )
-        outcome = {
-            "balanceOf_before": balance_of_before,
-            "balanceOf_after": balance_of_after,
-            "depositFromNote": deposit_from_note,
-            "balance_fell": balance_fell,
-            "result": result,
-            "departure": departure,
-        }
+        # Run the scenario job and read back its JSON result, then compute the verdict.
+        outcome = compute_outcome(run_job(dep, env))
     except RuntimeError as exc:
         outcome = {"result": "FAIL", "reason": str(exc)}
     finally:
