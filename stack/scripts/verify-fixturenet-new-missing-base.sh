@@ -26,9 +26,16 @@ if [ -z "${KEY}" ]; then
   exit 1
 fi
 
-# Establish the COLD state: remove the base snapshot (and its .key file) for this key.
-SNAP_DIR="${HOME}/deployments/.snapshots"
-rm -f "${SNAP_DIR}/armada-fixturenet-base-${KEY}.tar.zst" "${SNAP_DIR}/armada-fixturenet-base-${KEY}.key"
+# Establish the COLD state: point FIXTURENET_SNAP_DIR at a fresh, empty
+# throwaway directory under the repo's own .scratch/, so fixturenet-new (run
+# below) and this script's own snapshot check both see "no snapshot for this
+# key" without ever reading or deleting the operator's real
+# ${HOME}/deployments/.snapshots. A fresh mktemp dir starts empty -- nothing
+# to remove.
+export FIXTURENET_SNAP_DIR
+FIXTURENET_SNAP_DIR=$(mktemp -d "${REPO_ROOT}/.scratch/verify-fixturenet-new-missing-base.XXXXXX")
+trap 'rm -rf "${FIXTURENET_SNAP_DIR}"' EXIT
+SNAP_DIR="${FIXTURENET_SNAP_DIR}"
 
 # Run fixturenet-new, capture full output + exit code.
 OUT=$(bash "${SCRIPT_DIR}/fixturenet-new" "$NAME" 2>&1)

@@ -26,8 +26,12 @@
 # valid snapshot source iff its manifest's gasUsed names exactly these.
 BASE_MODULES="aave armada cctp lido usdc weth"   # sorted, for set comparison
 
-# Where snapshots and their key files live.
-SNAP_DIR="${HOME}/deployments/.snapshots"
+# Where snapshots and their key files live. FIXTURENET_SNAP_DIR overrides this
+# (a verify/acceptance script sets it to a throwaway directory under the
+# repo's own .scratch/, so grading a cache-management check never reads or
+# writes the operator's real snapshot cache). Unset in normal use, so every
+# real fixturenet-new or base-build run is unchanged.
+SNAP_DIR="${FIXTURENET_SNAP_DIR:-${HOME}/deployments/.snapshots}"
 
 # The base reconcile target, committed at env/targets/fixturenet-base.json, is
 # copied into the deployment's armada_env volume (bind-mounted to
