@@ -56,8 +56,10 @@ contract CommitmentHarness is ArmadaNitroAdjudicator {
     }
 }
 
-/// @dev N1a acceptance (docs/tasks/N1a-multiassetholder-commitment-storage.md): `holdings` stores
-/// a bytes32 pool commitment reference, not a uint256 balance; `heldValue` reads the amount live
+/// @dev Acceptance for the commitment-based holdings rewrite (originally N1a; the brief is
+/// deleted, superseded by the Lean model, AFDudley/armada-lean branch adjudicator-model-v4 --
+/// see the original text at integrated commit 5519526c if needed): `holdings` stores a bytes32
+/// pool commitment reference, not a uint256 balance; `heldValue` reads the amount live
 /// through `pool.preimageOf`; and the base `deposit` entry point is gone from the adjudicator.
 contract MultiAssetHolderCommitmentTest is Test {
     /// @dev Re-declared locally (solc 0.8.17 does not support qualified `Interface.Event` emit
