@@ -1,0 +1,147 @@
+{
+  "id": "derived-arn-8b8",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/R2-fixturenet-defect-scenarios.md scenario (b): record the pool's real ERC-20 balance, fund a channel with a real-proof depositFromNote, re-read the balance. The pool's token balance does not fall, matching Safety.lean's notedValue_conserved theorem (deposit instance).\nWhat holds now? Describe the current, observed state. The pool's balance falls: depositFromNote requires UnshieldType.NORMAL (ArmadaNitroAdjudicator.sol:99); TransactModule._transferTokenOut pays real ERC-20 out of the pool to the adjudicator -- an unshield, not a contract-owned spend (departures-found.md item 1). The resulting commitment is never inserted as a leaf, so even the holding this creates can never be spent.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the scenario on a real fixturenet; the pool's USDC balance after depositFromNote is lower than before.\nWhat constraints apply? State them in plain prose. Runs on the real fixturenet, real proofs, no VERIFICATION_BYPASS. Not part of the commit-boundary gate. Expected to report FAIL today, citing departure item 1; passes once the adjudicator rewrite lands.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) stack/compose-jobs/docker-compose-R2-deposit-conserves.yml, stack/scripts/verify-r2-deposit-conserves.py",
+  "restatement": "Add a fixturenet scenario, R2 scenario (b), that checks one rule: funding a channel from a note must not lower the pool's real token balance. The scenario is a compose job file plus a verify script. The script reads the pool's real ERC-20 balance, funds a channel with depositFromNote using a real proof, and reads the balance again. It reports PASS if the balance did not fall, as Safety.lean's notedValue_conserved theorem (deposit instance) requires. It reports FAIL if the balance fell. Today it must report FAIL and cite departure item 1 (depositFromNote requires UnshieldType.NORMAL, so real ERC-20 leaves the pool). It must pass after the adjudicator rewrite. It runs on the real fixturenet with real proofs and no VERIFICATION_BYPASS. It is not part of the commit-boundary gate. The deliverable is that the scenario runs and reports its result, not that it passes today.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The compose job file stack/compose-jobs/docker-compose-R2-deposit-conserves.yml exists."
+    },
+    {
+      "id": "c2",
+      "text": "The verify script stack/scripts/verify-r2-deposit-conserves.py exists."
+    },
+    {
+      "id": "c3",
+      "text": "The verify script records the pool's real ERC-20 balance, funds a channel with depositFromNote, and re-reads the balance."
+    },
+    {
+      "id": "c4",
+      "text": "The script reports PASS when the pool's token balance does not fall and FAIL when it falls, and on FAIL it cites departure item 1."
+    },
+    {
+      "id": "c5",
+      "text": "The scenario uses real proofs and does not use VERIFICATION_BYPASS."
+    },
+    {
+      "id": "c6",
+      "text": "The scenario is not part of the commit-boundary gate."
+    }
+  ],
+  "goal": "Provide a fixturenet scenario that measures the pool's real ERC-20 balance across a real-proof depositFromNote and reports whether the balance fell.",
+  "acceptance_criteria": [
+    "The compose job file for the deposit-conserves scenario is present in the repository.",
+    "The verify script for the deposit-conserves scenario is present in the repository.",
+    "The verify script reads a token balance and calls depositFromNote, so it measures the pool balance around a note deposit.",
+    "The verify script prints both a PASS outcome and a FAIL outcome, and names departure item 1 in its failure report.",
+    "Neither the job file nor the verify script mentions VERIFICATION_BYPASS, so real proofs are used.",
+    "The pre-commit configuration does not mention the new verify script, so it is not run at the commit boundary."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The compose job file for the deposit-conserves scenario is present in the repository."
+    },
+    {
+      "id": "c2",
+      "text": "The verify script for the deposit-conserves scenario is present in the repository."
+    },
+    {
+      "id": "c3",
+      "text": "The verify script reads a token balance and calls depositFromNote, so it measures the pool balance around a note deposit."
+    },
+    {
+      "id": "c4",
+      "text": "The verify script prints both a PASS outcome and a FAIL outcome, and names departure item 1 in its failure report."
+    },
+    {
+      "id": "c5",
+      "text": "Neither the job file nor the verify script mentions VERIFICATION_BYPASS, so real proofs are used."
+    },
+    {
+      "id": "c6",
+      "text": "The pre-commit configuration does not mention the new verify script, so it is not run at the commit boundary."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "file_exists",
+      "description": "The compose job file for the deposit-conserves scenario is present in the repository.",
+      "proves": "The scenario has its runnable job definition at the stated path.",
+      "restatement_clause_id": "c1",
+      "path": "stack/compose-jobs/docker-compose-R2-deposit-conserves.yml",
+      "clause_id": "c1"
+    },
+    {
+      "type": "file_exists",
+      "description": "The verify script for the deposit-conserves scenario is present in the repository.",
+      "proves": "The scenario has its verify script at the stated path.",
+      "restatement_clause_id": "c2",
+      "path": "stack/scripts/verify-r2-deposit-conserves.py",
+      "clause_id": "c2"
+    },
+    {
+      "type": "grep",
+      "description": "The verify script reads a token balance and calls depositFromNote, so it measures the pool balance around a note deposit.",
+      "proves": "The script takes the before and after balance reading around depositFromNote.",
+      "restatement_clause_id": "c3",
+      "pattern": "depositFromNote",
+      "additional_patterns": [
+        "balanceOf"
+      ],
+      "files": [
+        "stack/scripts/verify-r2-deposit-conserves.py"
+      ],
+      "count": {
+        "unit": "patterns",
+        "op": "eq",
+        "value": 2
+      },
+      "clause_id": "c3"
+    },
+    {
+      "type": "grep",
+      "description": "The verify script prints both a PASS outcome and a FAIL outcome, and names departure item 1 in its failure report.",
+      "proves": "The script reports its result and cites departure item 1 when the balance falls.",
+      "restatement_clause_id": "c4",
+      "pattern": "PASS",
+      "additional_patterns": [
+        "FAIL",
+        "departures-found\\.md",
+        "item 1"
+      ],
+      "files": [
+        "stack/scripts/verify-r2-deposit-conserves.py"
+      ],
+      "count": {
+        "unit": "patterns",
+        "op": "eq",
+        "value": 4
+      },
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep_absent",
+      "description": "Neither the job file nor the verify script mentions VERIFICATION_BYPASS, so real proofs are used.",
+      "proves": "The scenario does not skip proof verification.",
+      "restatement_clause_id": "c5",
+      "pattern": "VERIFICATION_BYPASS",
+      "files": [
+        "stack/compose-jobs/docker-compose-R2-deposit-conserves.yml",
+        "stack/scripts/verify-r2-deposit-conserves.py"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The pre-commit configuration does not mention the new verify script, so it is not run at the commit boundary.",
+      "proves": "The scenario is kept out of the commit-boundary gate.",
+      "restatement_clause_id": "c6",
+      "pattern": "verify-r2-deposit-conserves",
+      "files": [
+        ".pre-commit-config.yaml"
+      ],
+      "clause_id": "c6"
+    }
+  ]
+}
