@@ -1,0 +1,173 @@
+{
+  "id": "derived-arn-ac6",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. docs/tasks/R2-fixturenet-defect-scenarios.md scenario (a): fund a channel with a real-proof depositFromNote, conclude it, transfer a nonzero allocation to a recipient. The payout call does not revert and the recipient's note is live in the pool, matching Safety.lean's payout_can_happen theorem (AFDudley/armada-lean, adjudicator-model-v4).\nWhat holds now? Describe the current, observed state. The call reverts: PoolSpend.mintOwnedCommitments submits a hard-coded zero Groth16 proof to transactOwned; PrivacyPool.verifyOwned rejects it under real verification (departures-found.md item 6). It only works today with testingMode on; the fixturenet reconciler refuses to proceed with testingMode on.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run the scenario on a real fixturenet with testingMode() false; the transfer call reverts with PrivacyPool's real-proof verification failure.\nWhat constraints apply? State them in plain prose. Runs on the real fixturenet, real proofs, no VERIFICATION_BYPASS. Not part of the commit-boundary gate. Expected to report FAIL today, citing departure item 6; passes once the adjudicator rewrite lands.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) stack/compose-jobs/docker-compose-R2-payout.yml, stack/scripts/verify-r2-payout.py",
+  "restatement": "Add a fixturenet scenario named R2 scenario (a). It funds a channel with a real-proof depositFromNote, concludes the channel, and transfers a nonzero allocation to a recipient. It runs on a real fixturenet with testingMode() false, real proofs, and no VERIFICATION_BYPASS. The scenario checks the Safety.lean payout_can_happen expectation: the payout call does not revert and the recipient's note is live in the pool. The deliverable is the runnable scenario and its reported result. Today the scenario must report FAIL and cite departure item 6, because PoolSpend.mintOwnedCommitments submits a hard-coded zero Groth16 proof that PrivacyPool.verifyOwned rejects. It must report PASS once the adjudicator rewrite lands. The scenario is not part of the commit-boundary gate.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "The compose job stack/compose-jobs/docker-compose-R2-payout.yml and the script stack/scripts/verify-r2-payout.py exist."
+    },
+    {
+      "id": "c2",
+      "text": "The scenario runs on a real fixturenet with testingMode() false, real proofs, and no VERIFICATION_BYPASS."
+    },
+    {
+      "id": "c3",
+      "text": "The scenario funds a channel with a real-proof depositFromNote, concludes it, and transfers a nonzero allocation to a recipient. It then reports whether the payout call reverted and whether the recipient's note is live in the pool."
+    },
+    {
+      "id": "c4",
+      "text": "When the scenario reports FAIL, it cites departure item 6 from departures-found.md. Today it must report FAIL."
+    },
+    {
+      "id": "c5",
+      "text": "The scenario is not part of the commit-boundary gate."
+    }
+  ],
+  "goal": "A runnable R2 payout scenario that reports PASS or FAIL on a real fixturenet, and cites departure item 6 when it fails.",
+  "acceptance_criteria": [
+    "The compose job file for the R2 payout scenario is present in the repository.",
+    "The R2 payout verification script is present in the repository.",
+    "Running the scenario on the real fixturenet prints a report that shows testing mode off and no verification bypass.",
+    "Running the scenario prints a report of the deposit, the conclude step, the nonzero transfer, the payout outcome, and whether the recipient's note is live. The report shows a PASS or FAIL result.",
+    "The script text names departure item 6 from departures-found.md as the cited cause of a failure.",
+    "The pre-commit configuration does not run the R2 payout script."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "The compose job file for the R2 payout scenario is present in the repository."
+    },
+    {
+      "id": "c2",
+      "text": "The R2 payout verification script is present in the repository."
+    },
+    {
+      "id": "c3",
+      "text": "Running the scenario on the real fixturenet prints a report that shows testing mode off and no verification bypass."
+    },
+    {
+      "id": "c4",
+      "text": "Running the scenario prints a report of the deposit, the conclude step, the nonzero transfer, the payout outcome, and whether the recipient's note is live. The report shows a PASS or FAIL result."
+    },
+    {
+      "id": "c5",
+      "text": "The script text names departure item 6 from departures-found.md as the cited cause of a failure."
+    },
+    {
+      "id": "c6",
+      "text": "The pre-commit configuration does not run the R2 payout script."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "file_exists",
+      "description": "The compose job file for the R2 payout scenario is present in the repository.",
+      "proves": "The compose job exists at stack/compose-jobs/docker-compose-R2-payout.yml.",
+      "restatement_clause_id": "c1",
+      "path": "stack/compose-jobs/docker-compose-R2-payout.yml",
+      "clause_id": "c1"
+    },
+    {
+      "type": "file_exists",
+      "description": "The R2 payout verification script is present in the repository.",
+      "proves": "The script exists at stack/scripts/verify-r2-payout.py.",
+      "restatement_clause_id": "c1",
+      "path": "stack/scripts/verify-r2-payout.py",
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the scenario on the real fixturenet prints a report that shows testing mode off and no verification bypass.",
+      "proves": "The scenario runs with testingMode() false, real proofs, and no VERIFICATION_BYPASS.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-r2-payout.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "testing_mode",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "verification_bypass",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "Running the scenario prints a report of the deposit, the conclude step, the nonzero transfer, the payout outcome, and whether the recipient's note is live. The report shows a PASS or FAIL result.",
+      "proves": "The scenario performs the real-proof deposit, conclude, and nonzero transfer, and reports its result. It does not need to pass today.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-r2-payout.py",
+        "args": [
+          "--json"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "stdout_json",
+          "field": "deposit_used_real_proof",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "transfer_amount_nonzero",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "result_reported",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c4"
+    },
+    {
+      "type": "grep",
+      "description": "The script text names departure item 6 from departures-found.md as the cited cause of a failure.",
+      "proves": "A FAIL report cites departure item 6.",
+      "restatement_clause_id": "c4",
+      "pattern": "departures-found\\.md.*item 6",
+      "files": [
+        "stack/scripts/verify-r2-payout.py"
+      ],
+      "clause_id": "c5"
+    },
+    {
+      "type": "grep_absent",
+      "description": "The pre-commit configuration does not run the R2 payout script.",
+      "proves": "The scenario is not part of the commit-boundary gate.",
+      "restatement_clause_id": "c5",
+      "pattern": "verify-r2-payout",
+      "files": [
+        ".pre-commit-config.yaml"
+      ],
+      "clause_id": "c6"
+    }
+  ],
+  "declared_new_entrypoints": [
+    "stack/scripts/verify-r2-payout.py"
+  ]
+}
