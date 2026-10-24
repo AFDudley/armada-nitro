@@ -93,7 +93,7 @@ def teardown(dep: Path, env: dict[str, str]) -> None:
         [
             "sh",
             "-c",
-            'umount "${DEP}/data" 2>/dev/null; '
+            'sudo umount "${DEP}/data" 2>/dev/null || true; '
             'laconic-so deployment --dir "${DEP:?}" stop --delete-volumes; rm -rf "${DEP:?}"',
         ],
         env=env,
