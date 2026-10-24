@@ -119,13 +119,39 @@ const DEPOSIT_AMOUNT = ethers.parseUnits("100", 6); // 100 USDC per channel -- m
 const SHIELD_AMOUNT = ethers.parseUnits("150", 6); // gross per channel; nets ~149.25 USDC after the pool's 0.5% shield fee
 const SCAN_TIMEOUT_MS = 60_000;
 
-// Minimal ABI for the two adjudicator calls this script needs: reading the binding, and encoding
-// depositFromNote's calldata. The Transaction tuple mirrors lib/sdk/yield.ts's ADAPTER_ABI (both
-// ultimately forward the same struct to PrivacyPool.transact).
-const ADJUDICATOR_ABI = [
-  "function depositBinding(bytes32 channelId, uint256 expectedHeld) view returns (bytes32)",
-  "function depositFromNote(bytes32 channelId, uint256 expectedHeld, tuple(tuple(tuple(uint256 x, uint256 y) a, tuple(uint256[2] x, uint256[2] y) b, tuple(uint256 x, uint256 y) c) proof, bytes32 merkleRoot, bytes32[] nullifiers, bytes32[] commitments, tuple(uint16 treeNumber, uint72 minGasPrice, uint8 unshield, uint64 chainID, address adaptContract, bytes32 adaptParams, tuple(bytes32[4] ciphertext, bytes32 blindedSenderViewingKey, bytes32 blindedReceiverViewingKey, bytes annotationData, bytes memo)[] commitmentCiphertext) boundParams, tuple(bytes32 npk, tuple(uint8 tokenType, address tokenAddress, uint256 tokenSubID) token, uint120 value) unshieldPreimage)[] transactions) returns ()",
-];
+// The adjudicator ABI is loaded from the compiled artifact, never hand-written: a literal copy
+// of the function signatures drifts every time the contract changes (the R1/P2a rewrites added
+// `ownerField` and `publicOutputs` to `BoundParams` -- a hand-written copy that predates them
+// computes a selector matching nothing in the deployed contract, so every call falls through to
+// Solidity's default revert, empty data, no sub-call). `stack/container-build/
+// cerc-armada-nitro-env/Dockerfile`'s `contracts` stage already runs `forge build` for this
+// repo and copies `/src/armada-nitro/out` into the image, so the artifact is always present by
+// the time a job runs; this never falls back to a literal ABI -- a missing artifact is a loud
+// failure, naming the path, not a silent empty ABI.
+const ADJUDICATOR_ARTIFACT_PATH =
+  process.env.ADJUDICATOR_ARTIFACT_PATH ||
+  "/src/armada-nitro/out/ArmadaNitroAdjudicator.sol/ArmadaNitroAdjudicator.json";
+
+function loadAdjudicatorAbi(): unknown[] {
+  if (!fs.existsSync(ADJUDICATOR_ARTIFACT_PATH)) {
+    throw new Error(
+      `prepare.ts: compiled adjudicator artifact not found at ` +
+        `${ADJUDICATOR_ARTIFACT_PATH}. Run forge build in /src/armada-nitro first (the job's ` +
+        `own image already does this at build time); set ADJUDICATOR_ARTIFACT_PATH to point ` +
+        `at a different artifact if this script runs outside that image. A hand-written ABI ` +
+        `is not a fallback -- it drifts every time the contract changes.`,
+    );
+  }
+  const artifact = JSON.parse(
+    fs.readFileSync(ADJUDICATOR_ARTIFACT_PATH, "utf-8"),
+  );
+  if (!Array.isArray(artifact.abi)) {
+    throw new Error(
+      `prepare.ts: ${ADJUDICATOR_ARTIFACT_PATH} has no "abi" array -- not a forge artifact.`,
+    );
+  }
+  return artifact.abi as unknown[];
+}
 
 /** Normalize the proved TransactionStructV2 into the tuple the adjudicator ABI expects. Ported
  * from lib/sdk/yield.ts's normalizeTransactionForAdapter (that file's version is private to it). */
@@ -178,19 +204,24 @@ function normalizeTransactionForAdjudicator(
       };
     });
 
-  const up = t.unshieldPreimage as Record<string, unknown> | undefined;
-  const token = (up?.token ?? {}) as Record<string, unknown>;
-  const unshieldPreimage = {
-    npk: toHex(up?.npk) || ethers.ZeroHash,
-    token: {
-      tokenType: Number(token.tokenType ?? 0),
-      tokenAddress: (token.tokenAddress != null
-        ? String(token.tokenAddress)
-        : ethers.ZeroAddress) as string,
-      tokenSubID: toBigInt(token.tokenSubID),
-    },
-    value: toBigInt(up?.value),
+  const normalizeCommitmentPreimage = (
+    p: unknown,
+  ): { npk: string; token: unknown; value: bigint } => {
+    const rec = (p ?? {}) as Record<string, unknown>;
+    const tok = (rec.token ?? {}) as Record<string, unknown>;
+    return {
+      npk: toHex(rec.npk) || ethers.ZeroHash,
+      token: {
+        tokenType: Number(tok.tokenType ?? 0),
+        tokenAddress: (tok.tokenAddress != null
+          ? String(tok.tokenAddress)
+          : ethers.ZeroAddress) as string,
+        tokenSubID: toBigInt(tok.tokenSubID),
+      },
+      value: toBigInt(rec.value),
+    };
   };
+  const unshieldPreimage = normalizeCommitmentPreimage(t.unshieldPreimage);
 
   const proof = t.proof as Record<string, unknown> | undefined;
   const pa = (proof?.a ?? {}) as Record<string, unknown>;
@@ -226,6 +257,18 @@ function normalizeTransactionForAdjudicator(
         : ethers.ZeroAddress) as string,
       adaptParams: toHex(bp?.adaptParams) || ethers.ZeroHash,
       commitmentCiphertext,
+      // P2a (IArmadaPool.sol's BoundParams): the circuit's public owner input, zero for a
+      // non-owned transaction; plaintext preimages for contract-owned outputs, zero-length
+      // when none. depositFromNote submits a plain UnshieldType.NORMAL transaction through
+      // PrivacyPool.transact, never transactOwned -- TransactModule.sol's plain `transact`
+      // path REJECTS a non-zero ownerField ("Owner field set on plain transact") and treats
+      // publicOutputs as optional, so zero/empty is the correct value for this call, not an
+      // unset default; read from the SDK's own proved transaction when present so a future
+      // caller of this same normalizer for an owned-spend transaction is not silently dropped.
+      ownerField: toHex(bp?.ownerField) || ethers.ZeroHash,
+      publicOutputs: ((bp?.publicOutputs ?? []) as unknown[]).map(
+        normalizeCommitmentPreimage,
+      ),
     },
     unshieldPreimage,
   };
@@ -298,12 +341,13 @@ async function main() {
   // MockUSDCV2's ABI is an ERC20 superset (standard calls only) -- works against the real
   // FiatToken USDC too, same as scripts/capture/e2e-armada-circuits.ts relies on.
   const usdc = await ethers.getContractAt("MockUSDCV2", usdcAddress);
+  const adjudicatorAbi = loadAdjudicatorAbi();
   const adjudicatorRead = new ethers.Contract(
     adjudicatorAddress,
-    ADJUDICATOR_ABI,
+    adjudicatorAbi,
     ethers.provider,
   );
-  const depositIface = new ethers.Interface(ADJUDICATOR_ABI);
+  const depositIface = new ethers.Interface(adjudicatorAbi);
 
   clearDatabase();
   await initializeEngine("nitroe2e");
