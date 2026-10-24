@@ -1,0 +1,46 @@
+status: completed
+pebble_id: arn-d5a
+summary: >
+  Added the armada-assets-e2e gate at stack/compose-jobs/armada-assets-e2e/
+  (run.sh, check-teardown.sh, check-keep.sh, CLAUDE.md). run.sh warm-restores
+  the base-layer snapshot into ~/deployments/armada-assets-e2e, starts the
+  chain, and runs the base target (env/targets/fixturenet-base.json: weth,
+  usdc, cctp, aave, lido, armada) with --verify-only so no transaction is
+  sent; that verify pass is "the Aave lending pool, waUSDC and USDC answer on
+  the fixturenet RPC" (aave.py's verify reads getReserveData off the pool and
+  asset() off waUSDC; usdc.py's verify reads name()/symbol()/decimals() off
+  the USDC proxy). It then saves a warm base-layer snapshot via
+  stack/scripts/fixturenet-base-snapshot for a later chunk, and prints
+  {"job_files_present","fixturenet_up","snapshot_present"}. An EXIT trap
+  stops the deployment and removes its directory, unless KEEP_FIXTURENET=1
+  keeps it running. The snapshot cache (~/deployments/.snapshots) is always a
+  sibling of the deployment directory, never nested inside it. The script
+  names env/gates/nitro-e2e/prepare.ts as the wallet/proof code a later
+  deposit/channel/payout chunk will reuse against this snapshot (this
+  stand-up-only gate does not shield/deposit/open a channel/build a proof
+  itself). check-teardown.sh runs run.sh on its default path then verifies
+  no deployment runs, the deployment directory is gone, and the snapshot is
+  present and outside the deployment directory. check-keep.sh runs run.sh
+  with KEEP_FIXTURENET=1, verifies the fixturenet stays running past the
+  gate's exit, then tears it down itself. Verified by actually running all
+  three scripts end to end against the real, already-rebuilt warm base
+  snapshot (key 2e9a2d9de884ee29) and real docker/laconic-so infrastructure,
+  observing their JSON output and the deployment directory / docker
+  containers before and after each run; pre-commit passes on all four new
+  files (including the gate-no-host-deployment-access,
+  job-no-host-deployment-path, fixturenet-base-build-standalone and
+  claude-md-coverage hooks).
+cost: "~180k tokens"
+commits:
+  - "5b0b9b19"
+verify_transcript:
+  hooks:
+    - name: pre-commit (all hooks on the 4 new files)
+      outcome: passed
+      duration_s: 5
+e2e_gate:
+  spec: contracts/specs/derived-arn-d5a.spec.json
+  command: "bash stack/compose-jobs/armada-assets-e2e/run.sh && bash stack/compose-jobs/armada-assets-e2e/check-teardown.sh && bash stack/compose-jobs/armada-assets-e2e/check-keep.sh"
+  result: passed
+  ran_at_sha: "5b0b9b19"
+  mocks_in_path: false
