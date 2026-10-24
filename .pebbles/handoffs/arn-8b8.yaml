@@ -1,0 +1,65 @@
+status: completed
+pebble_id: arn-8b8
+summary: >
+  Added the R2 scenario (b) fixturenet scenario: a job and a driver that record the
+  pool's real ERC-20 (USDC) balance, fund a channel with a real-proof depositFromNote,
+  and re-read the balance. The job (stack/compose-jobs/docker-compose-R2-deposit-conserves.
+  yml) mirrors the disclosure job (cerc/armada-nitro-env image, manifest from the mounted
+  armada_env volume, RPC via the compose service name) and prints one JSON result line; the
+  driver (stack/scripts/verify-r2-deposit-conserves.py) stands up the fixturenet from the
+  warm snapshot (fixturenet-new), runs the job via run-job, reports PASS (balance held) or
+  FAIL (balance fell, citing departure item 1 in departures-found.md), and tears the
+  deployment down on exit. Registered R2-deposit-conserves in the fixturenet stack so
+  run-job finds the job. Verified end-to-end on the real fixturenet: the scenario ran and
+  reported FAIL (expected today, on departure item 1 -- it will pass after the adjudicator
+  rewrite). All six spec conditions in derived-arn-8b8.spec.json pass (job + script exist;
+  the script reads a token balance and calls depositFromNote; it reports PASS/FAIL and cites
+  item 1; neither file mentions VERIFICATION_BYPASS; the script is not in the commit-boundary
+  gate).
+cost: "~40k tokens"
+commits:
+  - "b4188354"
+verify_transcript:
+  hooks:
+    - name: pre-commit run gate-no-host-deposit-conserves (clean file)
+      outcome: passed
+      duration_s: 1
+    - name: pre-commit run gate-no-host-deposit-conserves (perturbed with armada_env)
+      outcome: failed
+      duration_s: 1
+    - name: pre-commit run gate-no-host-deposit-conserves (revert, confirm pass)
+      outcome: passed
+      duration_s: 1
+e2e_gate:
+  spec: contracts/specs/derived-arn-8b8.spec.json
+  command: "python3 stack/scripts/verify-r2-deposit-conserves.py"
+  result: passed
+  ran_at_sha: "b4188354"
+  mocks_in_path: false
+discrimination:
+  - mechanism: red_first
+    oracle: gate-no-host-deposit-conserves
+    target: "stack/scripts/verify-r2-deposit-conserves.py"
+    perturbation: "plant the literal token 'armada_env' into the script"
+    took:
+      applied:
+        observable: "stack/scripts/verify-r2-deposit-conserves.py (armada_env token)"
+        moved:
+          - "no 'armada_env' in the script"
+          - "'armada_env' added to the script"
+      observed:
+        observable: "pre-commit gate gate-no-host-deposit-conserves verdict"
+        moved:
+          - "exit 0 (gate passes on the clean file)"
+          - "exit 1 (gate fails after the perturbation)"
+    assertions_fired:
+      - assertion: "gate-no-host-deposit-conserves matches 'armada_env' in the script"
+        moved:
+          - "no 'armada_env' in the script"
+          - "'armada_env' added to the script"
+    pinned_at:
+      - stack/scripts/verify-r2-deposit-conserves.py
+      - .pre-commit-config.yaml
+    exit_code_before: 0
+    exit_code_after: 1
+    reverted: restored_and_verified
