@@ -148,19 +148,24 @@ function normalizeTransactionForAdjudicator(
       };
     });
 
-  const up = t.unshieldPreimage as Record<string, unknown> | undefined;
-  const token = (up?.token ?? {}) as Record<string, unknown>;
-  const unshieldPreimage = {
-    npk: toHex(up?.npk) || ethers.ZeroHash,
-    token: {
-      tokenType: Number(token.tokenType ?? 0),
-      tokenAddress: (token.tokenAddress != null
-        ? String(token.tokenAddress)
-        : ethers.ZeroAddress) as string,
-      tokenSubID: toBigInt(token.tokenSubID),
-    },
-    value: toBigInt(up?.value),
+  const normalizeCommitmentPreimage = (
+    p: unknown,
+  ): { npk: string; token: unknown; value: bigint } => {
+    const rec = (p ?? {}) as Record<string, unknown>;
+    const tok = (rec.token ?? {}) as Record<string, unknown>;
+    return {
+      npk: toHex(rec.npk) || ethers.ZeroHash,
+      token: {
+        tokenType: Number(tok.tokenType ?? 0),
+        tokenAddress: (tok.tokenAddress != null
+          ? String(tok.tokenAddress)
+          : ethers.ZeroAddress) as string,
+        tokenSubID: toBigInt(tok.tokenSubID),
+      },
+      value: toBigInt(rec.value),
+    };
   };
+  const unshieldPreimage = normalizeCommitmentPreimage(t.unshieldPreimage);
 
   const proof = t.proof as Record<string, unknown> | undefined;
   const pa = (proof?.a ?? {}) as Record<string, unknown>;
@@ -196,6 +201,18 @@ function normalizeTransactionForAdjudicator(
         : ethers.ZeroAddress) as string,
       adaptParams: toHex(bp?.adaptParams) || ethers.ZeroHash,
       commitmentCiphertext,
+      // P2a (IArmadaPool.sol's BoundParams): the circuit's public owner input, zero for a
+      // non-owned transaction; plaintext preimages for contract-owned outputs, zero-length
+      // when none. depositFromNote submits a plain UnshieldType.NORMAL transaction through
+      // PrivacyPool.transact, never transactOwned -- TransactModule.sol's plain `transact`
+      // path REJECTS a non-zero ownerField ("Owner field set on plain transact") and treats
+      // publicOutputs as optional, so zero/empty is the correct value for this call, not an
+      // unset default; read from the SDK's own proved transaction when present so a future
+      // caller of this same normalizer for an owned-spend transaction is not silently dropped.
+      ownerField: toHex(bp?.ownerField) || ethers.ZeroHash,
+      publicOutputs: ((bp?.publicOutputs ?? []) as unknown[]).map(
+        normalizeCommitmentPreimage,
+      ),
     },
     unshieldPreimage,
   };
