@@ -61,6 +61,13 @@ def run(
 # depositFromNote bound to the adjudicator).
 run(["mkdir", "-p", "/src/armada-poc/scripts/gates"])
 run(["cp", "/src/armada-nitro/env/gates/watchtower/prepare.ts", "/src/armada-poc/scripts/gates/prepare.ts"])
+run(
+    [
+        "cp",
+        "/src/armada-nitro/env/gates/adjudicator-abi.ts",
+        "/src/armada-poc/scripts/gates/adjudicator-abi.ts",
+    ]
+)
 penv = dict(os.environ)
 penv.update(
     {

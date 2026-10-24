@@ -72,6 +72,7 @@ import {
 } from "../../lib/sdk/network";
 import { getSpendableBalance } from "../../lib/sdk/transfer";
 import { getChainById, getRpcUrl } from "../../lib/sdk/chain-config";
+import { loadAdjudicatorAbi } from "./adjudicator-abi";
 
 import {
   TXIDVersion,
@@ -119,39 +120,9 @@ const DEPOSIT_AMOUNT = ethers.parseUnits("100", 6); // 100 USDC per channel -- m
 const SHIELD_AMOUNT = ethers.parseUnits("150", 6); // gross per channel; nets ~149.25 USDC after the pool's 0.5% shield fee
 const SCAN_TIMEOUT_MS = 60_000;
 
-// The adjudicator ABI is loaded from the compiled artifact, never hand-written: a literal copy
-// of the function signatures drifts every time the contract changes (the R1/P2a rewrites added
-// `ownerField` and `publicOutputs` to `BoundParams` -- a hand-written copy that predates them
-// computes a selector matching nothing in the deployed contract, so every call falls through to
-// Solidity's default revert, empty data, no sub-call). `stack/container-build/
-// cerc-armada-nitro-env/Dockerfile`'s `contracts` stage already runs `forge build` for this
-// repo and copies `/src/armada-nitro/out` into the image, so the artifact is always present by
-// the time a job runs; this never falls back to a literal ABI -- a missing artifact is a loud
-// failure, naming the path, not a silent empty ABI.
-const ADJUDICATOR_ARTIFACT_PATH =
-  process.env.ADJUDICATOR_ARTIFACT_PATH ||
-  "/src/armada-nitro/out/ArmadaNitroAdjudicator.sol/ArmadaNitroAdjudicator.json";
-
-function loadAdjudicatorAbi(): unknown[] {
-  if (!fs.existsSync(ADJUDICATOR_ARTIFACT_PATH)) {
-    throw new Error(
-      `prepare.ts: compiled adjudicator artifact not found at ` +
-        `${ADJUDICATOR_ARTIFACT_PATH}. Run forge build in /src/armada-nitro first (the job's ` +
-        `own image already does this at build time); set ADJUDICATOR_ARTIFACT_PATH to point ` +
-        `at a different artifact if this script runs outside that image. A hand-written ABI ` +
-        `is not a fallback -- it drifts every time the contract changes.`,
-    );
-  }
-  const artifact = JSON.parse(
-    fs.readFileSync(ADJUDICATOR_ARTIFACT_PATH, "utf-8"),
-  );
-  if (!Array.isArray(artifact.abi)) {
-    throw new Error(
-      `prepare.ts: ${ADJUDICATOR_ARTIFACT_PATH} has no "abi" array -- not a forge artifact.`,
-    );
-  }
-  return artifact.abi as unknown[];
-}
+// The adjudicator ABI is loaded from the compiled artifact, never hand-written -- see
+// adjudicator-abi.ts's own comment for why. One shared loader, copied alongside this file by
+// the job's own cp step, so every gate that calls depositFromNote reads the one rule.
 
 /** Normalize the proved TransactionStructV2 into the tuple the adjudicator ABI expects. Ported
  * from lib/sdk/yield.ts's normalizeTransactionForAdapter (that file's version is private to it). */

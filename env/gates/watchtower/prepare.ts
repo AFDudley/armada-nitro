@@ -47,6 +47,7 @@ import {
 } from "../../lib/sdk/network";
 import { getSpendableBalance } from "../../lib/sdk/transfer";
 import { getChainById, getRpcUrl } from "../../lib/sdk/chain-config";
+import { loadAdjudicatorAbi } from "./adjudicator-abi";
 
 import {
   TXIDVersion,
@@ -92,12 +93,9 @@ const DEPOSIT_AMOUNT = BigInt(process.env.DEPOSIT_AMOUNT_UNITS || "2500000"); //
 const SHIELD_AMOUNT = DEPOSIT_AMOUNT * 2n; // gross; plenty of headroom after the pool's shield fee.
 const SCAN_TIMEOUT_MS = 60_000;
 
-// Minimal ABI for the two adjudicator calls this script needs, identical to
-// env/gates/nitro-e2e/prepare.ts's ADJUDICATOR_ABI.
-const ADJUDICATOR_ABI = [
-  "function depositBinding(bytes32 channelId, uint256 expectedHeld) view returns (bytes32)",
-  "function depositFromNote(bytes32 channelId, uint256 expectedHeld, tuple(tuple(tuple(uint256 x, uint256 y) a, tuple(uint256[2] x, uint256[2] y) b, tuple(uint256 x, uint256 y) c) proof, bytes32 merkleRoot, bytes32[] nullifiers, bytes32[] commitments, tuple(uint16 treeNumber, uint72 minGasPrice, uint8 unshield, uint64 chainID, address adaptContract, bytes32 adaptParams, tuple(bytes32[4] ciphertext, bytes32 blindedSenderViewingKey, bytes32 blindedReceiverViewingKey, bytes annotationData, bytes memo)[] commitmentCiphertext) boundParams, tuple(bytes32 npk, tuple(uint8 tokenType, address tokenAddress, uint256 tokenSubID) token, uint120 value) unshieldPreimage)[] transactions) returns ()",
-];
+// The adjudicator ABI is loaded from the compiled artifact, never hand-written -- see
+// adjudicator-abi.ts's own comment for why. One shared loader, copied alongside this file by
+// the job's own cp step, so every gate that calls depositFromNote reads the one rule.
 
 /** Normalize the proved TransactionStructV2 into the tuple the adjudicator ABI expects. Ported
  * from env/gates/nitro-e2e/prepare.ts (itself ported from lib/sdk/yield.ts). */
@@ -256,12 +254,13 @@ async function main() {
 
   const privacyPool = await ethers.getContractAt("PrivacyPool", poolAddress);
   const usdc = await ethers.getContractAt("MockUSDCV2", usdcAddress);
+  const adjudicatorAbi = loadAdjudicatorAbi();
   const adjudicatorRead = new ethers.Contract(
     adjudicatorAddress,
-    ADJUDICATOR_ABI,
+    adjudicatorAbi,
     ethers.provider,
   );
-  const depositIface = new ethers.Interface(ADJUDICATOR_ABI);
+  const depositIface = new ethers.Interface(adjudicatorAbi);
 
   clearDatabase();
   await initializeEngine("watchtowere2e");

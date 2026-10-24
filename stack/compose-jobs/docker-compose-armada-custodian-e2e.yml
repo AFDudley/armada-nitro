@@ -54,6 +54,7 @@ services:
         # it to DEPOSITS_PATH.
         mkdir -p /src/armada-poc/scripts/gates
         cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        cp /src/armada-nitro/env/gates/adjudicator-abi.ts /src/armada-poc/scripts/gates/adjudicator-abi.ts
         (
           cd /src/armada-poc
           MANIFEST_PATH="$$MANIFEST_PATH" \
