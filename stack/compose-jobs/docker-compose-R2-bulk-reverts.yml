@@ -1,0 +1,87 @@
+# R2 scenario (d): the bulk path reverts (Safety.lean's bulk_paths_never_succeed).
+#
+# Concludes a channel (via the e2e scenario's co-signed conclude path), then calls
+# transferAllAssets on the concluded channel and reports whether the call reverted. Today the
+# call SUCCEEDS (departure item 5/8: neither transferAllAssets nor concludeAndTransferAllAssets
+# is overridden, so the inherited bulk path mints real spendable notes to every payee with
+# nullifiers := [] and no pool debit), so the check reports FAIL and cites 5/8. It will PASS
+# once the adjudicator rewrite lands.
+#
+# Mirrors docker-compose-R2-deposit-conserves.yml + docker-compose-armada-nitro-e2e.yml:
+#   - image cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+#   - reads the deployment's manifest from the mounted armada_env volume
+#   - resolves RPC via the compose service name (armada-fixturenet-geth:8545, no host networking)
+#   - prints exactly one JSON result line to stdout
+services:
+  R2-bulk-reverts:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    # No host networking: every $VAR in the command block is written $$VAR (docker compose's
+    # escape for a literal $) and read from the container's real environment (set by the
+    # environment: section).
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Fund the test account (reconciler mints only the shortfall).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (E9); verify rather than download.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # Stage 1: build the real-proof deposit (prepare.ts) -> deposits.json.
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        (cd /src/armada-poc && \
+          MANIFEST_PATH="$${MANIFEST_PATH}" DEPOSITS_OUTPUT="$${DEPOSITS_PATH}" \
+          HUB_RPC="$${HUB_RPC}" DEPLOY_ENV=local CCTP_MODE=real \
+            npx hardhat run scripts/gates/prepare.ts)
+
+        # Resolve the adjudicator, USDC, the test-account key, and the channel id.
+        ADJUDICATOR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["armadaNitro"]["adjudicator"])' "$${MANIFEST_PATH}")"
+        USDC="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["armada"]["usdc"])' "$${MANIFEST_PATH}")"
+        USER_ADDR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["testAccounts"][0]["address"])' "$${MANIFEST_PATH}")"
+        USER_KEY="$(cat "$${KEYS_DIR}/keys/$USER_ADDR.key")"
+        CHANNEL_ID="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read()[0]["channelId"])' "$${DEPOSITS_PATH}")"
+
+        # Conclude the channel via the e2e scenario's conclude path (funding + co-signed conclude),
+        # using the scenario script's FROST-signed hub execute (the same mechanism as the
+        # armada-nitro-e2e gate's stage 2).
+        export KEYS_DIR=/env
+        run_script() {
+          forge script "$$@" --rpc-url "$${HUB_RPC}" --slow --ffi --broadcast
+        }
+        run_script script/FixturenetScenario.s.sol --sig 'setUpHub()'
+        run_script script/FixturenetScenario.s.sol --sig 'cooperativeClose()'
+
+        # Call transferAllAssets on the concluded channel. The outcome carries one non-zero
+        # allocation (100 USDC) to a payee; stateHash = bytes32(0) matches the conclude
+        # fingerprint (conclude stores the fingerprint with bytes32(0), per E16 S4).
+        RESULT="ok"
+        if ! cast send "$ADJUDICATOR" \
+          "transferAllAssets(bytes32,(address,(uint8,string),(address,uint8,uint256[])[]),bytes32)" \
+          "$CHANNEL_ID" \
+          "[{\"asset\":\"$USDC\",\"assetMetadata\":{\"assetType\":0,\"metadata\":\"\"},\"allocations\":[{\"account\":\"$CHANNEL_ID\",\"role\":0,\"amount\":1000000}]}" \
+          "0x000000000000000000000000000000000000000000000000000000000000" \
+          --rpc-url "$${HUB_RPC}" --uuid-key "$USER_KEY" >/dev/null 2>&1; then
+          RESULT="revert"
+        fi
+
+        # Report: whether the transferAllAssets call reverted (the check's single assertion).
+        echo "{\"concluded\": true, \"channelId\": \"$CHANNEL_ID\", \"transferAllAssets\": \"$RESULT\"}"
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/nitro-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      DELEGATE_KEY: ${DELEGATE_KEY:-0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a}
+      FROST_SHARES_DIR: ${FROST_SHARES_DIR:-/env}
+      FROST_SIGNER: ${FROST_SIGNER:-frost-signer}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
