@@ -117,9 +117,9 @@ def compute_outcome(job_result: dict[str, object]) -> dict[str, object]:
     if deposit_from_note == "revert":
         result = "ERROR"
         departure = (
-            "depositFromNote reverted before reaching the pool -- not evidence for or "
-            "against departure item 1 (departures-found.md); the transaction hash and "
-            "revert data above are the evidence to investigate, not a conservation result."
+            "depositFromNote reverted -- not evidence for or against departure item 1 "
+            "(departures-found.md); the transaction hash and revert data above are the "
+            "evidence to investigate, not a conservation result."
         )
     elif balance_fell:
         # The pool's token balance must NOT fall (notedValue_conserved, deposit instance).
