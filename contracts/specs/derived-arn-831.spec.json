@@ -1,0 +1,181 @@
+{
+  "id": "derived-arn-831",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. On a real fixturenet, every linked library address of the deployed contracts holds that library's code. PoolSpend.sol calls PoseidonT4.poseidon(...) to hash every owned commitment (depositFromNote, transfer's payout, reclaim's mint); Foundry links this call to a fixed address (ArmadaNotes.sol's own comment: the addresses linked in foundry.toml).\nWhat holds now? Describe the current, observed state. script/Deploy.s.sol (env/reconciler/modules/armada_nitro.py's own deploy path, the path the reconciler runs for a real fixturenet) never places code at that fixed address. The only code that does, ArmadaNotes.placePoseidon, runs only from local-anvil test helpers (LocalArmada.s.sol, WatchtowerPerAssetSetup.s.sol, CheckSettlePerAssetSetup.s.sol, each onAnvil true) and the in-memory forge test fixture ArmadaFixture.sol. None of these run against the real fixturenet. The armada-poc pool's own deploy script (lib/armada-poc/scripts/deploy_privacy_pool.ts) deploys real Poseidon contracts for the pool's own shield/transact/unshield, but at a dynamic deployer-nonce address resolved through hardhat's own library linking, not the fixed foundry.toml address PoolSpend.sol compiles against. The forge test suite and the anvil scripts never run the production deploy path, so no existing test caught this.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. On a real fixturenet, standing up the stack and running the R2(c) reclaim scenario (arn-920, stack/scripts/verify-r2-reclaim-conserves.py): the reclaim call reverts with 'delegatecall to non-contract address 0x00000000000000000000000000000000000E0504 (usually an unliked library)', confirmed with a forge -vvvv trace. Every owned-spend operation (depositFromNote, transfer, reclaim) hits the same wall.",
+  "restatement": "After the production deploy path (script/Deploy.s.sol, run by env/reconciler/modules/armada_nitro.py on a real fixturenet) finishes, every library address that foundry.toml links into the deployed contracts must hold that library's code. This includes PoseidonT4 at 0x00000000000000000000000000000000000E0504. As a result, the owned-spend operations depositFromNote, transfer and reclaim, which call PoseidonT4.poseidon through PoolSpend.sol, must run on that fixturenet without the revert 'delegatecall to non-contract address 0x00000000000000000000000000000000000E0504 (usually an unliked library)'.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "On a real fixturenet deployed through the production deploy path (script/Deploy.s.sol via the reconciler), the address 0x00000000000000000000000000000000000E0504 holds non-empty PoseidonT4 library code."
+    },
+    {
+      "id": "c2",
+      "text": "On a real fixturenet deployed through the production deploy path, every library address linked in foundry.toml holds that library's code."
+    },
+    {
+      "id": "c3",
+      "text": "On a real fixturenet, running the R2(c) reclaim scenario (stack/scripts/verify-r2-reclaim-conserves.py) completes without the revert 'delegatecall to non-contract address 0x00000000000000000000000000000000000E0504 (usually an unliked library)'."
+    },
+    {
+      "id": "c4",
+      "text": "On a real fixturenet, depositFromNote and transfer, which also hash owned commitments with PoseidonT4.poseidon, complete without the 'delegatecall to non-contract address' revert."
+    }
+  ],
+  "goal": "The production fixturenet deploy places library code at every foundry.toml-linked library address, so owned-spend operations no longer revert.",
+  "acceptance_criteria": [
+    "After a real fixturenet is deployed the normal way, the Poseidon hashing library address ending in E0504 holds real code instead of being empty.",
+    "After a real fixturenet is deployed the normal way, each library address named in the project's linking settings holds code, and none is empty.",
+    "The reclaim scenario on a real fixturenet finishes successfully and no 'delegatecall to non-contract address' error appears.",
+    "On a real fixturenet, depositing from a note and making a transfer both finish successfully, with no 'delegatecall to non-contract address' error."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "After a real fixturenet is deployed the normal way, the Poseidon hashing library address ending in E0504 holds real code instead of being empty."
+    },
+    {
+      "id": "c2",
+      "text": "After a real fixturenet is deployed the normal way, each library address named in the project's linking settings holds code, and none is empty."
+    },
+    {
+      "id": "c3",
+      "text": "The reclaim scenario on a real fixturenet finishes successfully and no 'delegatecall to non-contract address' error appears."
+    },
+    {
+      "id": "c4",
+      "text": "On a real fixturenet, depositing from a note and making a transfer both finish successfully, with no 'delegatecall to non-contract address' error."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "behavior",
+      "description": "After a real fixturenet is deployed the normal way, the Poseidon hashing library address ending in E0504 holds real code instead of being empty.",
+      "proves": "The production deploy now places PoseidonT4 code at the fixed address that PoolSpend.sol uses.",
+      "restatement_clause_id": "c1",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-linked-libraries.py",
+        "args": [
+          "--address",
+          "0x00000000000000000000000000000000000E0504"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "code_size",
+          "op": "gt",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c1"
+    },
+    {
+      "type": "behavior",
+      "description": "After a real fixturenet is deployed the normal way, each library address named in the project's linking settings holds code, and none is empty.",
+      "proves": "No linked library address is left without code on the production fixturenet.",
+      "restatement_clause_id": "c2",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-linked-libraries.py",
+        "args": [
+          "--all-foundry-links"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "empty_library_count",
+          "op": "eq",
+          "value": 0
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 1800,
+      "clause_id": "c2"
+    },
+    {
+      "type": "behavior",
+      "description": "The reclaim scenario on a real fixturenet finishes successfully and no 'delegatecall to non-contract address' error appears.",
+      "proves": "The reclaim operation no longer fails because of the missing Poseidon library.",
+      "restatement_clause_id": "c3",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-r2-reclaim-conserves.py",
+        "args": [],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "unlinked_library_revert",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c3"
+    },
+    {
+      "type": "behavior",
+      "description": "On a real fixturenet, depositing from a note and making a transfer both finish successfully, with no 'delegatecall to non-contract address' error.",
+      "proves": "The other owned-spend operations also work now that the library code is present.",
+      "restatement_clause_id": "c4",
+      "when": {
+        "interpreter": "python3",
+        "script": "stack/scripts/verify-owned-spend-ops.py",
+        "args": [
+          "--ops",
+          "depositFromNote,transfer"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "unlinked_library_revert",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 3600,
+      "clause_id": "c4"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "stack/scripts/verify-linked-libraries.py",
+    "stack/scripts/verify-owned-spend-ops.py",
+    "stack/scripts/verify-r2-reclaim-conserves.py"
+  ]
+}
