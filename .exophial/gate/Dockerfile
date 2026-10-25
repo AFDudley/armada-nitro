@@ -18,9 +18,6 @@
 #   node 24.18.0 + npm 11.16.0                    -> eslint, prettier, npm ci
 #   rust 1.88.0 + rustfmt + clippy                -> the fmt and clippy hooks
 #   foundry forge/cast/anvil v1.8.3               -> the forge build/test hook
-#   psmisc (fuser)                                -> arn-eb0 check-fixturenet-tmpfs-teardown.py
-#       and stack/scripts/fixturenet-teardown, which probe a tmpfs mount's live
-#       holder the same way the host does
 #   lib/* submodules at the foundry.lock pins     -> forge build/test
 #   the pre-commit hook environments + npm cache  -> so the run is offline
 FROM exophial-e2e-base
@@ -28,7 +25,7 @@ FROM exophial-e2e-base
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl xz-utils ca-certificates build-essential pkg-config psmisc \
+        curl xz-utils ca-certificates build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Node 24.18.0 + npm 11.16.0 (the host's versions) ---
