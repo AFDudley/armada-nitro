@@ -89,7 +89,7 @@ services:
         scenario = json.loads('''$$SCENARIO_JSON''')
         out = {
             'testing_mode': '$$TESTING_MODE' == 'false',
-            'verification_bypass': $$VERIFICATION_BYPASS_JSON,
+            'verification_bypass': '$$VERIFICATION_BYPASS_JSON' == 'true',
             'deposit_used_real_proof': True,
             'transfer_amount_nonzero': True,
             'payout_reverted': scenario.get('payout_reverted'),
