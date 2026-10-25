@@ -41,7 +41,10 @@ def run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
 def mount_tmpfs(dep: pathlib.Path) -> None:
     """Mount a small capped tmpfs over <dep>/data (the fixturenet's RAM disk)."""
     (dep / "data").mkdir(parents=True, exist_ok=True)
-    run(["sudo", "mount", "-t", "tmpfs", "-o", "size=1M,mode=0777", "tmpfs", str(dep / "data")])
+    # arn-eb0: the gate container runs this as root, where `sudo` is not
+    # installed and not needed; skip it only when already root.
+    prefix: list[str] = [] if os.geteuid() == 0 else ["sudo"]
+    run([*prefix, "mount", "-t", "tmpfs", "-o", "size=1M,mode=0777", "tmpfs", str(dep / "data")])
 
 
 def mount_present(dep: pathlib.Path) -> bool:

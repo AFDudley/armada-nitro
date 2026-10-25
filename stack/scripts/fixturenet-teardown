@@ -17,13 +17,20 @@ set -euo pipefail
 SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 LACONIC="${LACONIC_SO:-$(command -v laconic-so || true)}"
+# arn-eb0: a privileged gate container runs this as root, where `sudo` is not
+# installed and not needed; the host runs it as a regular user, where `sudo`
+# is required to mount/unmount a tmpfs. Use `sudo` only when not already root.
+SUDO=()
+if [ "$(id -u)" -ne 0 ]; then
+  SUDO=(sudo)
+fi
 
 # Runs <cmd> without failing the script on a non-zero exit; echoes the exit
 # code, so teardown can report failure (c2) instead of aborting under set -e.
 run_umount() {
   local path="${1}"
   set +e
-  sudo umount "${path}"
+  "${SUDO[@]}" umount "${path}"
   local rc=${?}
   set -e
   echo "${rc}"
@@ -90,11 +97,7 @@ fixturenet_reap_orphans() {
 
 # --- dispatch -----------------------------------------------------------------
 if [[ "${1}" == --reap ]]; then
-  if [ -n "${2}" ]; then
-    fixturenet_reap_orphans "${2}"
-  else
-    fixturenet_reap_os
-  fi
+  fixturenet_reap_orphans "${2:-unknown}"
 else
   teardown_deployment "${1}"
 fi
