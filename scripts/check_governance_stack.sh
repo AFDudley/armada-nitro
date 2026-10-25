@@ -42,13 +42,14 @@ teardown_fixturenet() {
   [[ "${KEEP_FIXTURENET:-}" == "1" ]] && return 0
   [[ -n "${DEP:-}" && -d "${DEP:-}" ]] || return 0
   err "tearing down fixturenet ${NAME:-?} ..."
+  # arn-eb0: the shared fixturenet-teardown routine replaces the old
+  # `umount -l` (lazy) + stop + rm -rf, which leaked the RAM disk on a held
+  # mount. The routine unmounts the tmpfs data mount, stops the deployment
+  # (laconic-so stop --delete-volumes), and removes the directory.
   if [[ -n "$LACONIC" ]]; then
-    "$LACONIC" deployment --dir "$DEP" down --delete-volumes >/dev/null 2>&1 || true
+    "$LACONIC" deployment --dir "$DEP" stop --delete-volumes || true
   fi
-  if mountpoint -q "$DEP/data" 2>/dev/null; then
-    umount -l "$DEP/data" 2>/dev/null || true
-  fi
-  rm -rf "$DEP" 2>/dev/null || true
+  bash "${REPO_ROOT}/stack/scripts/fixturenet-teardown" "$DEP"
 }
 cleanup() {
   (cd "$POC_DIR" && git checkout -- scripts/deploy_crowdfund.ts 2>/dev/null || true)
