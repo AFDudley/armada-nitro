@@ -34,8 +34,13 @@ contract Deploy is Script {
         vm.startBroadcast();
         adjudicator = new ArmadaNitroAdjudicator(IArmadaPool(pool), vm.envAddress("ARMADA_ASSETS", ","));
         consensusApp = new ConsensusApp();
-        custodian = deployCode('HubCustodian.sol:HubCustodian', custodianArgs);
+        custodian = deployCode('HubCustodian.sol', custodianArgs);
         vm.stopBroadcast();
+
+        // arn-831: place the foundry-linked Poseidon libraries at their fixed addresses
+        // (0x...E0503, 0x...E0504) on the geth fixturenet so the owned-spend ops stop
+        // reverting with "delegatecall to non-contract address".
+        _placePoseidon();
 
         string memory key = 'deployment';
         vm.serializeAddress(key, 'armadaPool', pool);
@@ -45,5 +50,27 @@ contract Deploy is Script {
         string memory path = string.concat('deployments/', vm.toString(block.chainid), '.json');
         vm.writeJson(json, path);
         console2.log('wrote', path);
+    }
+
+    /// @dev Place the circomlib-generated PoseidonT3 and PoseidonT4 bytecode at their foundry.toml-linked
+    /// addresses. Reads the bytecode from lib/armada-poc/lib/poseidon_bytecode.json (fs_permissions in
+    /// foundry.toml), deploys each to obtain its runtime code, then etches the runtime at the linked
+    /// address. The etch is a forge cheat code that writes directly to the chain's state (geth's
+    /// state store), not a broadcast transaction.
+    function _placePoseidon() private {
+        string memory json = vm.readFile('lib/armada-poc/lib/poseidon_bytecode.json');
+        _etchPoseidonAt(0x00000000000000000000000000000000000e0503, vm.parseJsonBytes(json, '.PoseidonT3.bytecode'));
+        _etchPoseidonAt(0x00000000000000000000000000000000000E0504, vm.parseJsonBytes(json, '.PoseidonT4.bytecode'));
+    }
+
+    function _etchPoseidonAt(address target, bytes memory creationCode) private {
+        address deployed;
+        assembly {
+            deployed := create(0, add(creationCode, 0x20), mload(creationCode))
+        }
+        require(deployed != address(0), 'Poseidon deployment failed');
+        bytes memory runtime = deployed.code;
+        vm.etch(target, runtime);
+        console2.log('etched Poseidon at', vm.toString(target));
     }
 }

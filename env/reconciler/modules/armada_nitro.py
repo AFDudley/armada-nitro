@@ -125,8 +125,48 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
         "groupKeyY": group_key_y,
     }
     ctx.manifest.setdefault("gasUsed", {})
-    ctx.manifest["gasUsed"]["armada_nitro"] = ctx.manifest["gasUsed"].get("armada_nitro", 0) + gas_used
+    ctx.manifest["gasUsed"]["armada_nitro"] = ctx.manifest["gasUsed"]["armada_nitro", 0] + gas_used
+    # arn-831: place the foundry-linked PoseidonT3/T4 bytecode at their fixed addresses so the
+    # owned-spend ops (depositFromNote, transfer, reclaim) stop reverting with "delegatecall to
+    # non-contract address 0x...E0504 (usually an unlinked library)".
+    _place_poseidon(ctx)
     return "deployed", gas_used
+
+
+def _place_poseidon(ctx: Context) -> None:
+    """arn-831: place the foundry-linked PoseidonT3/T4 bytecode at their fixed addresses on the
+    real geth fixturenet, so the owned-spend ops stop reverting with "delegatecall to non-contract
+    address 0x...E0504 (usually an unlinked library)".
+
+    Reads the foundry.toml linked addresses and the poseidon_bytecode.json, then runs a small
+    forge script that etches the bytecode at the linked addresses.
+    """
+    import re
+    import json as _json
+    import subprocess
+
+    # Parse the foundry.toml libraries array
+    foundry_toml = _ARMADA_NITRO_ROOT / "foundry.toml"
+    if not foundry_toml.exists():
+        raise ctx.fail(f"foundry.toml not found at {_ARMADA_NITRO_ROOT}")
+    text = foundry_toml.read_text()
+    m = re.search(r"libraries\s*=\s*\[(?P<block>.*?\)]", text, re.DOTALL)
+    if not m:
+        raise ctx.fail("no libraries array found in foundry.toml")
+
+    # Read the poseidon bytecode JSON
+    json_path = _ARMADA_NITRO_ROOT / "lib/armada-poc/lib/poseidon_bytecode.json"
+    if not json_path.exists():
+        raise ctx.fail(f"poseidon_bytecode.json not found at {json_path}")
+    data = _json.loads(json_path.read_text())
+
+    # For each linked library, run a forge script to place the bytecode
+    for (path, lib, addr) in _find_links_from_toml(text):
+        if lib == "PoseidonT3" or lib == "PoseidonT4":
+            bytecode = data[lib]["bytecode"]
+            # Run a forge script to place the bytecode at the linked address
+            _run_forg_e_place(addr, bytecode, ctx.rpc_url, ctx.deployer_key)
+
 
 
 def verify(ctx: Context, action: str) -> None:

@@ -1,0 +1,96 @@
+# R2 scenario: a transfer (payout) conserves the pool's balance.
+#
+# Proves the Lean theorem notedValue_conserved (transfer instance): record the pool's real
+# ERC-20 (USDC) balance, make a payout transfer (payout from a note), re-read the balance.
+# The pool's token balance must NOT fall (a transfer is a shield-move, not a spend).
+#
+# Mirrors docker-compose-R2-deposit-conserves.yml: image cerc/armada-nitro-env:${ARMADA_IMAGE_TAG},
+# reads the deployment's manifest from the mounted armada_env volume, resolves the RPC via the
+# compose service name (armada-fixturenet-geth:8545, no host networking), and prints exactly
+# one JSON result line to stdout:
+#   {"balanceOf_before": <int>, "balanceOf_after": <int>, "transfer": "ok"|"revert",
+#    "balance_fell": <bool>, "transactionHash": <string>, "revertData": <string>,
+#    "unlinked_library_revert": <bool>}
+#
+# All state (manifest, test-account keys) comes from the armada_env volume at /env; the job
+# reaches the fixturenet only via the deployment's own docker network and geth RPC -- never by
+# touching the deployment's own data directory (job-no-host-deployment-path).
+services:
+  R2-transfer-conserves:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Fund the test account (reconciler mints only the shortfall).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image (E16); verify rather than download.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # Resolve on-chain addresses and the test-account key from the armada_env volume.
+        ADJUDICATOR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["armadaNitro"]["adjudicator"])' "$${MANIFEST_PATH}")"
+        POOL="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["armada"]["pool"])' "$${MANIFEST_PATH}")"
+        USDC="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["armada"]["usdc"])' "$${MANIFEST_PATH}")"
+        USER_ADDR="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["testAccounts"][0]["address"])' "$${MANIFEST_PATH}")"
+        USER_KEY="$(cat "$${KEYS_DIR}/keys/$${USER_ADDR}.key")"
+
+        # Read the pool's real ERC-20 (USDC) balance before the transfer.
+        BEFORE="$(cast call "$${USDC}" "balanceOf(address)(uint256)" "$${POOL}" --rpc-url "$${HUB_RPC}" | awk '{print $1}')"
+
+        # Make the payout transfer: send the transfer caldata (payout from a note) to the
+        # adjudicator from the test account.
+        TRANSFER_CALLDATA="$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read())["transfer"]["calldata"])' "$${DEPOSITS_PATH}")"
+
+        # Dry run first: a plain `cast call` returns the contract's own revert data directly.
+        REVERT_DATA=""
+        if ! CALL_OUT="$(cast call "$${ADJUDICATOR}" "$${TRANSFER_CALLDATA}" --from "$${USER_ADDR}" --rpc-url "$${HUB_RPC}" 2>&1)"; then
+          REVERT_DATA="$${CALL_OUT}"
+        fi
+
+        # Broadcast for real, with an explicit gas limit so the transaction is always actually
+        # mined (never refused at the gas-estimation stage).
+        TRANSFER_RESULT="ok"
+        TX_HASH=""
+        SEND_JSON="$(cast send "$${ADJUDICATOR}" "$${TRANSFER_CALLDATA}" \
+            --rpc-url "$${HUB_RPC}" --private-key "$${USER_KEY}" --gas-limit 2000000 --json 2>&1)"
+        TX_HASH="$(echo "$${SEND_JSON}" | python3 -c 'import json,sys; r = json.loads(sys.stdin.read()); sys.stdout.write(r.get("transactionHash") or ""); sys.exit(0 if r.get("status") == "0x1" else 1)')" || TRANSFER_RESULT="revert"
+        if [ "$${TRANSFER_RESULT}" = "revert" ] && [ -z "$${REVERT_DATA}" ]; then
+          REVERT_DATA="$${SEND_JSON}"
+        fi
+        if [ "$${TRANSFER_RESULT}" = "revert" ]; then
+          echo "R2-transfer-conserves: transfer reverted (tx $${TX_HASH}): $${REVERT_DATA}" >&2
+        fi
+
+        # Re-read the pool's real ERC-20 balance after the transfer.
+        AFTER="$(cast call "$${USDC}" "balanceOf(address)(uint256)" "$${POOL}" --rpc-url "$${HUB_RPC}" | awk '{print $1}')"
+
+        # Report: does the pool's token balance fall? (It must not -- a transfer conserves it.)
+        BALANCE_FELLS=$(python3 -c 'import sys; sys.stdout.write("true" if int(sys.argv[1]) > int(sys.argv[2]) else "false")' "$${BEFORE}" "$${AFTER}")
+
+        # The unlinked_library_revert flag is true when the transfer reverted with the
+        # 'delegatecall to non-contract address' error (a linked library not found).
+        UNLINKED="$(python3 -c '
+import sys
+result = sys.argv[1]
+revert_data = sys.argv[2]
+revert_data_lower = (revert_data or "").lower()
+is_revert = (result == "revert") and ("delegatecall" in revert_data_lower or "non-contract" in revert_data_lower)
+print("true" if is_revert else "false")' "$${TRANSFER_RESULT}" "$${REVERT_DATA}")
+
+        # Print exactly one JSON result line.
+        python3 -c 'import json,sys; print(json.dumps({"balanceOf_before": int(sys.argv[1]), "balanceOf_after": int(sys.argv[2]), "transfer": sys.argv[3], "balance_fell": sys.argv[4] == "true", "transactionHash": sys.argv[5], "revertData": sys.argv[5], "unlinked_library_revert": sys.argv[7] == "true"})' "$${BEFORE}" "$${AFTER}" "$${TRANSFER_RESULT}" "$${BALANCE_FELLS}" "$${TX_HASH}" "$${REVERT_DATA}" "$${UNLINKED}"
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/r2-transfer-conserves/transfer.json}
+      KEYS_DIR: ${KEYS_DIR:-/env}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:
