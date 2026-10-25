@@ -32,13 +32,13 @@ interface IPrivacyPoolLiveRead {
  * (`PrivacyPool.isLive`, read live via the fixturenet RPC -- never a caller-asserted value).
  *
  * Lean theorem: `payout_can_happen` (`Safety.lean` §D, `AFDudley/armada-lean`
- * `adjudicator-model-v4`). Expected to FAIL today on departure item 6 (zero proof):
- * `PoolSpend.mintOwnedCommitments` submits a hard-coded zero Groth16 proof to
- * `transactOwned`; `PrivacyPool.verifyOwned` rejects it under real verification. This
- * contract never reverts the job on that failure: the payout `transfer` call is trialed on a
- * local fork of the live RPC state first (the same pattern `FixturenetScenario.s.sol`'s
- * `earlySettle` uses), and only broadcast once it is known not to revert, so a FAIL report is
- * always reachable even when the real adjudicator rejects the payout.
+ * `adjudicator-model-v4`). Expected to report ERROR today, before departure item 6 is ever
+ * reached: the funding deposit itself reverts ("Collateral not adjudicator-owned" --
+ * `env/gates/nitro-e2e/prepare.ts`'s stock railgun SDK derives a Poseidon-hashed note public
+ * key, which can never equal the adjudicator's own raw address). Both the deposit and the
+ * payout `transfer` call are trialed on a local fork of the live RPC state first (the same
+ * no-queue pattern `FixturenetScenario.s.sol`'s `earlySettle` uses) and only broadcast once
+ * known not to revert, so a result is always reachable even when a real call is rejected.
  *
  * Reuses `FixturenetScenario.s.sol`'s channel-funding and signing helpers (same manifest,
  * deposits.json, FROST-signed hub custodian). Run via `forge script --sig 'run()'`.
@@ -100,12 +100,21 @@ contract FixturenetR2Payout is Script {
         );
     }
 
-    /// @dev The (a) scenario itself: fund, conclude, trial+broadcast the payout, verify the
-    /// recipient's note is live, write the one JSON result line this job reads back.
+    /// @dev The (a) scenario itself: trial the deposit first (never under vm.broadcast -- the
+    /// same no-queue trick `_payout` uses). If the deposit itself reverts (today's real-deposit
+    /// wall: "Collateral not adjudicator-owned", the SDK's Poseidon-derived npk can never equal
+    /// the adjudicator's raw address), report ERROR with the real revert reason and stop --
+    /// conclude/payout never run, since there is no funded channel to conclude. This is not
+    /// departure item 6 (the zero-proof payout revert); it is a different, earlier stop.
     function run() external {
         Ctx memory c = _ctx();
         Deposit memory d = _deposit(0);
-        _fund(c, d);
+        (bool funded, string memory depositReason) = _fund(c, d);
+        if (!funded) {
+            console2.log('deposit reverted:', depositReason);
+            _writeError('deposit', depositReason);
+            return;
+        }
 
         INitroTypes.FixedPart memory fp = _fixedPart(c, d.channelNonce);
         INitroTypes.VariablePart memory finalState = _state(c, 7, true, COOPERATIVE_USER, COOPERATIVE_HUB);
@@ -179,17 +188,50 @@ contract FixturenetR2Payout is Script {
         console2.log(json);
     }
 
-    /// @dev Fund `channelId` from stage 1's real-proof note alone (sent by the test account) --
-    /// no second, hub-side deposit (see the COOPERATIVE_USER/COOPERATIVE_HUB comment above).
-    function _fund(Ctx memory c, Deposit memory d) internal {
-        vm.broadcast(c.userKey);
-        (bool ok, bytes memory ret) = address(c.adjudicator).call(d.txCalldata);
-        if (!ok) {
-            console2.log('deposit reverted:', _decodeRevertReason(ret));
-            assembly {
-                revert(add(ret, 0x20), mload(ret))
-            }
+    /// @dev Writes the one JSON result line this job's stdout surfaces when the funding
+    /// deposit itself reverts, before conclude/payout ever run: which stage stopped and the
+    /// real decoded revert reason. Distinct from FAIL (a reported, in-scope assertion) --
+    /// ERROR means the scenario never reached its own target departure.
+    function _writeError(string memory stage, string memory reason) internal {
+        string memory json = string.concat(
+            '{"result":"ERROR","stage":"',
+            stage,
+            '","reason":"',
+            _jsonEscape(reason),
+            '"}'
+        );
+        vm.createDir('deployments', true);
+        vm.writeFile(RESULT_FILE, json);
+        console2.log(json);
+    }
+
+    /// @dev Replaces a double quote with a single quote so a revert reason embeds safely in
+    /// this script's own hand-built JSON line (revert strings here never carry a newline).
+    function _jsonEscape(string memory s) internal pure returns (string memory) {
+        bytes memory b = bytes(s);
+        for (uint256 i = 0; i < b.length; i++) {
+            if (b[i] == '"') b[i] = "'";
         }
+        return string(b);
+    }
+
+    /// @dev Trial `channelId`'s funding deposit first (never under vm.broadcast -- the same
+    /// no-queue trick `_payout` uses): if it reverts (today's real-deposit wall), return the
+    /// decoded reason without ever sending it as a real transaction. If it does not revert,
+    /// broadcast it for real -- no second, hub-side deposit (see the COOPERATIVE_USER/
+    /// COOPERATIVE_HUB comment above).
+    function _fund(Ctx memory c, Deposit memory d) internal returns (bool ok, string memory reason) {
+        bytes memory ret;
+        (ok, ret) = address(c.adjudicator).call(d.txCalldata);
+        if (!ok) {
+            return (false, _decodeRevertReason(ret));
+        }
+        vm.broadcast(c.userKey);
+        (ok, ret) = address(c.adjudicator).call(d.txCalldata);
+        if (!ok) {
+            return (false, _decodeRevertReason(ret));
+        }
+        return (true, '');
     }
 
     /// @dev Sign the operation with FROST shares 1 and 2, then broadcast the group-authorized

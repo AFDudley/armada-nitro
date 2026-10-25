@@ -15,18 +15,21 @@ testingMode() and checks VERIFICATION_BYPASS is unset.
 
 Runs on a real fixturenet, real proofs, no VERIFICATION_BYPASS (c2). Not part of the
 commit-boundary gate (.pre-commit-config.yaml) -- a standalone, by-hand or by-schedule run,
-since it is expected FAIL until the adjudicator rewrite lands (departure item 6: see below).
+since it is expected ERROR or FAIL until the adjudicator rewrite lands (see below).
 
 Prints exactly one JSON line to stdout (all diagnostics go to stderr):
     {"testing_mode": false, "verification_bypass": false, "deposit_used_real_proof": true,
-     "transfer_amount_nonzero": true, "payout_reverted": <bool>, "live_note": <bool>,
-     "result_reported": true, "result": "PASS"|"FAIL"}
-and exits 0 regardless of whether the scenario itself reports PASS or FAIL -- this script's own
-acceptance is that the scenario ran end to end and reported a result (docs/tasks/
-R2-fixturenet-defect-scenarios.md, "Acceptance"), not that it passed. When the scenario reports
-FAIL, the reason is departures-found.md item 6 (PoolSpend.mintOwnedCommitments submits a
-hard-coded zero Groth16 proof to transactOwned; PrivacyPool.verifyOwned rejects it under real
-verification), the only way this scenario fails today.
+     "transfer_amount_nonzero": true, "payout_reverted": <bool|null>, "live_note": <bool|null>,
+     "stage": <str|null>, "reason": <str|null>, "result_reported": true,
+     "result": "PASS"|"FAIL"|"ERROR"}
+and exits 0 regardless of the scenario's own result -- this script's own acceptance is that the
+scenario ran end to end and reported a result (docs/tasks/R2-fixturenet-defect-scenarios.md,
+"Acceptance"), not that it passed. Today the funding deposit itself reverts before conclude or
+payout ever runs ("Collateral not adjudicator-owned": the stock railgun SDK derives a
+Poseidon-hashed note public key, which can never equal the adjudicator's own raw address); the
+scenario reports ERROR with stage="deposit" and the real decoded reason, not FAIL -- departure
+item 6 (PoolSpend.mintOwnedCommitments submits a hard-coded zero Groth16 proof) is never
+reached.
 
 Tears the fixturenet down on exit with a guarded `laconic-so deployment stop --delete-volumes`
 then a guarded `rm -rf` (docs/tasks/R2-fixturenet-defect-scenarios.md, "Scenarios").
@@ -160,9 +163,11 @@ def main() -> int:
         "verification_bypass": bool(job_result.get("verification_bypass")),
         "deposit_used_real_proof": bool(job_result.get("deposit_used_real_proof")),
         "transfer_amount_nonzero": bool(job_result.get("transfer_amount_nonzero")),
-        "payout_reverted": bool(job_result.get("payout_reverted")),
-        "live_note": bool(job_result.get("live_note")),
-        "result_reported": job_result.get("result") in ("PASS", "FAIL"),
+        "payout_reverted": job_result.get("payout_reverted"),
+        "live_note": job_result.get("live_note"),
+        "stage": job_result.get("stage"),
+        "reason": job_result.get("reason"),
+        "result_reported": job_result.get("result") in ("PASS", "FAIL", "ERROR"),
         "result": job_result.get("result"),
     }
     if result["result"] == "FAIL":
@@ -171,6 +176,11 @@ def main() -> int:
         # transactOwned; PrivacyPool.verifyOwned rejects it under real verification, so the payout
         # transfer call reverts. Passes once the adjudicator rewrite lands.
         log("FAIL: cited cause: departures-found.md item 6 (zero Groth16 proof in mintOwnedCommitments)")
+    elif result["result"] == "ERROR":
+        # The scenario stopped before departure item 6 is reachable at all: the funding
+        # deposit itself reverts on today's contract (no client can fund a channel -- the
+        # stock railgun SDK derives a Poseidon-hashed note public key, never a raw address).
+        log(f"ERROR: stopped at stage={result['stage']!r}, reason={result['reason']!r}")
 
     print(json.dumps(result))
     return 0

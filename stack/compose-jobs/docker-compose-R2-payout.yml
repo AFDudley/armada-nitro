@@ -55,6 +55,7 @@ services:
         # ---- stage 1: env/gates/nitro-e2e/prepare.ts, with armada-poc's toolchain + lib/sdk ----
         mkdir -p /src/armada-poc/scripts/gates
         cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        cp /src/armada-nitro/env/gates/adjudicator-abi.ts /src/armada-poc/scripts/gates/adjudicator-abi.ts
         (
           cd /src/armada-poc
           MANIFEST_PATH="$$MANIFEST_PATH" \
@@ -91,8 +92,10 @@ services:
             'verification_bypass': $$VERIFICATION_BYPASS_JSON,
             'deposit_used_real_proof': True,
             'transfer_amount_nonzero': True,
-            'payout_reverted': scenario['payout_reverted'],
-            'live_note': scenario['live_note'],
+            'payout_reverted': scenario.get('payout_reverted'),
+            'live_note': scenario.get('live_note'),
+            'stage': scenario.get('stage'),
+            'reason': scenario.get('reason'),
             'result': scenario['result'],
         }
         print(json.dumps(out))
