@@ -1,0 +1,21 @@
+status: completed
+pebble_id: arn-eb0
+summary: "The worker exited without writing its own handoff, but the commit it left\
+  \ behind (f9c1a4be3879) was captured and graded against its own linked spec (contracts/specs/derived-arn-eb0.spec.json)\
+  \ \u2014 accepted. Synthesized by the reducer (exo-556.2) so this capture is not\
+  \ recorded as a failure and left parked for hand recovery just because no handoff\
+  \ was written."
+cost: "unknown \u2014 worker exited without self-reporting its token spend"
+commits:
+- f9c1a4be38793fed908f116a3e1eeb77185e9e97
+verify_transcript:
+  hooks:
+  - name: reducer_capture_grade
+    outcome: passed
+    duration_s: 0.0
+e2e_gate:
+  spec: contracts/specs/derived-arn-eb0.spec.json
+  command: exophial.completion.grade_captured_tree (re-run by _finish's gate)
+  result: passed
+  ran_at_sha: f9c1a4be38793fed908f116a3e1eeb77185e9e97
+  mocks_in_path: false

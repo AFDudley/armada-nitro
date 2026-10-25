@@ -18,4 +18,6 @@ jobs:
   - armada-watchtower-discrimination-e2e
   - armada-disclosure
   - R2-deposit-conserves
+  - R2-bulk-reverts
+  - R2-payout
   - R2-reclaim-conserves

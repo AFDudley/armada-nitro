@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Shared fixturenet teardown routine (arn-eb0).
+#
+# A fixturenet keeps its chain data on a capped tmpfs mounted over
+# <deployment>/data (FIXTURENET_DATA_SIZE, mounted by fixturenet-new). This
+# routine is the single place that releases that RAM disk: it unmounts the
+# tmpfs data mount, stops the deployment (when a live laconic-so is
+# available), and removes the deployment directory. It exits non-zero and
+# names the mount path when the tmpfs survives because a live process holds
+# it, so no mount is silently left behind.
+#
+# Usage:
+#   fixturenet-teardown <deployment-dir>       # tear down one deployment
+#   fixturenet-teardown --reap [name]          # reap every orphan tmpfs under ~/deployments
+set -euo pipefail
+
+SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+LACONIC="${LACONIC_SO:-$(command -v laconic-so || true)}"
+# arn-eb0: a privileged gate container runs this as root, where `sudo` is not
+# installed and not needed; the host runs it as a regular user, where `sudo`
+# is required to mount/unmount a tmpfs. Use `sudo` only when not already root.
+SUDO=()
+if [ "$(id -u)" -ne 0 ]; then
+  SUDO=(sudo)
+fi
+
+# Runs <cmd> without failing the script on a non-zero exit; echoes the exit
+# code, so teardown can report failure (c2) instead of aborting under set -e.
+run_umount() {
+  local path="${1}"
+  set +e
+  "${SUDO[@]}" umount "${path}"
+  local rc=${?}
+  set -e
+  echo "${rc}"
+}
+
+# --- teardown a single deployment -------------------------------------------
+# Unmount the RAM disk, stop the deployment, and remove the directory. A
+# live process holding the tmpfs makes unmount fail -> exit non-zero naming
+# the mount path (c2); it never continues silently (c1/c2).
+teardown_deployment() {
+  local dep="${1}"
+  local fs
+  fs=$(stat -f -c %T "${dep}/data" 2>/dev/null || true)
+  if [ "$fs" = tmpfs ]; then
+    local umount_rc
+    umount_rc=$(run_umount "${dep}/data")
+    if [ "${umount_rc}" != "0" ]; then
+      echo "fixturenet-teardown: FAILED: cannot unmount ${dep}/data [tmpfs data mount held by a live process]" >&2
+      exit 1
+    fi
+  fi
+  if [[ -n "$LACONIC" && -e "${dep}/spec.yml" ]]; then
+    "$LACONIC" deployment --dir "${dep}" stop --delete-volumes || true
+  fi
+  rm -rf "${dep}"
+  fs=$(stat -f -c %T "${dep}/data" 2>/dev/null || true)
+  if [ "$fs" = tmpfs ]; then
+    echo "fixturenet-teardown: FAILED: tmpfs still mounted at ${dep}/data after teardown" >&2
+    exit 1
+  fi
+}
+
+# --- reap every orphan tmpfs under ~/deployments (c3/c4) ---------------------
+# Reaps every deployment whose data/ is a tmpfs mount that nothing holds,
+# whatever its name -- including names like r2-payout-<epoch>-<hex> that
+# never repeat (c3). "Nothing holds it" is proven the same way
+# teardown_deployment proves it for c1/c2: the kernel's own umount refusal
+# (EBUSY) when a live process still references the mount, not a separate
+# probe tool. A live process holding the mount keeps the deployment (c4).
+fixturenet_reap_orphans() {
+  local name="${1:-unknown}"
+  local d
+  for d in "${HOME}/deployments/"*/; do
+    [ -d "$d" ] || continue
+    local fs
+    fs=$(stat -f -c %T "${d}/data" 2>/dev/null || true)
+    [ "$fs" = tmpfs ] || continue
+    if [[ -e "${d}/spec.yml" && -n "$LACONIC" ]]; then
+      "$LACONIC" deployment --dir "${d}" stop --delete-volumes || true
+    fi
+    local umount_rc
+    umount_rc=$(run_umount "${d}/data")
+    if [ "${umount_rc}" != "0" ]; then
+      echo "fixturenet-teardown: ${d}/data used by a live process -- kept [reap name=${name}]"
+      continue
+    fi
+    rm -rf "${d}"
+    echo "fixturenet-teardown: reaped orphan ${d} [tmpfs data mount removed]"
+  done
+}
+
+# --- dispatch -----------------------------------------------------------------
+if [[ "${1}" == --reap ]]; then
+  fixturenet_reap_orphans "${2:-unknown}"
+else
+  teardown_deployment "${1}"
+fi

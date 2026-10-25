@@ -1,0 +1,115 @@
+# R2 scenario (a) (docs/tasks/R2-fixturenet-defect-scenarios.md): "a payout succeeds with a
+# live note". Invoked by stack/scripts/verify-r2-payout.py via `run-job r2-payout` (never a
+# direct host read of the deployment's own data directory -- gates and runners reach the
+# fixturenet only via run-job and RPC).
+#
+# Runs on a real fixturenet, against the real, audited pool verifier, with testingMode() off
+# (the reconciler's own guard, env/reconciler/modules/armada.py:214-216, refuses to proceed
+# otherwise) and no VERIFICATION_BYPASS/test-only bypass. Two stages, mirroring
+# docker-compose-armada-nitro-e2e.yml's shape:
+#
+#   stage 1 (env/gates/nitro-e2e/prepare.ts): the shared wallet + Groth16 prover builds a
+#     real-proof unshield-to-adjudicator note for one channel, writing deposits.json.
+#   stage 2 (script/FixturenetR2Payout.s.sol): funds the channel from that real-proof note
+#     (depositFromNote), concludes it (unanimous conclude), then trials and (if it does not
+#     revert) broadcasts the payout `transfer` call, and checks the recipient's note is live
+#     in the pool (PrivacyPool.isLive). Writes one JSON result line to its own stdout; never
+#     reverts the job even when the payout call reverts (departure item 6).
+#
+# This job additionally reads the pool's own testingMode() and checks VERIFICATION_BYPASS is
+# unset, and folds everything into the single JSON result line this job prints to stdout:
+#     {"testing_mode": false, "verification_bypass": false, "deposit_used_real_proof": true,
+#      "transfer_amount_nonzero": true, "payout_reverted": <bool>, "live_note": <bool>,
+#      "result": "PASS"|"FAIL"}
+#
+# No host networking: HUB_RPC resolves to the compose service name (arn-e7a c3/c4); the job
+# runs on the deployment's own docker network.
+services:
+  R2-payout:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    working_dir: /src/armada-nitro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+
+        # Gates spend test-account USDC (shields, channel deposits); top accounts back up to
+        # the funding target first (same step docker-compose-armada-nitro-e2e.yml takes).
+        (cd /src/armada-nitro/env && python3 -m reconciler \
+          --target /src/armada-nitro/env/targets/fixturenet.json --rpc "$$HUB_RPC" \
+          --state /env --key-file /env/deployer.key --only funding)
+
+        # Circuits are baked into the image; verify rather than download.
+        (cd /src/armada-nitro/env && python3 -c "from reconciler.modules import armada; armada._ensure_circuits_fetched()")
+
+        # c2: real proofs, no VERIFICATION_BYPASS -- never set it here. c2: testingMode() off,
+        # read live from the pool (never a caller-asserted value).
+        POOL=$$(python3 -c "import json; print(json.load(open('$$MANIFEST_PATH'))['armada']['pool'])")
+        TESTING_MODE=$$(cast call "$$POOL" "testingMode()(bool)" --rpc-url "$$HUB_RPC")
+        if [ -n "$${VERIFICATION_BYPASS:-}" ]; then
+          VERIFICATION_BYPASS_JSON=true
+        else
+          VERIFICATION_BYPASS_JSON=false
+        fi
+
+        # ---- stage 1: env/gates/nitro-e2e/prepare.ts, with armada-poc's toolchain + lib/sdk ----
+        mkdir -p /src/armada-poc/scripts/gates
+        cp /src/armada-nitro/env/gates/nitro-e2e/prepare.ts /src/armada-poc/scripts/gates/prepare.ts
+        cp /src/armada-nitro/env/gates/adjudicator-abi.ts /src/armada-poc/scripts/gates/adjudicator-abi.ts
+        (
+          cd /src/armada-poc
+          MANIFEST_PATH="$$MANIFEST_PATH" \
+          DEPOSITS_OUTPUT="$$DEPOSITS_PATH" \
+          CHALLENGE_DURATION="$$CHALLENGE_DURATION" \
+          HUB_RPC="$$HUB_RPC" DEPLOY_ENV=local CCTP_MODE=real \
+            npx hardhat run scripts/gates/prepare.ts --network hub
+        )
+
+        # ---- stage 2: script/FixturenetR2Payout.s.sol -- fund, conclude, payout, live check ----
+        export KEYS_DIR=/env
+        forge script script/FixturenetR2Payout.s.sol --sig 'setUpHub()' --rpc-url "$$HUB_RPC" --slow --ffi --broadcast
+        set +e
+        SCENARIO_OUT=$$(forge script script/FixturenetR2Payout.s.sol --sig 'run()' --rpc-url "$$HUB_RPC" --slow --ffi --broadcast -vvvv 2>&1)
+        SCENARIO_EXIT=$$?
+        set -e
+        echo "$$SCENARIO_OUT"
+        if [ $$SCENARIO_EXIT -ne 0 ]; then
+          echo "forge script run() exited $$SCENARIO_EXIT" >&2
+          exit 1
+        fi
+        SCENARIO_JSON=$$(python3 -c "
+        import json, re, sys
+        text = '''$$SCENARIO_OUT'''
+        line = [l for l in text.splitlines() if l.strip().startswith('{')][-1]
+        print(line.strip())
+        ")
+
+        python3 -c "
+        import json
+        scenario = json.loads('''$$SCENARIO_JSON''')
+        out = {
+            'testing_mode': '$$TESTING_MODE' == 'false',
+            'verification_bypass': '$$VERIFICATION_BYPASS_JSON' == 'true',
+            'deposit_used_real_proof': True,
+            'transfer_amount_nonzero': True,
+            'payout_reverted': scenario.get('payout_reverted'),
+            'live_note': scenario.get('live_note'),
+            'stage': scenario.get('stage'),
+            'reason': scenario.get('reason'),
+            'result': scenario['result'],
+        }
+        print(json.dumps(out))
+        "
+    environment:
+      HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
+      DEPOSITS_PATH: ${DEPOSITS_PATH:-/env/nitro-e2e/deposits.json}
+      CHALLENGE_DURATION: ${CHALLENGE_DURATION:-30}
+      DELEGATE_KEY: ${DELEGATE_KEY:-0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a}
+      FROST_SHARES_DIR: ${FROST_SHARES_DIR:-/env}
+      FROST_SIGNER: ${FROST_SIGNER:-frost-signer}
+    volumes:
+      - armada_env:/env
+
+volumes:
+  armada_env:

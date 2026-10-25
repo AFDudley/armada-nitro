@@ -82,7 +82,6 @@ secs() { local s=$1; printf '%dm%02ds' $((s/60)) $((s%60)); }
 # remove its directory. A live process still using a deployment keeps it (c6),
 # so only the unused ones are stopped and removed (c2).
 cleanup_stale_deployments() {
-  local d
   # arn-396 c4: the cleanup guards the deployment path against an empty or unset
   # value (c3), and selects earlier deployments by the exact name prefix (c4) --
   # the shared prefix, never a run id.
@@ -90,28 +89,11 @@ cleanup_stale_deployments() {
     echo "fixturenet-new: ${DEP} is empty or unset -- skipping stale-deployment cleanup" >&2
     return 0
   fi
-  for d in "${HOME}/deployments/${NAME}"*
-  do
-    if [ -d "$d" ]; then
-      # arn-396 c6: a live process still using a deployment keeps it (fuser finds
-      # the pid); an unused deployment is stopped and its directory removed.
-      if fuser -s "$d" >/dev/null 2>&1; then
-        echo "fixturenet-new: ${d} used by a live process -- not removing it"
-        continue
-      fi
-      # arn-396 c2: stop with volume deletion, then remove the deployment directory.
-      if [ -e "$d/spec.yml" ]; then
-        "$LACONIC" deployment --dir "$d" stop --delete-volumes  # laconic-so deployment stop --delete-volumes
-      fi
-      # a SIGKILLed prior run can leave the RAM-disk tmpfs still mounted over
-      # the data dir, making `rm -rf` fail with "device or resource busy";
-      # unmount before removing the deployment directory.
-      if [ -d "$d/data" ]; then
-        sudo umount "$d/data" 2>/dev/null || true
-      fi
-      rm -rf "$d"
-    fi
-  done
+  # arn-eb0: instead of matching the same name prefix only, the shared routine
+  # reaps EVERY orphan tmpfs mount under ~/deployments, so unique names
+  # (r2-payout-*, r2-reclaim-*) are reclaimed; a live process still using a
+  # deployment keeps it (c4).
+  bash "${REPO_ROOT}/stack/scripts/fixturenet-teardown" --reap "${NAME}"
 }
 
 

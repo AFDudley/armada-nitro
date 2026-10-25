@@ -29,6 +29,9 @@ import time
 import uuid
 from pathlib import Path
 
+# arn-eb0: locate the shared fixturenet-teardown routine relative to this file.
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+
 # ---- paths -----------------------------------------------------------------
 SCRIPT = Path(__file__).resolve()
 REPO_ROOT = SCRIPT.parents[2]  # <repo>/stack/scripts/... -> <repo>
@@ -89,13 +92,12 @@ def teardown(dep: Path, env: dict[str, str]) -> None:
     rm -rf. DEP is set to the deployment dir, so a missing var fails fast (`: "${DEP:?}")."""
     # Unmount the fixturenet's RAM disk (tmpfs over data/, mounted by fixturenet-new) so the
     # guarded rm -rf can remove the deployment dir; a missing DEP fails fast via ${DEP:?}.
-    run(
-        [
-            "sh",
-            "-c",
-            'sudo umount "${DEP}/data" 2>/dev/null || true; '
-            'laconic-so deployment --dir "${DEP:?}" stop --delete-volumes; rm -rf "${DEP:?}"',
-        ],
+    # arn-eb0: the shared fixturenet-teardown routine unmounts the tmpfs RAM
+    # disk, stops the deployment (laconic-so stop --delete-volumes), and removes
+    # the directory -- a held mount makes it fail loudly instead of leaking the
+    # RAM disk.
+    subprocess.run(
+        ["bash", _REPO_ROOT + "/stack/scripts/fixturenet-teardown", str(dep)],
         env=env,
     )
 
