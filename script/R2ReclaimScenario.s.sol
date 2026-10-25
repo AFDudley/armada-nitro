@@ -17,10 +17,16 @@ import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFo
 /// total token balance for the reclaimed asset must be the same before and after the reclaim
 /// call (Safety.lean `notedValue_conserved`, the reclaim instance).
 ///
-/// Today the scenario is expected to report FAIL on departure item 2 (`departures-found.md`):
-/// `_settleReclaimExit` calls `PoolSpend.settleReclaim`, which mints `priorHeld +
-/// guaranteeAmount` for the target from one input of `priorHeld` -- nothing debits the source,
-/// so the pool's balance after the reclaim exceeds the balance before by the guarantee amount.
+/// Today the scenario is expected to report ERROR, before departure item 2 is ever reached: a
+/// confirmed, separate deploy-script gap. `PoolSpend`'s commitment-hash computation
+/// delegatecalls a fixed, `foundry.toml`-linked Poseidon library address; `script/Deploy.s.sol`
+/// (the real deploy path `env/reconciler/modules/armada_nitro.py` runs) never places real
+/// bytecode there, so `reclaim`'s own mint call reverts with "delegatecall to non-contract
+/// address ... usually an unliked library" -- confirmed on a real fixturenet trace. Operator
+/// ruling (2026-10-25): `PoolSpend` and the adjudicator deploy path are code the rewrite
+/// replaces; this scenario is the rewrite's own check that its deploy places every linked
+/// library on the real fixturenet.
+///
 /// `PoolSpend.settleReclaim`'s own doc comment confirms a never-funded target has no prior
 /// commitment at all ("Spends the target channel's current commitment (if any; a never-funded
 /// target has none)"), so this scenario needs no deposit into either channel: `reclaim`'s own
@@ -28,18 +34,21 @@ import {ExitFormat as Outcome} from '@statechannels/exit-format/contracts/ExitFo
 /// only that both channels are finalized (ForceMove) and the source's outcome carries a
 /// guarantee allocation to the target. That keeps this scenario entirely inside the real,
 /// audited ForceMove/MultiAssetHolder path with no pool proof of any kind involved, real or
-/// bypassed -- there is nothing here for VERIFICATION_BYPASS to skip.
+/// bypassed -- there is nothing here for VERIFICATION_BYPASS to skip. `reclaim` is trialed
+/// (never a direct Solidity call) so a revert is reported, not a script crash.
 ///
 /// Phases (separate `forge script --sig` calls so the challenge windows are waited out by the
 /// job's shell between calls):
 ///   finalizeTarget  force-move (challenge) a fresh target channel to finalize it
 ///   finalizeSource  force-move (challenge) a fresh source channel, with a final state holding
 ///                    a GUARANTEE allocation to the target
-///   reclaimReport   read the pool's token balance, call reclaim, re-read the balance, and
+///   reclaimReport   read the pool's token balance, trial reclaim, re-read the balance, and
 ///                    print exactly one JSON result line to stdout:
 ///                    {"reclaim_called": true, "balance_before": N0, "balance_after": N1,
-///                     "guarantee_amount": G, "verdict": "FAIL",
+///                     "guarantee_amount": G, "result": "PASS"|"FAIL",
 ///                     "cites": "departures-found.md item 2 ..."}
+///                    or, if reclaim reverts: {"result": "ERROR", "stage": "reclaim",
+///                     "reason": "<decoded revert>"}
 ///
 /// Environment: MANIFEST_PATH (default /env/manifest.json), KEYS_DIR (default /env),
 /// CHALLENGE_DURATION, R2_SOURCE_NONCE / R2_TARGET_NONCE (written by finalizeTarget /
@@ -116,47 +125,86 @@ contract R2ReclaimScenario is Script {
         console2.log('source challenged; finalizesAt = now + challenge window');
     }
 
-    /// @dev c2/c3/c4: read the pool's token balance, call reclaim, re-read the balance, and
-    /// print the single JSON result line. Today this reports FAIL, citing departures-found.md
-    /// item 2 (reclaim mints priorHeld + guaranteeAmount for the target from one input of
-    /// priorHeld, with no source debit).
+    /// @dev c2/c3/c4: read the pool's token balance, trial the reclaim call (never a direct
+    /// Solidity call -- the same no-queue trick FixturenetR2Payout.s.sol's `_fund`/`_payout`
+    /// use -- so a revert is reported, not a script crash), re-read the balance, and print the
+    /// single JSON result line. If reclaim reverts, report ERROR with stage="reclaim" and the
+    /// real decoded reason -- confirmed on the real fixturenet: PoolSpend's own commitment-hash
+    /// computation delegatecalls a fixed, foundry.toml-linked Poseidon library address that
+    /// `script/Deploy.s.sol` never places real bytecode at, so every owned-spend operation
+    /// (depositFromNote, transfer, reclaim) reverts there -- a deploy-script gap, not
+    /// departure item 2's own mint-without-debit logic, which is never reached. Otherwise
+    /// report PASS/FAIL on whether the pool's balance for the reclaimed asset is conserved.
     function reclaimReport() external {
         Ctx memory c = _ctx();
-        INitroTypes.FixedPart memory sourceFP = _fixedPart(c, _readNonce(SOURCE_NONCE_FILE));
-        INitroTypes.FixedPart memory targetFP = _fixedPart(c, _readNonce(TARGET_NONCE_FILE));
-        bytes32 sourceChannelId = NitroUtils.getChannelId(sourceFP);
-        bytes32 targetChannelId = NitroUtils.getChannelId(targetFP);
-
-        INitroTypes.VariablePart memory sourceState = _sourceState(c, targetChannelId);
-        INitroTypes.VariablePart memory targetState = _targetState(c);
-        bytes memory sourceOutcomeBytes = abi.encode(sourceState.outcome);
-        bytes memory targetOutcomeBytes = abi.encode(targetState.outcome);
-        bytes32 targetStateHash = NitroUtils.hashState(targetFP, targetState);
+        IMultiAssetHolder.ReclaimArgs memory args = _reclaimArgs(c);
 
         // c2: the pool's total token balance for the reclaimed asset (usdc.balanceOf(pool)).
         uint256 balanceBefore = c.usdc.balanceOf(address(c.privacyPool));
 
-        // c2: call reclaim (the guarantee: source channel's allocation at index 1 points at
-        // the target channel).
-        c.adjudicator.reclaim(
+        (bool ok, string memory reason) = _tryReclaim(c, args);
+        if (!ok) {
+            console2.log('reclaim reverted:', reason);
+            _writeError('reclaim', reason);
+            return;
+        }
+
+        uint256 balanceAfter = c.usdc.balanceOf(address(c.privacyPool));
+        _writeReclaimResult(balanceBefore, balanceAfter);
+    }
+
+    /// @dev The guarantee: source channel's allocation at index 1 points at the target
+    /// channel. Extracted from reclaimReport to keep its own stack frame small (`forge build`
+    /// hits "Stack too deep" otherwise).
+    function _reclaimArgs(Ctx memory c) internal view returns (IMultiAssetHolder.ReclaimArgs memory) {
+        INitroTypes.FixedPart memory sourceFP = _fixedPart(c, _readNonce(SOURCE_NONCE_FILE));
+        INitroTypes.FixedPart memory targetFP = _fixedPart(c, _readNonce(TARGET_NONCE_FILE));
+        bytes32 targetChannelId = NitroUtils.getChannelId(targetFP);
+        INitroTypes.VariablePart memory sourceState = _sourceState(c, targetChannelId);
+        INitroTypes.VariablePart memory targetState = _targetState(c);
+        return
             IMultiAssetHolder.ReclaimArgs({
-                sourceChannelId: sourceChannelId,
+                sourceChannelId: NitroUtils.getChannelId(sourceFP),
                 fixedPart: sourceFP,
                 variablePart: sourceState,
-                sourceOutcomeBytes: sourceOutcomeBytes,
+                sourceOutcomeBytes: abi.encode(sourceState.outcome),
                 sourceAssetIndex: 0,
                 indexOfTargetInSource: 1,
-                targetStateHash: targetStateHash,
-                targetOutcomeBytes: targetOutcomeBytes,
+                targetStateHash: NitroUtils.hashState(targetFP, targetState),
+                targetOutcomeBytes: abi.encode(targetState.outcome),
                 targetAssetIndex: 0
-            })
-        );
-        uint256 balanceAfter = c.usdc.balanceOf(address(c.privacyPool));
+            });
+    }
 
-        // c3: report the verdict. conserved only if balanceAfter == balanceBefore; otherwise
-        // FAIL, citing departures-found.md item 2.
+    /// @dev Trial `reclaim` first (never a direct Solidity call -- the same no-queue trick
+    /// FixturenetR2Payout.s.sol's `_fund`/`_payout` use -- so a revert is reported, not a
+    /// script crash). If it reverts (today's real-fixturenet wall: a fixed, foundry.toml-
+    /// linked Poseidon library address `script/Deploy.s.sol` never places real bytecode at),
+    /// return the decoded reason without ever sending it as a real transaction. If it does not
+    /// revert, broadcast it for real.
+    function _tryReclaim(
+        Ctx memory c,
+        IMultiAssetHolder.ReclaimArgs memory args
+    ) internal returns (bool ok, string memory reason) {
+        bytes memory payload = abi.encodeCall(c.adjudicator.reclaim, (args));
+        bytes memory ret;
+        (ok, ret) = address(c.adjudicator).call(payload);
+        if (!ok) {
+            return (false, _decodeRevertReason(ret));
+        }
+        vm.broadcast(c.userKey);
+        (ok, ret) = address(c.adjudicator).call(payload);
+        if (!ok) {
+            return (false, _decodeRevertReason(ret));
+        }
+        return (true, '');
+    }
+
+    /// @dev c3: report the verdict. PASS only if balanceAfter == balanceBefore; otherwise FAIL,
+    /// citing departures-found.md item 2.
+    function _writeReclaimResult(uint256 balanceBefore, uint256 balanceAfter) internal {
         bool conserved = (balanceAfter == balanceBefore);
-        string memory verdict = conserved ? 'conserved' : 'FAIL';
+        string memory verdict = conserved ? 'PASS' : 'FAIL';
         string memory cite = 'departures-found.md item 2: _settleReclaimExit calls PoolSpend.settleReclaim, which mints priorHeld + guaranteeAmount for the target from one input of priorHeld, with no source debit';
 
         string memory json = string.concat(
@@ -167,13 +215,46 @@ contract R2ReclaimScenario is Script {
             vm.toString(balanceAfter),
             ', "guarantee_amount": ',
             vm.toString(GUARANTEE),
-            ', "verdict": "',
+            ', "result": "',
             verdict,
             '", "cites": "',
             cite,
             '"}'
         );
         console2.log(json);
+    }
+
+    /// @dev Writes the one JSON result line this job's stdout surfaces when reclaim itself
+    /// reverts: which stage stopped and the real decoded revert reason. ERROR means the
+    /// scenario never reached departure item 2's own conservation check.
+    function _writeError(string memory stage, string memory reason) internal {
+        string memory json = string.concat(
+            '{"result":"ERROR","stage":"',
+            stage,
+            '","reason":"',
+            _jsonEscape(reason),
+            '"}'
+        );
+        console2.log(json);
+    }
+
+    /// @dev Replaces a double quote with a single quote so a revert reason embeds safely in
+    /// this script's own hand-built JSON line (revert strings here never carry a newline).
+    function _jsonEscape(string memory s) internal pure returns (string memory) {
+        bytes memory b = bytes(s);
+        for (uint256 i = 0; i < b.length; i++) {
+            if (b[i] == '"') b[i] = "'";
+        }
+        return string(b);
+    }
+
+    function _decodeRevertReason(bytes memory ret) internal pure returns (string memory) {
+        if (ret.length < 4) return '<no revert reason>';
+        bytes memory encoded = new bytes(ret.length - 4);
+        for (uint256 i = 0; i < encoded.length; i++) {
+            encoded[i] = ret[i + 4];
+        }
+        return abi.decode(encoded, (string));
     }
 
     // ---------------------------------------------------------------- states
