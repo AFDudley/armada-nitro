@@ -1,0 +1,307 @@
+{
+  "id": "derived-arn-eb0",
+  "original_statement": "What must hold? State the invariant or expectation this concerns. stack/README.md states: \"the cap makes a forgotten fixturenet fill its RAM disk and die instead of growing on a shared filesystem.\" A fixturenet's tmpfs data mount stops existing once no live deployment uses it, so the host's available RAM returns to the pool.\nWhat holds now? Describe the current, observed state. On 2026-10-25, 17 tmpfs mounts from dead deployments held 17.2 GiB of RAM on kelce. The host had 8 GiB available at that point. None of the 17 had a running container. fuser found no process using any of the 17 mount paths. The coordinator unmounted and removed all 17, and available memory rose to 22 GiB.\n\nThe 17 names: r2-payout-<epoch>-<hex> (9 deployments), r2-reclaim-* (3 deployments), r2-debug-1, r2-debug-2, r2-debug-3, r2-debug-clean, r2-dbg-* (1 or more). Creation times on the r2-debug* and r2-dbg-* mounts: 2026-10-24 07:05Z to 2026-10-24 09:18Z. Used size per mount ranged 300 MB to 3 GiB; the r2-debug* mounts were at their full 3 GiB cap.\n\nTeardown logic exists in four separate places in the repository, and the four differ from each other:\n\n1. stack/scripts/fixturenet-new, function cleanup_stale_deployments (line 84): unmounts a stale deployment's data directory, but only for a deployment whose directory name starts with the SAME name string as the deployment fixturenet-new is about to create. A name that embeds an epoch timestamp and random hex (as the r2-payout-* and r2-reclaim-* names do) never repeats, so this path never matches that deployment again on a later run.\n\n2. scripts/check_governance_stack.sh, function teardown_fixturenet: runs `umount -l` (lazy unmount) on the data mount.\n\n3. stack/scripts/verify-r2-deposit-conserves.py (committed on integrated): runs `sudo umount <path> || true`, then stops the deployment, then removes the deployment directory.\n\n4. Worker worktree copies .worktrees/worker-arn-ac6/stack/scripts/verify-r2-payout.py and .worktrees/worker-arn-920/stack/scripts/verify-r2-reclaim-conserves.py: each calls `laconic-so deployment stop --delete-volumes` and then `shutil.rmtree(..., ignore_errors=True)`, with no umount call anywhere in either file. The tmpfs mount survives the deployment directory's removal in this path, and `ignore_errors=True` produces no error message when it does.\nHow do you see it? Describe exactly how to observe this for yourself \u2014 the steps to reproduce, or how you would demo it. Run `findmnt -t tmpfs | grep deployments` on kelce: mounts whose deployment directory no longer exists, or whose directory holds no container that `docker ps -a` lists, are present. Run `fuser <mount path>` on one of them: it reports no process. Read stack/scripts/fixturenet-new line 84 (cleanup_stale_deployments), scripts/check_governance_stack.sh's teardown_fixturenet, stack/scripts/verify-r2-deposit-conserves.py, and .worktrees/worker-arn-ac6/stack/scripts/verify-r2-payout.py side by side: each unmounts differently, and the last calls neither umount nor umount -l.\nWhat constraints apply? State them in plain prose. The operator decided the fixturenet's chain data stays in RAM. stack/scripts/fixturenet-new mounts a 3 GiB tmpfs over <deployment>/data by default (FIXTURENET_DATA_SIZE), per commit d51ae19d.\nWhere does this apply? (e.g. gateway route, mobile screen, CLI verb) stack/scripts/fixturenet-new (cleanup_stale_deployments), scripts/check_governance_stack.sh (teardown_fixturenet), stack/scripts/verify-r2-deposit-conserves.py, .worktrees/worker-arn-ac6/stack/scripts/verify-r2-payout.py, .worktrees/worker-arn-920/stack/scripts/verify-r2-reclaim-conserves.py",
+  "restatement": "Each fixturenet keeps its chain data on a 3 GiB tmpfs mounted over <deployment>/data (FIXTURENET_DATA_SIZE, commit d51ae19d). The tmpfs mount must stop existing once no live deployment uses it, so the host's RAM returns to the pool. Today four teardown paths each unmount differently: fixturenet-new's cleanup_stale_deployments, check_governance_stack.sh's teardown_fixturenet (umount -l), verify-r2-deposit-conserves.py (sudo umount ... || true), and worker-branch verify scripts with no umount at all. Also, cleanup_stale_deployments only matches deployments whose name starts with the new deployment's name, so epoch-and-hex names (r2-payout-*, r2-reclaim-*) are never reclaimed. On 2026-10-25, 17 such orphan mounts held 17.2 GiB on kelce. The requirement: one shared teardown routine unmounts the data tmpfs and removes the deployment directory, and fails loudly if the mount survives. Every committed teardown path uses that routine and so leaves no mount behind. fixturenet-new also reclaims every orphan tmpfs mount under ~/deployments, whatever its name, when no running container and no process (fuser) uses it. A mount that a live process uses stays.",
+  "restatement_clauses": [
+    {
+      "id": "c1",
+      "text": "After the shared fixturenet teardown routine runs on a deployment, `findmnt -t tmpfs` lists no mount at <deployment>/data, and the deployment directory no longer exists."
+    },
+    {
+      "id": "c2",
+      "text": "When the teardown routine cannot remove the tmpfs mount at <deployment>/data (for example, a live process holds it), the routine exits non-zero and prints an error that names the mount path. It does not silently continue."
+    },
+    {
+      "id": "c3",
+      "text": "fixturenet-new's stale cleanup unmounts and removes every tmpfs mount under ~/deployments whose deployment has no running container and no process that fuser finds, whatever the deployment name (including names such as r2-payout-<epoch>-<hex> that never repeat)."
+    },
+    {
+      "id": "c4",
+      "text": "fixturenet-new's stale cleanup keeps a tmpfs mount under ~/deployments that a live process uses: the mount and its deployment directory still exist after the cleanup."
+    },
+    {
+      "id": "c5",
+      "text": "After teardown_fixturenet in scripts/check_governance_stack.sh runs on a deployment, `findmnt -t tmpfs` lists no mount at <deployment>/data, and the deployment directory no longer exists."
+    },
+    {
+      "id": "c6",
+      "text": "After the exit teardown of stack/scripts/verify-r2-deposit-conserves.py runs on a deployment, `findmnt -t tmpfs` lists no mount at <deployment>/data, and the deployment directory no longer exists."
+    }
+  ],
+  "goal": "No fixturenet tmpfs data mount outlives its deployment, so a dead deployment never holds host RAM.",
+  "acceptance_criteria": [
+    "Mount a small tmpfs over the data folder of a throwaway deployment under ~/deployments, run the shared teardown on it, then look for the mount and the folder. Neither is present, and the teardown succeeded.",
+    "Mount a small tmpfs over a throwaway deployment's data folder, keep a process sitting inside it, and run the shared teardown. The teardown reports failure, and its error message names the mount path.",
+    "Create an abandoned deployment named like r2-payout-<epoch>-<hex> with a tmpfs data mount, no container, and no process using it. Run fixturenet-new's stale cleanup for a different deployment name. Afterwards the abandoned mount and its folder are gone.",
+    "Create a deployment with a tmpfs data mount and keep a process sitting inside it. Run fixturenet-new's stale cleanup. Afterwards the mount and its folder are still present.",
+    "Mount a small tmpfs over a throwaway deployment's data folder, then run the governance-stack check's teardown on it. Afterwards the mount and the folder are gone.",
+    "Mount a small tmpfs over a throwaway deployment's data folder, then run the deposit-conservation check's exit teardown on it. Afterwards the mount and the folder are gone."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Mount a small tmpfs over the data folder of a throwaway deployment under ~/deployments, run the shared teardown on it, then look for the mount and the folder. Neither is present, and the teardown succeeded."
+    },
+    {
+      "id": "c2",
+      "text": "Mount a small tmpfs over a throwaway deployment's data folder, keep a process sitting inside it, and run the shared teardown. The teardown reports failure, and its error message names the mount path."
+    },
+    {
+      "id": "c3",
+      "text": "Create an abandoned deployment named like r2-payout-<epoch>-<hex> with a tmpfs data mount, no container, and no process using it. Run fixturenet-new's stale cleanup for a different deployment name. Afterwards the abandoned mount and its folder are gone."
+    },
+    {
+      "id": "c4",
+      "text": "Create a deployment with a tmpfs data mount and keep a process sitting inside it. Run fixturenet-new's stale cleanup. Afterwards the mount and its folder are still present."
+    },
+    {
+      "id": "c5",
+      "text": "Mount a small tmpfs over a throwaway deployment's data folder, then run the governance-stack check's teardown on it. Afterwards the mount and the folder are gone."
+    },
+    {
+      "id": "c6",
+      "text": "Mount a small tmpfs over a throwaway deployment's data folder, then run the deposit-conservation check's exit teardown on it. Afterwards the mount and the folder are gone."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "description": "Mount a small tmpfs over the data folder of a throwaway deployment under ~/deployments, run the shared teardown on it, then look for the mount and the folder. Neither is present, and the teardown succeeded.",
+      "proves": "The shared teardown releases the RAM disk and removes the deployment folder (c1).",
+      "restatement_clause_id": "c1",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-tmpfs-teardown.py",
+        "args": [
+          "--case",
+          "teardown-clean"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "teardown_exit_code",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "mount_present_after",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "deployment_dir_present_after",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c1"
+    },
+    {
+      "description": "Mount a small tmpfs over a throwaway deployment's data folder, keep a process sitting inside it, and run the shared teardown. The teardown reports failure, and its error message names the mount path.",
+      "proves": "A teardown that cannot release the RAM disk fails loudly instead of hiding the leak (c2).",
+      "restatement_clause_id": "c2",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-tmpfs-teardown.py",
+        "args": [
+          "--case",
+          "teardown-busy"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "teardown_exit_code",
+          "op": "ne",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "stderr_names_mount_path",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c2"
+    },
+    {
+      "description": "Create an abandoned deployment named like r2-payout-<epoch>-<hex> with a tmpfs data mount, no container, and no process using it. Run fixturenet-new's stale cleanup for a different deployment name. Afterwards the abandoned mount and its folder are gone.",
+      "proves": "The stale cleanup reclaims orphan RAM disks whose names never repeat (c3).",
+      "restatement_clause_id": "c3",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-tmpfs-teardown.py",
+        "args": [
+          "--case",
+          "reap-orphan-unique-name"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "orphan_mount_present_after",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "orphan_dir_present_after",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c3"
+    },
+    {
+      "description": "Create a deployment with a tmpfs data mount and keep a process sitting inside it. Run fixturenet-new's stale cleanup. Afterwards the mount and its folder are still present.",
+      "proves": "The stale cleanup never takes a RAM disk away from a deployment that is still in use (c4).",
+      "restatement_clause_id": "c4",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-tmpfs-teardown.py",
+        "args": [
+          "--case",
+          "reap-keeps-live"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "live_mount_present_after",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "observe": "stdout_json",
+          "field": "live_dir_present_after",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 300,
+      "clause_id": "c4"
+    },
+    {
+      "description": "Mount a small tmpfs over a throwaway deployment's data folder, then run the governance-stack check's teardown on it. Afterwards the mount and the folder are gone.",
+      "proves": "The governance-stack check's teardown leaves no RAM disk behind (c5).",
+      "restatement_clause_id": "c5",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-tmpfs-teardown.py",
+        "args": [
+          "--case",
+          "governance-teardown"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "mount_present_after",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "deployment_dir_present_after",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c5"
+    },
+    {
+      "description": "Mount a small tmpfs over a throwaway deployment's data folder, then run the deposit-conservation check's exit teardown on it. Afterwards the mount and the folder are gone.",
+      "proves": "The deposit-conservation check's teardown leaves no RAM disk behind (c6).",
+      "restatement_clause_id": "c6",
+      "type": "behavior",
+      "when": {
+        "interpreter": "python3",
+        "script": "scripts/check-fixturenet-tmpfs-teardown.py",
+        "args": [
+          "--case",
+          "r2-deposit-teardown"
+        ],
+        "stdin": ""
+      },
+      "then": [
+        {
+          "observe": "exit_code",
+          "field": "",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "observe": "stdout_json",
+          "field": "mount_present_after",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "observe": "stdout_json",
+          "field": "deployment_dir_present_after",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "max_runs": 1,
+      "timeout_seconds": 180,
+      "clause_id": "c6"
+    }
+  ],
+  "criticality": "marginal",
+  "verification_level": "bounded_model_check",
+  "declared_new_entrypoints": [
+    "scripts/check-fixturenet-tmpfs-teardown.py"
+  ]
+}
