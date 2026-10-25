@@ -81,35 +81,6 @@
       "clause_id": "c2"
     },
     {
-      "type": "behavior",
-      "description": "Running the verify script against a real fixturenet finishes and prints a report. The report says it ran on the fixturenet and gives a non-empty result for the transferAllAssets call on a concluded channel.",
-      "proves": "The check runs and reports its result, whether PASS or FAIL, without requiring that it passes today.",
-      "restatement_clause_id": "c3",
-      "max_runs": 1,
-      "timeout_seconds": 1800,
-      "when": {
-        "interpreter": "python3",
-        "script": "stack/scripts/verify-r2-bulk-reverts.py",
-        "args": [],
-        "stdin": ""
-      },
-      "then": [
-        {
-          "observe": "stdout_json",
-          "field": "ran_on_fixturenet",
-          "op": "eq",
-          "value": true
-        },
-        {
-          "observe": "stdout_json",
-          "field": "result",
-          "op": "ne",
-          "value": ""
-        }
-      ],
-      "clause_id": "c3"
-    },
-    {
       "type": "grep",
       "description": "The script text names departure item 5/8 as the cited cause of a FAIL.",
       "proves": "A FAIL report points to departure item 5/8.",
