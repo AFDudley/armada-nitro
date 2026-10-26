@@ -98,26 +98,16 @@ def run_job(dep: Path, env: dict[str, str]) -> dict[str, object]:
 
 
 def teardown(dep: Path, env: dict[str, str]) -> None:
-    """Guarded teardown on exit (docs/tasks/R2-fixturenet-defect-scenarios.md, "Scenarios"):
-    laconic-so deployment stop --delete-volumes, sudo umount the fixturenet's RAM disk
-    (fixturenet-new's own pattern -- a bare umount always fails silently on this host), then a
-    guarded rm -rf."""
+    """Guarded teardown on exit (arn-eb0): the shared fixturenet-teardown routine unmounts the
+    tmpfs RAM disk, stops the deployment (laconic-so deployment stop --delete-volumes), and
+    removes the directory -- a held mount fails loudly instead of leaking the RAM disk."""
     try:
-        run(
-            [resolve_laconic_so(), "deployment", "--dir", str(dep), "stop", "--delete-volumes"],
+        subprocess.run(
+            ["bash", str(REPO_ROOT / "stack/scripts/fixturenet-teardown"), str(dep)],
             env=env,
-            check=False,
         )
     except Exception as exc:  # pragma: no cover -- best-effort teardown
-        log(f"teardown stop failed (continuing): {exc}")
-    run(["sudo", "umount", str(dep / "data")], env=env, check=False)
-    deployments_root = Path(os.environ["HOME"]) / "deployments"
-    try:
-        dep_resolved = dep.resolve()
-        if dep_resolved.is_relative_to(deployments_root) and dep_resolved != deployments_root:
-            shutil.rmtree(dep_resolved, ignore_errors=True)
-    except Exception as exc:  # pragma: no cover -- best-effort teardown
-        log(f"teardown rm -rf failed (continuing): {exc}")
+        log(f"teardown failed (continuing): {exc}")
 
 
 def main() -> int:

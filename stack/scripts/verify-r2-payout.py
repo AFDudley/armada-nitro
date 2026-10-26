@@ -107,28 +107,21 @@ def run_payout_job(dep: Path, env: dict[str, str]) -> dict[str, object]:
 
 
 def teardown(dep: Path, env: dict[str, str]) -> None:
-    """Guarded teardown on exit (docs/tasks/R2-fixturenet-defect-scenarios.md, "Scenarios"):
-    `laconic-so deployment stop --delete-volumes`, then a guarded `rm -rf` of the deployment
-    directory. Never removes anything unless `dep` is a real, non-empty path under
-    ~/deployments, mirroring the brief's `: "${DEP:?}"` guard."""
+    """Guarded teardown on exit (arn-eb0): the shared fixturenet-teardown routine unmounts the
+    tmpfs RAM disk, stops the deployment (laconic-so stop --delete-volumes), and removes the
+    directory -- matching verify-r2-deposit-conserves.py's own pattern. Never removes anything
+    unless `dep` is a real, non-empty path under ~/deployments, mirroring the brief's
+    `: "${DEP:?}"` guard."""
     if not dep or str(dep) in ("", "/", str(Path(os.environ.get("HOME", "/")))):
         log(f"refusing to tear down suspicious deployment path: {dep!r}")
         return
     try:
-        run(
-            [resolve_laconic_so(), "deployment", "--dir", str(dep), "stop", "--delete-volumes"],
+        subprocess.run(
+            ["bash", str(REPO_ROOT / "stack/scripts/fixturenet-teardown"), str(dep)],
             env=env,
-            check=False,
         )
     except Exception as exc:  # pragma: no cover -- best-effort teardown
-        log(f"teardown stop failed (continuing): {exc}")
-    deployments_root = Path(os.environ["HOME"]) / "deployments"
-    try:
-        dep_resolved = dep.resolve()
-        if dep_resolved.is_relative_to(deployments_root) and dep_resolved != deployments_root:
-            shutil.rmtree(dep_resolved, ignore_errors=True)
-    except Exception as exc:  # pragma: no cover -- best-effort teardown
-        log(f"teardown rm -rf failed (continuing): {exc}")
+        log(f"teardown failed (continuing): {exc}")
 
 
 def main() -> int:

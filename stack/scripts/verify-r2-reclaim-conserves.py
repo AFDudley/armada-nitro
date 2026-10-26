@@ -98,24 +98,19 @@ def run_reclaim_job(dep: Path, env: dict[str, str]) -> dict[str, object]:
 
 
 def teardown(dep: Path, env: dict[str, str]) -> None:
-    """Guarded teardown (docs/tasks/R2-fixturenet-defect-scenarios.md: "a guarded
-    `laconic-so deployment stop --delete-volumes` then a guarded `rm -rf`"). sudo umount the
-    RAM disk first -- fixturenet-new's own pattern, a bare umount always fails silently on this
-    host."""
+    """Guarded teardown on exit (arn-eb0): the shared fixturenet-teardown routine unmounts the
+    tmpfs RAM disk, stops the deployment (laconic-so stop --delete-volumes), and removes the
+    directory -- matching verify-r2-deposit-conserves.py's own pattern."""
     dep_str = str(dep)
     if not dep_str or dep_str in ("/", str(Path.home())):
         return
     try:
-        run(
-            [resolve_laconic_so(), "deployment", "--dir", dep_str, "stop", "--delete-volumes"],
+        subprocess.run(
+            ["bash", str(REPO_ROOT / "stack/scripts/fixturenet-teardown"), dep_str],
             env=env,
-            check=False,
         )
     except Exception as exc:  # noqa: BLE001 -- best-effort teardown, never masks the real result
-        log(f"teardown: stop failed (continuing): {exc}")
-    run(["sudo", "umount", str(dep / "data")], env=env, check=False)
-    if dep.exists() and dep.is_dir() and dep != Path("/"):
-        shutil.rmtree(dep, ignore_errors=True)
+        log(f"teardown failed (continuing): {exc}")
 
 
 def main() -> int:
