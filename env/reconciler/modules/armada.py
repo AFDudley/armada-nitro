@@ -37,6 +37,7 @@ from typing import Any
 import hashlib
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -46,6 +47,14 @@ from reconciler.modules import _circuits, _wallet
 _ARMADA_POC = Path("/src/armada-poc")
 _HUB_POOL_DEPLOYMENT_FILE = _ARMADA_POC / "deployments" / "privacy-pool-hub.json"
 _HUB_CCTP_DEPLOYMENT_FILE = _ARMADA_POC / "deployments" / "hub-v3.json"
+
+# arn-831: deploy_privacy_pool.ts deploys the pool's own real, functional Poseidon
+# contracts with a plain CREATE (lib/poseidon_bytecode.json's bytecode as init code) and
+# prints each address (never writes them to privacy-pool-hub.json). This module reads
+# them back from the script's own stdout so armada_nitro can link the adjudicator's
+# PoolSpend against the SAME real deployment, instead of forge auto-deploying the
+# compile-time revert stub PoseidonLibs.sol carries for ABI purposes only.
+_POSEIDON_ADDR_RE = re.compile(r"^\s*(PoseidonT3|PoseidonT4):\s*(0x[0-9a-fA-F]{40})\s*$", re.MULTILINE)
 
 # anvil account 7 (test test ... junk, index 7): the fixturenet's treasury (Deploy env
 # TREASURY_ADDRESS), per docs/tasks/E6-armada-and-nitro.md.
@@ -175,7 +184,13 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
 
     # See module docstring point 1: writes deployments/hub-v3.json; sends no transactions.
     _run_hardhat("scripts/deploy_cctp_sepolia.ts", env)
-    _run_hardhat("scripts/deploy_privacy_pool.ts", env)
+    pool_stdout = _run_hardhat("scripts/deploy_privacy_pool.ts", env)
+    poseidon_addrs = dict(_POSEIDON_ADDR_RE.findall(pool_stdout))
+    if "PoseidonT3" not in poseidon_addrs or "PoseidonT4" not in poseidon_addrs:
+        raise ctx.fail(
+            "deploy_privacy_pool.ts did not print both PoseidonT3 and PoseidonT4 "
+            f"addresses on stdout; found {sorted(poseidon_addrs)}"
+        )
 
     gas_used, _ = _gas_used_since(ctx, start_block)
 
@@ -199,6 +214,8 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
         "usdc": deployed_usdc,
         "deployBlock": deployment["deployBlock"],
         "artifactsBaseUrl": _ARTIFACTS_BASE_URL,
+        "poseidonT3": poseidon_addrs["PoseidonT3"],
+        "poseidonT4": poseidon_addrs["PoseidonT4"],
     }
     ctx.manifest.setdefault("gasUsed", {})
     ctx.manifest["gasUsed"]["armada"] = ctx.manifest["gasUsed"].get("armada", 0) + gas_used

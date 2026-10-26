@@ -33,6 +33,15 @@ def _read_group_key(ctx: Context) -> tuple[str, str]:
 _ARMADA_NITRO_ROOT = Path(__file__).resolve().parents[3]
 _SCRIPT_TARGET = "script/Deploy.s.sol:Deploy"
 
+# arn-831: same path foundry.toml's default-profile `libraries` entry names. The
+# production profile leaves PoseidonT3/PoseidonT4 unlinked (foundry.toml's
+# [profile.production] libraries = []) so this module can link them at deploy time to
+# the SAME real, functional Poseidon contracts the armada module's own
+# deploy_privacy_pool.ts already deployed for the pool -- not forge's auto-deployed
+# compile-time stub (PoseidonLibs.sol's library bodies are `revert(...)`-only, kept
+# just so the source tree compiles against the real library's ABI).
+_POSEIDON_LIB_PATH = "lib/armada-poc/contracts/privacy-pool/types/PoseidonLibs.sol"
+
 
 def _uint(cast_output: str) -> int:
     # `cast call ...(uintN)` pretty-prints large values as "123 [1.23e5]".
@@ -69,6 +78,17 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     if not armada or not armada.get("pool"):
         raise ctx.fail("armada module has not been reconciled; run it before armada_nitro (MODULE_ORDER)")
 
+    # arn-831: link PoolSpend against the SAME real Poseidon contracts the armada module
+    # deployed for the pool, never forge's auto-deployed compile-time stub.
+    poseidon_t3 = armada.get("poseidonT3")
+    poseidon_t4 = armada.get("poseidonT4")
+    if not poseidon_t3 or not poseidon_t4:
+        raise ctx.fail(
+            "armada manifest has no poseidonT3/poseidonT4 address (adopt mode never "
+            "records one); armada_nitro's production deploy needs a real Poseidon link "
+            "target, not forge's auto-deployed compile-time stub"
+        )
+
     # arn-3d8: the adjudicator only funds assets on its configured list. The fixturenet's hub
     # list is USDC, WETH, wstETH, waUSDC, each already recorded by an earlier module
     # (MODULE_ORDER: weth, usdc, cctp, aave, lido, armada all run before armada_nitro).
@@ -103,10 +123,39 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
             "HUB_GROUP_KEY_Y": group_key_y,
             "HUB_REVOCATION_DELAY": str(params["revocationDelay"]),
             "ARMADA_ASSETS": ",".join(configured_assets),
+            # arn-831: compile under the production foundry profile (foundry.toml
+            # [profile.production] libraries = []), then supply the real link targets on
+            # the command line below so PoolSpend links to the pool's own real Poseidon
+            # deployment instead of forge auto-deploying PoseidonLibs.sol's compile-time
+            # revert stub.
+            "FOUNDRY_PROFILE": "production",
         },
-        extra_args=("--private-keys", ctx.deployer_key),
+        extra_args=(
+            "--libraries",
+            f"{_POSEIDON_LIB_PATH}:PoseidonT3:{poseidon_t3}",
+            "--libraries",
+            f"{_POSEIDON_LIB_PATH}:PoseidonT4:{poseidon_t4}",
+            "--private-keys",
+            ctx.deployer_key,
+        ),
     )
     gas_used = _forge.sum_gas_used(receipts)
+
+    # arn-831: confirm the --libraries flags above actually took: forge must NOT have
+    # auto-deployed PoseidonT3/PoseidonT4 itself (that would mean PoolSpend linked
+    # against PoseidonLibs.sol's own revert-only stub body, not the pool's real
+    # deployment -- the exact defect this module's fix removes).
+    for lib_name in ("PoseidonT3", "PoseidonT4"):
+        try:
+            stub_address = _forge.created_contract_address(receipts, lib_name)
+        except KeyError:
+            continue
+        raise ctx.fail(
+            f"forge auto-deployed {lib_name} at {stub_address} during broadcast: the "
+            "--libraries pre-link did not take effect, so PoolSpend would link against "
+            "PoseidonLibs.sol's compile-time revert stub, not the pool's real Poseidon "
+            "deployment"
+        )
 
     # Deploy.s.sol's `new X()` and `vm.deployCode(...)` (for HubCustodian) are each a
     # top-level broadcast CREATE, so all three are plain created_contract_address lookups

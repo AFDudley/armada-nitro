@@ -31,5 +31,20 @@ libraries = [
     "lib/armada-poc/contracts/privacy-pool/types/PoseidonLibs.sol:PoseidonT4:0x00000000000000000000000000000000000E0504",
 ]
 
+# arn-831: the production fixturenet deploy (env/reconciler/modules/armada_nitro.py,
+# FOUNDRY_PROFILE=production) compiles under this profile instead. Leaving `libraries` empty
+# here means PoseidonT3/PoseidonT4 compile unlinked; armada_nitro.py's own forge invocation
+# then supplies the real link target on the command line (`--libraries ...:PoseidonT3:<addr>`,
+# `...:PoseidonT4:<addr>`), reading the address from the SAME real, functional Poseidon
+# deployment armada.py's own privacy-pool deploy already made for the pool
+# (lib/poseidon_bytecode.json's bytecode, sent as a plain CREATE). Without that explicit
+# --libraries flag, `forge script --broadcast` would instead auto-deploy PoseidonT3/PoseidonT4
+# from THIS file's own source -- a compile-time revert stub, never a working Poseidon
+# implementation -- and link PoolSpend.sol to that; armada_nitro.py's own post-broadcast check
+# fails the reconcile if that ever happens. The fixed addresses above stay for `forge test` and
+# the local-anvil scripts (LocalArmada.s.sol and friends), which etch bytecode there for speed.
+[profile.production]
+libraries = []
+
 [fmt]
 line_length = 100
