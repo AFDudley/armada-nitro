@@ -88,15 +88,40 @@ if [ -n "${build_command_args:-}" ]; then read -ra extra <<< "${build_command_ar
 # ':local' tag (the base-snapshot cache key, base-key.py reads their image IDs);
 # the final image is tagged with the commit sha.
 
-# The toolchain:
+# The toolchain (every other stage FROMs it, so it must finish first):
 docker build --target toolchain -t cerc/armada-nitro-env-toolchain:local "${extra[@]}" "${build_args[@]}" -f "$DOCKERFILE" < "$CTX_TAR" -
-# Each source stage (one per env/sources.lock.json sources[] entry).
+
+# Each source stage, the circuits stage and the frost-signer stage FROM
+# toolchain only -- not from each other -- so nothing serializes them. A prior
+# version built them one `docker build` invocation at a time; on a cold cache
+# that paid the sum of every stage's install+compile time instead of the
+# slowest one. BuildKit's "default" docker-driver instance accepts concurrent
+# build requests, so run them in parallel and let dockerd schedule them across
+# the host's cores, same images and tags as before, just not serialized. Each
+# stage's own output is piped through its own label (live, line-buffered) so
+# a failure is still diagnosable and the operator still sees progress.
+build_stage() {  # build_stage <target> <tag> <label>
+  local target="$1" tag="$2" label="$3"
+  docker build --target "$target" -t "$tag" "${extra[@]}" "${build_args[@]}" -f "$DOCKERFILE" < "$CTX_TAR" - 2>&1 \
+    | sed -u "s/^/[${label}] /"
+  return "${PIPESTATUS[0]}"
+}
+
+stage_labels=()
+stage_pids=()
 while read -r name; do
-  docker build --target "src-${name}" -t "cerc/armada-nitro-env-src-${name}:local" "${extra[@]}" "${build_args[@]}" -f "$DOCKERFILE" < "$CTX_TAR" -
+  build_stage "src-${name}" "cerc/armada-nitro-env-src-${name}:local" "src-${name}" &
+  stage_labels+=("src-${name}"); stage_pids+=($!)
 done < <(jq -r '.sources[].name' "$LOCK")
-# The circuits stage.
-docker build --target circuits -t cerc/armada-nitro-env-circuits:local "${extra[@]}" "${build_args[@]}" -f "$DOCKERFILE" < "$CTX_TAR" -
-# The frost-signer stage (arn-1be).
-docker build --target frost-signer -t cerc/armada-nitro-env-frost-signer:local "${extra[@]}" "${build_args[@]}" -f "$DOCKERFILE" < "$CTX_TAR" -
+build_stage circuits cerc/armada-nitro-env-circuits:local circuits &
+stage_labels+=(circuits); stage_pids+=($!)
+build_stage frost-signer cerc/armada-nitro-env-frost-signer:local frost-signer &
+stage_labels+=(frost-signer); stage_pids+=($!)
+
+fail=0
+for i in "${!stage_pids[@]}"; do
+  wait "${stage_pids[$i]}" || { echo "cerc-armada-nitro-env/build.sh: stage '${stage_labels[$i]}' failed" >&2; fail=1; }
+done
+[ "$fail" -eq 0 ] || exit 1
 # The final image, tagged with the commit sha.
 docker build -t "cerc/armada-nitro-env:${IMAGE_TAG}" "${extra[@]}" "${build_args[@]}" -f "$DOCKERFILE" < "$CTX_TAR" -
