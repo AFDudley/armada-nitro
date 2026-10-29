@@ -73,4 +73,4 @@ discrimination:
       - ".pre-commit-config.yaml"
     exit_code_before: 0
     exit_code_after: 1
-    reverted: true
+    reverted: restored_and_verified
