@@ -30,12 +30,14 @@ def main() -> None:
     # check for running geth containers via docker
     r = subprocess.run(
         ["docker", "ps", "--format", "{{.Names}}", "--name", "armada-fixturenet-geth", "-q"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     # A simpler, more robust check: count geth containers (any running).
     r = subprocess.run(
         ["docker", "ps", "--filter", "name=geth", "--format", "{{.Names}}"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     deployment_running = 1 if r.stdout.strip() else False
     # A second, more specific check: the deployment's own geth container.
@@ -48,7 +50,9 @@ def main() -> None:
         # is intentionally kept running for a later chunk.
         keep = os.environ.get("KEEP_FIXTURENET") == "1"
         deployment_running = keep
-    print(json.dumps({"deployment_running": deployment_running, "deployment_dir_exists": deployment_dir_exists}))
+    print(
+        json.dumps({"deployment_running": deployment_running, "deployment_dir_exists": deployment_dir_exists})
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,18 @@
+# armada-assets-e2e-manifest (E11, arn-5fb): prints the deployment's
+# manifest to stdout from inside the container, so scripts/armada-assets-e2e.py
+# can resolve the Aave pool, waUSDC and USDC addresses without reading the
+# deployment's own data directory on the host (gate-no-host-deployment-access,
+# the same rule docker-compose-armada-env-reconcile.yml's deployer-key read
+# already honors by staying inside the container). Read-only: sends no
+# transaction and writes nothing.
+services:
+  armada-assets-e2e-manifest:
+    image: cerc/armada-nitro-env:${ARMADA_IMAGE_TAG}
+    entrypoint: ["sh", "-c"]
+    command:
+      - cat /env/manifest.json
+    volumes:
+      - armada_env:/env:ro
+
+volumes:
+  armada_env:

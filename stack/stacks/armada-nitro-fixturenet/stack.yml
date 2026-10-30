@@ -21,3 +21,4 @@ jobs:
   - R2-bulk-reverts
   - R2-payout
   - R2-reclaim-conserves
+  - armada-assets-e2e-manifest
