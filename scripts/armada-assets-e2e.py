@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""armada-assets-e2e gate (arn-5fb, E11).
+"""armada-assets-e2e gate (arn-273, E11).
 
 Stands up the Aave fixturenet from the warm snapshot (arn-d5a's saved
 base-layer snapshot), runs the Aave yield scenario and the redeem scenario
@@ -8,18 +8,23 @@ on-chain, and tears down the fixturenet on exit.
 Yield scenario (E11 scenario 1): the hub (anvil account 1) deposits USDC into
 the waUSDC ERC-4626 vault; a second account (anvil account 2) supplies USDC
 to the Aave pool and borrows USDC to raise utilization; time advances at least
-60 seconds of blocks; then both waUSDC.convertToAssets(1e6) and the Aave USDC
-liquidityIndex have increased.
+60 seconds of blocks (c2); then both pool.getReserveNormalizedIncome(usdc)
+and vault.convertToAssets(vault.balanceOf(hub)) have increased (c2, c3). A
+fixed-share convertToAssets probe and the raw stored liquidityIndex field do
+not move within a wall-clock-feasible wait at this reserve's real interest
+rate (arn-273's holds-now); the live index and the hub's full position do.
 
 Redeem scenario (E11 scenario 4): the hub redeems its waUSDC for USDC; the
-hub's USDC balance grows by at least the yield scenario principal.
+hub's USDC balance grows by at least the yield scenario principal (c5).
 
 Running with --skip-borrow skips the borrow step so the yield check fails
-(c3). The gate prints exactly two evidence lines (one per scenario) and a
-final JSON line carrying every spec'd field. It never configures the Lido
-oracle (c5) and, unless KEEP_FIXTURENET=1, tears down the running fixturenet
-and removes the deployment directory on exit via atexit, leaving nothing
-running (c6).
+(c4). The gate itself never asserts pass/fail on the yield check -- it
+only reports the raw before/after numbers; scripts/observe-armada-assets-gate.py
+wraps it and makes that assertion. The gate prints exactly two evidence
+lines (one per scenario, c6) and a final JSON line carrying every spec'd
+field. It never configures the Lido oracle (c7) and, unless
+KEEP_FIXTURENET=1, tears down the running fixturenet and removes the
+deployment directory on exit via atexit, leaving nothing running (c8).
 
 This script never stands up the fixturenet, reads its state directory or
 tears it down itself: it delegates to the arn-d5a compose job
@@ -27,7 +32,7 @@ tears it down itself: it delegates to the arn-d5a compose job
 run-job that prints the deployment manifest from inside a container
 (docker-compose-armada-assets-e2e-manifest.yml), and a teardown helper beside
 run.sh (teardown.sh). Those three pieces hold the host access this gate
-itself must not use (gate-no-host-deployment-access pre-commit hook).
+itself must not use (gate-no-host-deployment-access pre-commit hook, c9).
 
 Run: python3 scripts/armada-assets-e2e.py [--skip-borrow]
 """
@@ -68,11 +73,11 @@ SECOND_ADDR = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"  # account 2
 # scenario amounts (USDC, 6 decimals)
 PRINCIPAL = 100_000_000  # 100 USDC the hub deposits into waUSDC
 HUB_FUND = 200_000_000  # deployer mints 200 USDC to the hub (2x principal)
-SECOND_FUND = 100_000_000  # deployer mints 100 USDC to the second account
-SECOND_SUPPLY = 100_000_000  # second account supplies 100 USDC
-SECOND_BORROW = 50_000_000  # second account borrows 50 USDC (50% utilization)
+SECOND_FUND = 10_000_000_000  # deployer mints 10,000 USDC to the second account
+SECOND_SUPPLY = 10_000_000_000  # second account supplies 10,000 USDC
+SECOND_BORROW = 7_000_000_000  # second account borrows 7,000 USDC (70% of its own collateral, this reserve's LTV ceiling is 75%)
 
-WAIT_SECONDS = 65  # advance at least 60 s of blocks (c1)
+WAIT_SECONDS = 65  # advance at least 60 s of blocks (c2)
 
 
 # ---- helpers ---------------------------------------------------------------
@@ -161,7 +166,7 @@ def wait_for_blocks(rpc: str) -> None:
 def read_manifest() -> dict[str, Any]:
     """Read the deployment's manifest via the armada-assets-e2e-manifest
     run-job, which prints it from inside a container -- this script never
-    reads the deployment's data directory itself."""
+    reads the deployment's state directory on the host itself."""
     so = laconic_so()
     env = dict(os.environ)
     env["ARMADA_IMAGE_TAG"] = repo_head()
@@ -216,17 +221,13 @@ def wausdc_convert_to_assets(rpc: str, vault: str, shares: int) -> int:
     return parse_cast_int(out)
 
 
-def aave_liquidity_index(rpc: str, pool: str, asset: str) -> int:
-    # getReserveData(address) prints one field per line, not a single
-    # comma-separated line (env/reconciler/modules/aave.py's _reserve_data
-    # relies on the same splitlines() shape): line 0 is the nested
-    # ReserveConfigurationMap tuple, line 1 is liquidityIndex (c1, c2).
-    sig = (
-        "getReserveData(address)((uint256),uint128,uint128,uint128,uint128,uint128,"
-        "uint40,uint16,address,address,address,address,uint128,uint128,uint128)"
-    )
-    lines = cast_call(rpc, pool, sig, asset).splitlines()
-    return parse_cast_int(lines[1])
+def aave_normalized_income(rpc: str, pool: str, asset: str) -> int:
+    # The live, time-accruing index (as opposed to getReserveData's stored
+    # liquidityIndex field, which only updates on a transaction that touches
+    # the reserve -- host-measured flat across a 180 s wait with no such
+    # transaction; arn-273 c2).
+    out = cast_call(rpc, pool, "getReserveNormalizedIncome(address)(uint256)", asset)
+    return parse_cast_int(out)
 
 
 # ---- scenarios -------------------------------------------------------------
@@ -242,6 +243,7 @@ def run_yield_scenario(rpc: str, manifest: dict[str, Any], skip_borrow: bool) ->
     # the hub approves the vault and deposits the principal into waUSDC.
     cast_send(rpc, HUB_KEY, usdc, "approve(address,uint256)", vault, str(PRINCIPAL))
     cast_send(rpc, HUB_KEY, vault, "deposit(uint256,address)", str(PRINCIPAL), HUB_ADDR)
+    hub_shares = balance_of(rpc, vault, HUB_ADDR)
     # the second account (account 2) supplies USDC to the pool and borrows to raise utilization.
     cast_send(rpc, SECOND_KEY, usdc, "approve(address,uint256)", pool, str(SECOND_SUPPLY))
     cast_send(
@@ -266,25 +268,23 @@ def run_yield_scenario(rpc: str, manifest: dict[str, Any], skip_borrow: bool) ->
             "0",
             SECOND_ADDR,
         )
-    # read before / wait / read after
-    convert_before = wausdc_convert_to_assets(rpc, vault, 1_000_000)
-    liq_before = aave_liquidity_index(rpc, pool, usdc)
+    # read before / wait / read after -- pool.getReserveNormalizedIncome(usdc)
+    # and vault.convertToAssets(vault.balanceOf(hub)), not a fixed 1e6-share
+    # probe (arn-273, c2, c3: a fixed-share probe does not move within a
+    # wall-clock-feasible wait at this reserve's real interest rate).
+    income_before = aave_normalized_income(rpc, pool, usdc)
+    vault_assets_before = wausdc_convert_to_assets(rpc, vault, hub_shares)
     t0 = time.time()
     time.sleep(WAIT_SECONDS)
     advanced_seconds = time.time() - t0
-    convert_after = wausdc_convert_to_assets(rpc, vault, 1_000_000)
-    liq_after = aave_liquidity_index(rpc, pool, usdc)
-    convert_increased = convert_after > convert_before
-    liq_increased = liq_after > liq_before
+    income_after = aave_normalized_income(rpc, pool, usdc)
+    vault_assets_after = wausdc_convert_to_assets(rpc, vault, hub_shares)
     return {
-        "convert_before": convert_before,
-        "convert_after": convert_after,
-        "liq_before": liq_before,
-        "liq_after": liq_after,
-        "scenario1_convert_to_assets_increased": convert_increased,
-        "scenario1_liquidity_index_increased": liq_increased,
-        "scenario1_blocks_advanced_seconds": int(advanced_seconds),
-        "yield_check_passed": convert_increased and liq_increased,
+        "income_before": income_before,
+        "income_after": income_after,
+        "vault_assets_before": vault_assets_before,
+        "vault_assets_after": vault_assets_after,
+        "wait_seconds": int(advanced_seconds),
     }
 
 
@@ -297,9 +297,7 @@ def run_redeem_scenario(rpc: str, manifest: dict[str, Any]) -> dict[str, Any]:
     shares = balance_of(rpc, vault, HUB_ADDR)
     cast_send(rpc, HUB_KEY, vault, "redeem(uint256,address,address)", str(shares), HUB_ADDR, HUB_ADDR)
     bal_after = balance_of(rpc, usdc, HUB_ADDR)
-    redeem_ge_principal = bal_after >= bal_before + PRINCIPAL
     return {
-        "scenario4_redeem_ge_principal": redeem_ge_principal,
         "bal_before": bal_before,
         "bal_after": bal_after,
     }
@@ -310,13 +308,13 @@ def run_redeem_scenario(rpc: str, manifest: dict[str, Any]) -> dict[str, Any]:
 
 def teardown() -> None:
     """Tear down the running fixturenet via the teardown helper beside
-    run.sh -- this gate script never touches the deployment's data directory
-    itself. Honors KEEP_FIXTURENET=1."""
+    run.sh -- this gate script never touches the deployment's state
+    directory on the host itself. Honors KEEP_FIXTURENET=1."""
     run(["bash", str(TEARDOWN_SH)], check=False)
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="armada-assets-e2e gate (arn-5fb)")
+    ap = argparse.ArgumentParser(description="armada-assets-e2e gate (arn-273)")
     ap.add_argument(
         "--skip-borrow",
         action="store_true",
@@ -335,24 +333,26 @@ def main() -> None:
     redeem_res = run_redeem_scenario(rpc, manifest)
     # print exactly two evidence lines (one per scenario)
     print(
-        f"scenario 1 (yield): hub deposited {PRINCIPAL/1e6:.0f} USDC into waUSDC; "
-        f"convertToAssets(1e6) {yield_res['convert_before']} -> {yield_res['convert_after']} "
-        f"(increased={yield_res['scenario1_convert_to_assets_increased']}); "
-        f"USDC liquidityIndex {yield_res['liq_before']} -> {yield_res['liq_after']} "
-        f"(increased={yield_res['scenario1_liquidity_index_increased']})"
+        f"scenario 1 (yield): hub deposited {PRINCIPAL / 1e6:.0f} USDC into waUSDC, second account "
+        f"supplied {SECOND_SUPPLY / 1e6:.0f} USDC and borrowed {SECOND_BORROW / 1e6:.0f} USDC; "
+        f"pool.getReserveNormalizedIncome(usdc) {yield_res['income_before']} -> {yield_res['income_after']}; "
+        f"vault.convertToAssets(hub shares) {yield_res['vault_assets_before']} -> {yield_res['vault_assets_after']} "
+        f"over {yield_res['wait_seconds']}s"
     )
     print(
         f"scenario 4 (redeem): hub's USDC balance "
-        f"{redeem_res['bal_before']/1e6:.0f} -> {redeem_res['bal_after']/1e6:.0f} "
-        f"USDC; redeem returned at least the principal ({redeem_res['scenario4_redeem_ge_principal']})"
+        f"{redeem_res['bal_before'] / 1e6:.0f} -> {redeem_res['bal_after'] / 1e6:.0f} USDC"
     )
     result = {
         "fixturenet_up": True,
-        "scenario1_convert_to_assets_increased": yield_res["scenario1_convert_to_assets_increased"],
-        "scenario1_liquidity_index_increased": yield_res["scenario1_liquidity_index_increased"],
-        "scenario1_blocks_advanced_seconds": yield_res["scenario1_blocks_advanced_seconds"],
-        "scenario4_redeem_ge_principal": redeem_res["scenario4_redeem_ge_principal"],
-        "yield_check_passed": yield_res["yield_check_passed"],
+        "income_before": yield_res["income_before"],
+        "income_after": yield_res["income_after"],
+        "vault_assets_before": yield_res["vault_assets_before"],
+        "vault_assets_after": yield_res["vault_assets_after"],
+        "wait_seconds": yield_res["wait_seconds"],
+        "bal_before": redeem_res["bal_before"],
+        "bal_after": redeem_res["bal_after"],
+        "principal": PRINCIPAL,
         "scenario_line_count": 2,
     }
     print(json.dumps(result))
