@@ -166,17 +166,24 @@ def read_manifest() -> dict[str, Any]:
     env = dict(os.environ)
     env["ARMADA_IMAGE_TAG"] = repo_head()
     out = run([so, "deployment", "--dir", str(DEP_DIR), "run-job", "armada-assets-e2e-manifest"], env=env)
-    for line in out.stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            manifest = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if "aave" in manifest and "usdc" in manifest:
-            return manifest  # type: ignore[no-any-return]
-    raise RuntimeError("armada-assets-e2e-manifest run-job printed no manifest JSON line")
+    # `cat`'s output is the manifest file's own pretty-printed, multi-line
+    # JSON (not one line), so find the top-level `{` ... `}` block by brace
+    # depth and parse that whole block, instead of trying each line alone.
+    lines = out.stdout.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip() == "{"), None)
+    if start is None:
+        raise RuntimeError("armada-assets-e2e-manifest run-job printed no manifest JSON")
+    depth = 0
+    end = None
+    for i in range(start, len(lines)):
+        depth += lines[i].count("{") - lines[i].count("}")
+        if depth == 0:
+            end = i
+            break
+    if end is None:
+        raise RuntimeError("armada-assets-e2e-manifest run-job printed an unterminated manifest JSON")
+    manifest: dict[str, Any] = json.loads("\n".join(lines[start : end + 1]))
+    return manifest
 
 
 # ---- on-chain helpers ------------------------------------------------------
@@ -201,41 +208,25 @@ def parse_cast_int(s: str) -> int:
 
 def balance_of(rpc: str, token: str, addr: str) -> int:
     out = cast_call(rpc, token, "balanceOf(address)", addr)
-    return int(out.split()[0])
+    return parse_cast_int(out)
 
 
 def wausdc_convert_to_assets(rpc: str, vault: str, shares: int) -> int:
     out = cast_call(rpc, vault, "convertToAssets(uint256)", str(shares))
-    return int(out.split()[0])
+    return parse_cast_int(out)
 
 
 def aave_liquidity_index(rpc: str, pool: str, asset: str) -> int:
-    out = cast_call(
-        rpc,
-        pool,
-        "getReserveData(address)((uint256),uint128,uint128,uint128,uint128,uint128,uint40,uint16,address,address,address,address,uint128,uint128,uint128)",
-        asset,
+    # getReserveData(address) prints one field per line, not a single
+    # comma-separated line (env/reconciler/modules/aave.py's _reserve_data
+    # relies on the same splitlines() shape): line 0 is the nested
+    # ReserveConfigurationMap tuple, line 1 is liquidityIndex (c1, c2).
+    sig = (
+        "getReserveData(address)((uint256),uint128,uint128,uint128,uint128,uint128,"
+        "uint40,uint16,address,address,address,address,uint128,uint128,uint128)"
     )
-    s = out
-    if s.startswith("(") and s.endswith(")"):
-        s = s[1:-1]
-    fields = []
-    depth = 0
-    current = []
-    for ch in s:
-        if ch == "(":
-            depth += 1
-            current.append(ch)
-        elif ch == ")":
-            depth -= 1
-            current.append(ch)
-        elif ch == "," and depth == 0:
-            fields.append("".join(current).strip())
-            current = []
-        else:
-            current.append(ch)
-    fields.append("".join(current).strip())
-    return parse_cast_int(fields[1])
+    lines = cast_call(rpc, pool, sig, asset).splitlines()
+    return parse_cast_int(lines[1])
 
 
 # ---- scenarios -------------------------------------------------------------

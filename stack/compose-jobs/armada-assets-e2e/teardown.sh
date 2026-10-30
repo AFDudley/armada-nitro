@@ -30,5 +30,8 @@ fi
 if [ -d "${DEP}/data" ]; then
   sudo umount "${DEP}/data" 2>/dev/null || true
 fi
-rm -rf "$DEP" "$SPEC"
+# A plain rm -rf is not enough when the data dir was never a tmpfs mount
+# (observed: leftover container-written files from an aborted run) --
+# every file under it is root-owned, so remove it with sudo.
+sudo rm -rf "$DEP" "$SPEC"
 echo "teardown.sh: ${DEP} removed"
