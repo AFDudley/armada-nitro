@@ -1,4 +1,6 @@
 coordination_repo: "/home/rix/code/git_puller/repos/armada-nitro"
+# Law L1 (INV-001): the one declared integration branch. Readers never fall back.
+integration_branch: integrated
 poll_interval: 5
 inspect_interval: 5
 
@@ -28,8 +30,8 @@ spec_dir: "contracts/specs"
 # high-criticality (critical/catastrophic) filings route to `frontier`.
 intake_derivation:
   tiers:
-    small: "sonnet"
-    frontier: "opus"
+    small: "anthropic/claude-sonnet-5"
+    frontier: "claude-opus-5"
   thinking_budgets:
     small: 4000
     frontier: 31999
