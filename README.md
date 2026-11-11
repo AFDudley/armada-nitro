@@ -7,8 +7,8 @@ armada-laconic spec (ADR-0015/0016, `engineering/shielded-nitro-bridge-design.md
   (a) note-native custody: a channel is funded by an Armada unshield bound to the channel, and an allocation is paid
   out by shielding a fresh note;
   (b) EIP-1271 participants, so a hub's channel participant is its custodian contract rather than an EOA.
-- **hub custodian** — the hub's stable on-chain principal. A FROST(secp256k1, KECCAK-256) group key authorizes every
-  cold operation; hot delegate ECDSA keys sign channel states and are checked through `isValidSignature`.
+- **hub custodian** — the hub's stable on-chain principal. A FROST(secp256k1, KECCAK-256) group key authorizes
+  every operation, including channel state signatures, verified through `isValidSignature`.
 
 Target: Ethereum Sepolia against Armada's `demo3` deployment. Local testing runs on a laconic stack-orchestrator
 stack (`stack/`).
