@@ -2956,3 +2956,9 @@
 {"type":"comment","timestamp":"2026-11-11T03:35:45.478783Z","issue_id":"arn-104","payload":{"body":"gate-verdict: 1c54dded19f4ea59577a367884a5c93a41f82057 passed 0.2.1+5905375e","build":"0.2.1+5905375e","outcome":"passed","sha":"1c54dded19f4ea59577a367884a5c93a41f82057","verdict_kind":"gate_verdict"}}
 {"type":"comment","timestamp":"2026-11-11T03:35:45.524010Z","issue_id":"arn-104","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
 {"type":"close","timestamp":"2026-11-11T03:35:45.544915Z","issue_id":"arn-104","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
+{"type":"create","timestamp":"2026-11-11T03:37:32.062540Z","issue_id":"arn-e42","payload":{"description":"Operator-authored branch `cfg/intake-model-ids`, merged via `exophial integrate --branch` — no pebble id already tracked it.","priority":"2","title":"land: cfg/intake-model-ids","type":"task"}}
+{"type":"comment","timestamp":"2026-11-11T03:37:32.104449Z","issue_id":"arn-e42","payload":{"body":"branch-identity: cfg/intake-model-ids"}}
+{"type":"comment","timestamp":"2026-11-11T03:40:28.103041Z","issue_id":"arn-e42","payload":{"body":"exophial-integration-attempt-started: at 427b88cd2b07dbcb3a2e09cc3bd70bdfb5d6fa01"}}
+{"type":"comment","timestamp":"2026-11-11T03:42:39.918619Z","issue_id":"arn-e42","payload":{"body":"gate-verdict: 5335d38536ba52ecffa07ad7087a337f7c79effd passed 0.2.1+5905375e","build":"0.2.1+5905375e","outcome":"passed","sha":"5335d38536ba52ecffa07ad7087a337f7c79effd","verdict_kind":"gate_verdict"}}
+{"type":"comment","timestamp":"2026-11-11T03:42:40.002962Z","issue_id":"arn-e42","payload":{"body":"exophiald: merged (merged_ff).\n\nexophial-verdict: {\"verdict\": \"pass\"}"}}
+{"type":"close","timestamp":"2026-11-11T03:42:40.044880Z","issue_id":"arn-e42","payload":{"outcome":"merged_ff","reason":"clean fast-forward merge; no rebase was needed"}}
