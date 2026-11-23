@@ -62,7 +62,7 @@ stack/
 `python3 -m reconciler --target env/targets/<network>.json --rpc <url> --state <dir>` writes
 `<dir>/manifest.json` and, on the fixturenet only, `<dir>/keys/<address>.key`.
 
-- **Modules run in dependency order**: weth, usdc, cctp, aave, lido, armada, armada_nitro, funding.
+- **Modules run in dependency order**: weth, usdc, cctp, aave, lido, armada, armada_nitro, armada_sol, funding.
 - **Each module has three steps.**
   - `observe`: read the manifest and the chain.
   - `apply`: deploy or configure only what is missing.
@@ -90,6 +90,7 @@ armada-client's P1-05 reads the first five keys and nothing else. Change them on
   "armadaNitro":  { "adjudicator": "0x…", "consensusApp": "0x…", "hubCustodian": "0x…" },
   "assets":       { "weth": "0x…", "wstETH": "0x…", "waUSDC": "0x…" },
   "testAccounts": [ { "address": "0x…", "privateKeyFile": "keys/0x….key" } ],
+  "armadaSol":    { "pool": "0x…", "deployBlock": 0, "feeAdmin": "0x…", "treasury": "0x…", "maxBatch": 8, "poseidonT3": "0x…", "poseidonT4": "0x…", "monorepoCommit": "<sha>" },
   "usdc":  { "proxy": "0x…", "implementation": "0x…", "masterMinter": "0x…" },
   "cctp":  { "tokenMessenger": "0x…", "messageTransmitter": "0x…", "tokenMinter": "0x…", "domain": 0 },
   "aave":  { "poolAddressesProvider": "0x…", "pool": "0x…", "aUSDC": "0x…", "stataTokenFactory": "0x…", "usdcPriceFeed": "0x…" },
@@ -113,6 +114,7 @@ recorded constant with provenance.
 | lido | `wstETH.stETH()` = stETH. `submit` 1 ETH mints stETH. `wstETH.stEthPerToken()` = `1e18` (no oracle report ever). Every HashConsensus has zero members |
 | armada | `testingMode()` = false. For each of the 19 `(nullifiers, commitments)` shapes, `getVerificationKey` equals the value from the demo3 pool on Sepolia (`0x5f3324b47b3CFf937BB67C30B362898E193e5216`), read by `cast`. The pool's USDC and CCTP addresses equal the manifest's |
 | armada_nitro | `adjudicator.pool()` = Armada pool. The custodian's group key = the target's. The revocation delay = the target's |
+| armada_sol | The runtime of PoolSol, with the link and immutable bytes set to zero, has the SHA-256 that `env/armada-sol/provenance.json` records from armada-laconic-mono's Lean bytecode statement. The link bytes are the armada module's Poseidon contracts. For each of the 19 shapes, the key in storage equals `getVerificationKey` of the demo3 pool on Sepolia |
 | funding | each test account holds ≥ 1,000 USDC and ≥ 100 ETH |
 
 ## 7. Gates

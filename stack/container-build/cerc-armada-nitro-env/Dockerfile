@@ -11,6 +11,7 @@
 #                          ARGs (a lock file synthesised from them), never by lock bytes.
 #   - `contracts`          this repo's Foundry inputs only + `forge build`, so env/ churn
 #                          does not recompile contracts.
+#   - `solc-pool`          solc 0.8.31, the compiler of env/armada-sol/PoolSol.sol.
 #   - final                copies each /src/<name>, merges the HOME caches the stages
 #                          populated, the contracts build and the circuits, verifies pins.
 #
@@ -173,6 +174,18 @@ COPY test /src/armada-nitro/test
 COPY lib /src/armada-nitro/lib
 RUN set -e && cd /src/armada-nitro && forge build
 
+# ============================ solc-pool =====================================
+# solc 0.8.31, the compiler that env/armada-sol/provenance.json records for
+# env/armada-sol/PoolSol.sol, at the svm-rs path the armada_sol reconciler module
+# reads. The SHA-256 is the one binaries.soliditylang.org/linux-amd64/list.json
+# gives for this build.
+FROM toolchain AS solc-pool
+RUN set -e \
+  && mkdir -p /root/.svm/0.8.31 \
+  && curl -sSfL "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.31+commit.fd3a2265" -o /root/.svm/0.8.31/solc-0.8.31 \
+  && H=$(sha256sum /root/.svm/0.8.31/solc-0.8.31) && test "${H%% *}" = "aac9cd0116e9ae0cd3d8f64a8641381845dc9f12e2a52653de36fb619323e557" \
+  && chmod +x /root/.svm/0.8.31/solc-0.8.31
+
 # ============================ frost-signer ==================================
 # Build the 2-of-3 FROST tool (tools/frost-signer) into the env image at
 # /usr/local/bin/frost-signer, so the armada-frost-keygen job can run `frost-signer keygen`
@@ -221,6 +234,7 @@ COPY --from=src-lido-core                 /root/.svm/  /root/.svm/
 COPY --from=src-armada-poc                /root/.svm/  /root/.svm/
 COPY --from=src-community-staking-module  /root/.svm/  /root/.svm/
 COPY --from=contracts                     /root/.svm/  /root/.svm/
+COPY --from=solc-pool                     /root/.svm/  /root/.svm/
 # Yarn global cache: the yarn-installing stages (stablecoin-evm, lido-core, CSM).
 COPY --from=src-stablecoin-evm            /root/.yarn/berry/  /root/.yarn/berry/
 COPY --from=src-lido-core                 /root/.yarn/berry/  /root/.yarn/berry/

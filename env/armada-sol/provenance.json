@@ -1,0 +1,32 @@
+{
+  "monorepoCommit": "601eae6fc1cc26f4c24ac3b7ed872e68b9ff8c8d",
+  "source": "armada-sol/out/PoolSol.sol",
+  "sourceSha256": "e54b079d11ab0875df47a52d42cf909b10f341f2e219bec60baf8cc567eff5fa",
+  "solc": {
+    "version": "0.8.31",
+    "viaIR": true,
+    "optimizerRuns": 200,
+    "evmVersion": "osaka"
+  },
+  "statement": "armada-sol/ArmadaSol/Bytecode/Pool/Code.lean",
+  "runtimeSha256": "1f9e7d45104367cbc7a317aa272dced96d01e06477e7f4b8d61c1e7ba46098af",
+  "runtimeLength": 8402,
+  "links": {
+    "PoseidonT3": [
+      6216
+    ],
+    "PoseidonT4": [
+      364
+    ]
+  },
+  "immutables": {
+    "feeAdmin": [
+      809
+    ],
+    "treasury": [],
+    "maxBatch": [
+      1167,
+      3138
+    ]
+  }
+}

@@ -37,6 +37,7 @@ MODULE_ORDER = [
     "lido",
     "armada",
     "armada_nitro",
+    "armada_sol",
     "funding",
 ]
 

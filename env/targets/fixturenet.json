@@ -44,6 +44,11 @@
       "groupKeyFile": "group-pubkey.json"
     }
   },
+  "armada_sol": {
+    "deploy": {
+      "maxBatch": 8
+    }
+  },
   "funding": {
     "deploy": {}
   }
