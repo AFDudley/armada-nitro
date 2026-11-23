@@ -32,10 +32,10 @@ from typing import Any, cast
 
 # The public RPC endpoints of the reference chains that oracle postconditions read (mainnet,
 # Sepolia), several vendors for each chain. `Context.cast(..., chain=...)` takes them in turn.
-_ORACLE_RPCS: dict[str, list[str]] = json.loads(
-    (Path(__file__).resolve().parents[1] / "oracle-rpcs.json").read_text()
-)
-_next_vendor: dict[str, int] = {name: 0 for name in _ORACLE_RPCS}
+# The table is read on first use: the image's circuits stage imports this module without env/.
+_ORACLE_RPCS_FILE = Path(__file__).resolve().parents[1] / "oracle-rpcs.json"
+_oracle_rpcs: dict[str, list[str]] = {}
+_next_vendor: dict[str, int] = {}
 
 
 class ReconcileError(Exception):
@@ -112,8 +112,10 @@ class Context:
         tried at most once per call; when all fail, the error names each vendor's failure."""
         if chain is None:
             return self._run(["cast", *args, "--rpc-url", self.rpc_url])
-        vendors = _ORACLE_RPCS[chain]
-        start = _next_vendor[chain]
+        if not _oracle_rpcs:
+            _oracle_rpcs.update(json.loads(_ORACLE_RPCS_FILE.read_text()))
+        vendors = _oracle_rpcs[chain]
+        start = _next_vendor.get(chain, 0)
         _next_vendor[chain] = (start + 1) % len(vendors)
         failures = []
         for i in range(len(vendors)):
