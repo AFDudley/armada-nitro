@@ -167,15 +167,16 @@ run_reconcile() {  # run_reconcile <label> [RECONCILER_TARGET-in-container]
     "$LACONIC" deployment --dir "$DEP" run-job armada-env-reconcile 2>&1 | tee "$log"
   fi
   echo "fixturenet-new: ${label} reconcile module results:"
-  grep -E '^(weth|usdc|cctp|aave|lido|armada|armada_nitro|funding), ' "$log" | sed 's/^/    /' || true
+  grep -E '^[a-z_]+, (adopted|present|deployed|configured), ' "$log" | sed 's/^/    /' || true
 }
 
 # arn-46d.4: after the full reconcile, the manifest must hold exactly the
-# eight expected modules (weth, usdc, cctp, aave, lido, armada, armada_nitro,
-# funding); a ninth module or a missing module makes the script fail.
-check_module_set() {  # check_module_set <manifest>
-  local manifest="$1"
-  local expected='["weth","usdc","cctp","aave","lido","armada","armada_nitro","funding"]'
+# modules that the full target names (env/targets/fixturenet.json, every key
+# except "network"); an extra module or a missing module makes the script fail.
+check_module_set() {  # check_module_set <manifest> <target>
+  local manifest="$1" target="$2"
+  local expected
+  expected=$(jq -c '[keys[] | select(. != "network")]' "$target")
   local actual missing extra
   # Read .gasUsed keys; the real manifest lives under a root-owned
   # tmpfs (needs sudo); a plain temp file (probe) is read without it.
@@ -194,7 +195,7 @@ check_module_set() {  # check_module_set <manifest>
     return 1
   fi
   if [ "$missing" != '[]' ] || [ "$extra" != '[]' ]; then
-    echo "fixturenet-new: module check FAILED: ${manifest} does not hold exactly the eight modules" >&2
+    echo "fixturenet-new: module check FAILED: ${manifest} does not hold exactly the modules of ${target}" >&2
     if [ "$missing" != '[]' ]; then
       echo "  missing (expected but absent): $(jq -r '.[]' <<< "$missing")" >&2
     fi
@@ -278,10 +279,10 @@ run_reconcile full
 echo "fixturenet-new: full reconcile took $(secs $(($(now)-tf)))"
 
 
-# arn-46d.4: after the full reconcile, verify the manifest holds exactly the eight
-# expected modules; fail the script on a ninth or a missing module.
-if check_module_set "${DEP}/data/armada_env/manifest.json"; then
-  : # pass -- the module set is exactly the eight expected modules
+# arn-46d.4: after the full reconcile, verify the manifest holds exactly the
+# full target's modules; fail the script on an extra or a missing module.
+if check_module_set "${DEP}/data/armada_env/manifest.json" "${REPO_ROOT}/env/targets/fixturenet.json"; then
+  : # pass -- the module set is exactly the full target's modules
 else
   echo "fixturenet-new: manifest module set check failed" >&2
   exit 1
