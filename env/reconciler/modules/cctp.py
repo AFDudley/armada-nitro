@@ -51,7 +51,6 @@ _CCTP_CONTRACTS = Path("/src/evm-cctp-contracts")
 # the Sepolia v2 transmitter's") reads at run time -- the same address
 # demo3 used (armada-poc deployments/privacy-pool-hub-sepolia.json,
 # key cctp.messageTransmitter), per docs/tasks/E3b-usdc-cctp.md.
-_SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com"
 _SEPOLIA_MESSAGE_TRANSMITTER = "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275"
 
 # CCTP v2's message body version is 1 on every live deployment (read from
@@ -100,7 +99,7 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     usdc_proxy = usdc["proxy"]
     total_gas = 0
 
-    version = int(ctx.cast("call", _SEPOLIA_MESSAGE_TRANSMITTER, "version()(uint32)", rpc_url=_SEPOLIA_RPC))
+    version = int(ctx.cast("call", _SEPOLIA_MESSAGE_TRANSMITTER, "version()(uint32)", chain="sepolia"))
 
     factory_receipts = _forge.run_broadcast(
         project_dir=_CCTP_CONTRACTS,
@@ -230,7 +229,7 @@ def verify(ctx: Context, action: str) -> None:
 
     version = int(ctx.cast("call", message_transmitter, "version()(uint32)"))
     sepolia_version = int(
-        ctx.cast("call", _SEPOLIA_MESSAGE_TRANSMITTER, "version()(uint32)", rpc_url=_SEPOLIA_RPC)
+        ctx.cast("call", _SEPOLIA_MESSAGE_TRANSMITTER, "version()(uint32)", chain="sepolia")
     )
     if version != sepolia_version:
         raise ctx.fail(

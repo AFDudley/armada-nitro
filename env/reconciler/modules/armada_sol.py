@@ -33,7 +33,7 @@ from pathlib import Path
 from reconciler.context import CastError, Context, resolve_target_mode, to_int
 from reconciler.modules import _wallet
 from reconciler.modules._circuits import CIRCUITS_BUILD_DIR
-from reconciler.modules.armada import _SEPOLIA_POOL, _SEPOLIA_RPC, _TESTING_ARTIFACT_CONFIGS
+from reconciler.modules.armada import _SEPOLIA_POOL, _TESTING_ARTIFACT_CONFIGS
 
 _SOURCE_DIR = Path(__file__).resolve().parents[2] / "armada-sol"
 _SOURCE = _SOURCE_DIR / "PoolSol.sol"
@@ -238,7 +238,7 @@ def verify(ctx: Context, action: str) -> None:
     for n, m in _TESTING_ARTIFACT_CONFIGS:
         stored = _stored_vk(ctx, sol["pool"], n, m)
         sepolia = ctx.cast(
-            "call", _SEPOLIA_POOL, "getVerificationKey(uint256,uint256)", str(n), str(m), rpc_url=_SEPOLIA_RPC
+            "call", _SEPOLIA_POOL, "getVerificationKey(uint256,uint256)", str(n), str(m), chain="sepolia"
         )
         equal = stored.lower() == sepolia.lower()
         print(f"armada_sol vk ({n},{m}): {'EQUAL' if equal else 'MISMATCH'}")

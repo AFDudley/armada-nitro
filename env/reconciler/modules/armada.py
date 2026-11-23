@@ -67,7 +67,6 @@ _ARTIFACTS_BASE_URL = "https://circuits.knowable.run/v0.1.0-dev"
 
 # The demo3 pool on Sepolia this environment's verification keys must match
 # (docs/ENVIRONMENT.md §6; verified reachable by the integrator, see the task brief).
-_SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com"
 _SEPOLIA_POOL = "0x5f3324b47b3CFf937BB67C30B362898E193e5216"
 
 # lib/armada-poc/lib/artifacts.ts TESTING_ARTIFACT_CONFIGS, copied verbatim (19 shapes)
@@ -259,7 +258,7 @@ def verify(ctx: Context, action: str) -> None:
             "getVerificationKey(uint256,uint256)",
             str(nullifiers),
             str(commitments),
-            rpc_url=_SEPOLIA_RPC,
+            chain="sepolia",
         )
         equal = fixturenet_vk.lower() == sepolia_vk.lower()
         fixturenet_hash = hashlib.sha256(bytes.fromhex(fixturenet_vk[2:])).hexdigest()

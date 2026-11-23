@@ -255,6 +255,9 @@ COPY --from=src-armada-poc                /root/.cache/hardhat-nodejs/  /root/.c
 RUN git config --system "url.file:///src/community-staking-module.insteadOf" \
       "https://github.com/lidofinance/community-staking-module.git"
 
+# getaddrinfo puts a public IPv6 address first on the fixturenet's IPv6 network (see the file).
+COPY stack/container-build/cerc-armada-nitro-env/gai.conf /etc/gai.conf
+
 # This repository (env/, stack/, the real env/sources.lock.json, ...), then the
 # contracts build output and the circuits on top.
 COPY . /src/armada-nitro

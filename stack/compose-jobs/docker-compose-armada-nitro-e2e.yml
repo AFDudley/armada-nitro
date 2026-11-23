@@ -79,3 +79,8 @@ services:
 
 volumes:
   armada_env:
+
+# The project network's options, as stack/compose/docker-compose-armada-fixturenet.yml sets them.
+networks:
+  default:
+    enable_ipv6: true

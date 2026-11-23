@@ -30,6 +30,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
+# The public RPC endpoints of the reference chains that oracle postconditions read (mainnet,
+# Sepolia), several vendors for each chain. `Context.cast(..., chain=...)` takes them in turn.
+_ORACLE_RPCS: dict[str, list[str]] = json.loads(
+    (Path(__file__).resolve().parents[1] / "oracle-rpcs.json").read_text()
+)
+_next_vendor: dict[str, int] = {name: 0 for name in _ORACLE_RPCS}
+
 
 class ReconcileError(Exception):
     """Raised by a module to fail its step; names the module and the
@@ -96,14 +103,29 @@ class Context:
             )
         return result.stdout.strip()
 
-    def cast(self, *args: str, rpc_url: str | None = None) -> str:
+    def cast(self, *args: str, chain: str | None = None) -> str:
         """Run a read-only `cast` subcommand; returns stdout, stripped.
-        `rpc_url` overrides the network being reconciled -- used by oracle
-        postconditions that read a reference chain (mainnet, Sepolia)."""
-        return self._run(["cast", *args, "--rpc-url", rpc_url or self.rpc_url])
 
-    def cast_json(self, *args: str, rpc_url: str | None = None) -> Any:
-        return json.loads(self.cast(*args, rpc_url=rpc_url))
+        Without `chain`, against the network being reconciled. With `chain` (a key of
+        env/oracle-rpcs.json), against that reference chain: the call starts at the next vendor
+        in round-robin order, and goes to the following vendor when one fails. Each vendor is
+        tried at most once per call; when all fail, the error names each vendor's failure."""
+        if chain is None:
+            return self._run(["cast", *args, "--rpc-url", self.rpc_url])
+        vendors = _ORACLE_RPCS[chain]
+        start = _next_vendor[chain]
+        _next_vendor[chain] = (start + 1) % len(vendors)
+        failures = []
+        for i in range(len(vendors)):
+            url = vendors[(start + i) % len(vendors)]
+            try:
+                return self._run(["cast", *args, "--rpc-url", url])
+            except CastError as e:
+                failures.append(f"{url}: {e}")
+        raise CastError(f"every {chain} vendor failed: " + " | ".join(failures))
+
+    def cast_json(self, *args: str, chain: str | None = None) -> Any:
+        return json.loads(self.cast(*args, chain=chain))
 
     def forge(self, *args: str, cwd: str | None = None) -> str:
         result = subprocess.run(["forge", *args], capture_output=True, text=True, cwd=cwd)

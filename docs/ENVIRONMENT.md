@@ -105,6 +105,12 @@ armada-client's P1-05 reads the first five keys and nothing else. Change them on
 Every expected value comes from outside the code under test: mainnet, Sepolia, an upstream specification, or a
 recorded constant with provenance.
 
+A module reads mainnet and Sepolia with `ctx.cast(..., chain="mainnet" | "sepolia")`. The public RPC endpoints are in
+`env/oracle-rpcs.json`, several vendors for each chain. Each call starts at the next vendor in round-robin order and
+goes to the following vendor when one fails; when every vendor fails, the error names each failure. The fixturenet
+network has IPv6, and the env image's `/etc/gai.conf` puts public IPv6 addresses first, because some vendors reset
+IPv4 connections from the fixturenet host.
+
 | Module | Postcondition |
 |---|---|
 | weth | `extcodehash` equals mainnet WETH9's (`0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2`), recorded in `sources.lock.json` with the command and block. `deposit` 1 ETH then `withdraw` round-trips |

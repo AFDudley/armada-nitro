@@ -1,0 +1,15 @@
+{
+  "mainnet": [
+    "https://ethereum-rpc.publicnode.com",
+    "https://0xrpc.io/eth",
+    "https://mainnet.gateway.tenderly.co",
+    "https://eth.drpc.org",
+    "https://rpc.flashbots.net"
+  ],
+  "sepolia": [
+    "https://ethereum-sepolia-rpc.publicnode.com",
+    "https://0xrpc.io/sep",
+    "https://sepolia.gateway.tenderly.co",
+    "https://rpc.sepolia.ethpandaops.io"
+  ]
+}

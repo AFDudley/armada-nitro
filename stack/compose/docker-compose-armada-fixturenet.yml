@@ -431,3 +431,10 @@ volumes:
   armada_env:
   nimbus_el_data:
   nimbus_cl_data:
+
+# IPv6 on the project network, so that a job reaches the reference-chain RPC vendors
+# (env/oracle-rpcs.json) over IPv6 as well as IPv4. Every job file of this stack declares the
+# same block: compose recreates a network whose options differ, and the pod's containers use it.
+networks:
+  default:
+    enable_ipv6: true

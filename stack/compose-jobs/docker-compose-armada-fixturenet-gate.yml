@@ -37,3 +37,8 @@ services:
     environment:
       JG_PYTHON_A: ${JG_PYTHON_A:-python3}
       JG_PYTHON_B: ${JG_PYTHON_B:-python3}
+
+# The project network's options, as stack/compose/docker-compose-armada-fixturenet.yml sets them.
+networks:
+  default:
+    enable_ipv6: true

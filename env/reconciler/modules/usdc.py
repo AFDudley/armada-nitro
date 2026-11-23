@@ -45,8 +45,6 @@ _SCRIPT_TARGET = "scripts/deploy/deploy-fiat-token.s.sol:DeployFiatToken"
 _ARTIFACT = _STABLECOIN_EVM / "artifacts/foundry/FiatTokenV2_2.sol/FiatTokenV2_2.json"
 
 # Oracle reference points (docs/tasks/E3b-usdc-cctp.md "USDC bytecode oracle").
-_MAINNET_RPC = "https://ethereum-rpc.publicnode.com"
-_SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com"
 _MAINNET_USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
 _SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
 # keccak256("org.zeppelinos.proxy.implementation") - the EIP1967-predecessor
@@ -99,8 +97,8 @@ def _zero_link_slots(code: bytes) -> bytes:
     return bytes(buf)
 
 
-def _normalized_runtime(ctx: Context, address: str, rpc_url: str) -> bytes:
-    code_hex = ctx.cast("code", address, rpc_url=rpc_url)
+def _normalized_runtime(ctx: Context, address: str, chain: str | None) -> bytes:
+    code_hex = ctx.cast("code", address, chain=chain)
     code = bytes.fromhex(code_hex[2:])
     return _zero_link_slots(_strip_metadata_trailer(code))
 
@@ -118,8 +116,8 @@ def _uint(cast_output: str) -> int:
     return to_int(cast_output.split()[0])
 
 
-def _implementation_of(ctx: Context, proxy: str, rpc_url: str) -> str:
-    slot = ctx.cast("storage", proxy, _IMPLEMENTATION_SLOT, rpc_url=rpc_url)
+def _implementation_of(ctx: Context, proxy: str, chain: str | None) -> str:
+    slot = ctx.cast("storage", proxy, _IMPLEMENTATION_SLOT, chain=chain)
     return "0x" + slot[-40:]
 
 
@@ -198,7 +196,7 @@ def verify(ctx: Context, action: str) -> None:
 
     # version() must equal Sepolia USDC's, read at run time (docs/ENVIRONMENT.md §6).
     version = json.loads(ctx.cast("call", proxy, "version()(string)"))
-    sepolia_version = json.loads(ctx.cast("call", _SEPOLIA_USDC, "version()(string)", rpc_url=_SEPOLIA_RPC))
+    sepolia_version = json.loads(ctx.cast("call", _SEPOLIA_USDC, "version()(string)", chain="sepolia"))
     if version != sepolia_version:
         raise ctx.fail(f"version() = {version!r}, Sepolia USDC's version() = {sepolia_version!r}")
 
@@ -223,14 +221,14 @@ def verify(ctx: Context, action: str) -> None:
 
     # USDC bytecode oracle: the implementation's runtime must equal mainnet
     # USDC's, byte for byte, after normalization.
-    fixturenet_impl = _implementation_of(ctx, proxy, ctx.rpc_url)
+    fixturenet_impl = _implementation_of(ctx, proxy, None)
     if fixturenet_impl.lower() != usdc["implementation"].lower():
         raise ctx.fail(
             f"proxy implementation slot = {fixturenet_impl}, manifest usdc.implementation = {usdc['implementation']}"
         )
-    mainnet_impl = _implementation_of(ctx, _MAINNET_USDC, _MAINNET_RPC)
-    fixturenet_runtime = _normalized_runtime(ctx, fixturenet_impl, ctx.rpc_url)
-    mainnet_runtime = _normalized_runtime(ctx, mainnet_impl, _MAINNET_RPC)
+    mainnet_impl = _implementation_of(ctx, _MAINNET_USDC, "mainnet")
+    fixturenet_runtime = _normalized_runtime(ctx, fixturenet_impl, None)
+    mainnet_runtime = _normalized_runtime(ctx, mainnet_impl, "mainnet")
     diff = _diff_count(fixturenet_runtime, mainnet_runtime)
     print(
         "usdc bytecode oracle: fixturenet normalized length="
