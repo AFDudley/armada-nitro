@@ -33,7 +33,12 @@ import { ethers } from "hardhat";
 import * as fs from "fs";
 import { buildPoseidon } from "circomlibjs";
 
-import { initializeEngine, clearDatabase, getEngine } from "../../lib/sdk/init";
+import {
+  initializeEngine,
+  clearDatabase,
+  getEngine,
+  shutdownEngine,
+} from "../../lib/sdk/init";
 import { createWallet, DEFAULT_ENCRYPTION_KEY } from "../../lib/sdk/wallet";
 import { initializeProver } from "../../lib/sdk/prover";
 import {
@@ -348,10 +353,14 @@ async function main() {
 
   for (const v of verdicts)
     console.log(`VERDICT ${v.fn} ${v.pass ? "PASS" : "FAIL"} ${v.detail}`);
-  process.exitCode = verdicts.every((v) => v.pass) ? 0 : 1;
+  await shutdownEngine();
+  return verdicts.every((v) => v.pass) ? 0 : 1;
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exitCode = 2;
-});
+// The engine keeps handles open after shutdown, so the script exits explicitly (as pool-e2e.ts does).
+main()
+  .then((code) => process.exit(code))
+  .catch((e) => {
+    console.error(e);
+    process.exit(2);
+  });

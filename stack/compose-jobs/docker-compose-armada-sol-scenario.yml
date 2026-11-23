@@ -25,6 +25,9 @@ services:
     environment:
       MANIFEST_PATH: ${MANIFEST_PATH:-/env/manifest.json}
       HUB_RPC: ${HUB_RPC:-http://armada-fixturenet-geth:8545}
+      # With ts-node's V8 compile cache (v8-compile-cache-lib), the prover's worker threads abort
+      # with "Fatal error ... unreachable code" in V8's code-cache deserializer on this image.
+      DISABLE_V8_COMPILE_CACHE: "1"
     volumes:
       - armada_env:/env
 
