@@ -9,9 +9,15 @@ See env/armada-sol/README.md.
 
 apply() compiles the source with solc 0.8.31 under the recorded profile, links the PoseidonT3 and
 PoseidonT4 contracts that the armada module records (Armada's own deploy creates them), and passes
-the verifying keys of Armada's circuit build (/src/armada-circuits/build/<n>x<m>/vkey.json) to the
-constructor, for the shapes that Armada's deploy registers. The constructor is the only writer of
-the keys. The circuit release has no owned circuit, so the owned key list is empty.
+the verifying keys of Armada's circuit build (/src/armada-circuits/build/<n>x<m>/vkey.json) and the
+target's initial fee ratio to the constructor, for the shapes that Armada's deploy registers. The
+constructor sets the fee ratio and the empty-tree root (armada-laconic labbook
+2026-11-24-pool-for-nitro.md, item P1), and is the only writer of the keys. The circuit release has
+no owned circuit, so the owned key list is empty.
+
+apply() redeploys when the recorded `monorepoCommit` differs from provenance.json's: a deployed pool
+of a different version is not a match, so apply() deploys the current version and replaces the
+manifest entry.
 
 verify() checks two oracles from outside the code under test:
 - the deployed runtime, with the link and immutable bytes set to zero, has the SHA-256 that the
@@ -51,9 +57,7 @@ _FEE_ADMIN_ACCOUNT_INDEX = 8
 # The constructor's parameters: `ShapedKey` is (nullifiers, commitments, VerifyingKey), and
 # `VerifyingKey` is (artifactsIPFSHash, alpha1, beta2, gamma2, delta2, ic) (out/PoolSol.sol).
 _VK_TYPE = "(string,(uint256,uint256),(uint256[2],uint256[2]),(uint256[2],uint256[2]),(uint256[2],uint256[2]),(uint256,uint256)[])"
-_CONSTRUCTOR_SIG = (
-    f"constructor(address,address,uint256,(uint256,uint256,{_VK_TYPE})[],(uint256,uint256,{_VK_TYPE})[])"
-)
+_CONSTRUCTOR_SIG = f"constructor(address,address,uint256,uint128,uint128,(uint256,uint256,{_VK_TYPE})[],(uint256,uint256,{_VK_TYPE})[])"
 
 # solc's storage layout of PoolSol: `verificationKeys` is the mapping at slot 24, and a
 # `VerifyingKey` takes the string at +0, ten words at +1..+14 and the `ic` array at +15
@@ -135,7 +139,8 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     mode, params = resolve_target_mode(ctx.target["armada_sol"])
     if mode != "deploy":
         raise ctx.fail("armada_sol supports only deploy")
-    if observed and observed.get("pool"):
+    prov = _provenance()
+    if observed and observed.get("pool") and observed.get("monorepoCommit") == prov["monorepoCommit"]:
         return "present", 0
 
     armada = ctx.manifest.get("armada")
@@ -144,13 +149,27 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
             "armada has not recorded its Poseidon contracts; run it before armada_sol (MODULE_ORDER)"
         )
 
-    prov = _provenance()
     code = _link(_compile(prov), {"PoseidonT3": armada["poseidonT3"], "PoseidonT4": armada["poseidonT4"]})
     fee_admin = _wallet.address(_FEE_ADMIN_ACCOUNT_INDEX)
     treasury = _wallet.address(_TREASURY_ACCOUNT_INDEX)
     max_batch = int(params["maxBatch"])
+    fee_num = int(params["feeNum"])
+    fee_den = int(params["feeDen"])
     keys = "[" + ",".join(f"({n},{m},{_vk_value(n, m)})" for n, m in _TESTING_ARTIFACT_CONFIGS) + "]"
-    args = ctx._run(["cast", "abi-encode", _CONSTRUCTOR_SIG, fee_admin, treasury, str(max_batch), keys, "[]"])
+    args = ctx._run(
+        [
+            "cast",
+            "abi-encode",
+            _CONSTRUCTOR_SIG,
+            fee_admin,
+            treasury,
+            str(max_batch),
+            str(fee_num),
+            str(fee_den),
+            keys,
+            "[]",
+        ]
+    )
 
     receipt = ctx.send("--create", "0x" + code + args.removeprefix("0x"))
     if to_int(receipt["status"]) != 1:

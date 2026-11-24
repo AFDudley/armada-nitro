@@ -46,7 +46,9 @@
   },
   "armada_sol": {
     "deploy": {
-      "maxBatch": 8
+      "maxBatch": 8,
+      "feeNum": 1,
+      "feeDen": 200
     }
   },
   "funding": {

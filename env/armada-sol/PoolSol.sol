@@ -26,7 +26,6 @@ contract PoolSol {
     error valueTooLarge();
     error tokenRejected();
     error poseidonFailed();
-    error treeFull();
     error shapeTooLarge();
     error unknownRoot();
     error nullifierSpent();
@@ -125,6 +124,23 @@ contract PoolSol {
     }
     uint256 internal constant PRIME_Q = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
     uint256 internal constant SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    uint256 internal constant EMPTY_TREE_ROOT = 9493149700940509817378043077993653487291699154667385859234945399563579865744;
+    uint256 internal constant ZERO_0 = 2051258411002736885948763699317990061539314419500486054347250703186609807356;
+    uint256 internal constant ZERO_1 = 798649550954976630491249457249448595186529806442197797936973525980664838735;
+    uint256 internal constant ZERO_2 = 3860253447950477476238282376227806265529430782364398060886622632609206263506;
+    uint256 internal constant ZERO_3 = 10967393403090576943058612851160624964768856418916757431315467969379265276661;
+    uint256 internal constant ZERO_4 = 4177329909171803290170279196019319447087145475250139657920728261184066492383;
+    uint256 internal constant ZERO_5 = 9144726083425293457189930182175584375755866170755203037168330473435257599943;
+    uint256 internal constant ZERO_6 = 8236371367060628245320813572019740297071112030680295018688014025332724941914;
+    uint256 internal constant ZERO_7 = 20704513355749821470300998799414731362245300238021178553122435057113528378476;
+    uint256 internal constant ZERO_8 = 16736886623818773524263138779809916105169520362832964900272252437275369959388;
+    uint256 internal constant ZERO_9 = 16415580715665869864634788741927065679186058985255106992778939765291984104497;
+    uint256 internal constant ZERO_10 = 5715205213015845364387052206849889843188282449933545435544812025608946666822;
+    uint256 internal constant ZERO_11 = 11013175031749877081979736330659999751637067247483574805902945041305483682579;
+    uint256 internal constant ZERO_12 = 10708260192616993577686743465610377735773279483333447100671640147037242870779;
+    uint256 internal constant ZERO_13 = 17708681376628530799996447981717676562184543188562031708516142906406141650368;
+    uint256 internal constant ZERO_14 = 3967876508977884960877910167550068853181553556854105674925421366723704424223;
+    uint256 internal constant ZERO_15 = 18077967785446169488603147322170139942753858441115263187838141084900323103797;
     uint256 internal treeNumber;
     uint256 internal nextLeafIndex;
     bytes32[16] internal filledSubTrees;
@@ -140,10 +156,13 @@ contract PoolSol {
     address internal immutable treasury;
     uint256 internal immutable maxBatch;
 
-    constructor(address feeAdmin_, address treasury_, uint256 maxBatch_, ShapedKey[] memory keys, ShapedKey[] memory ownedKeys) {
+    constructor(address feeAdmin_, address treasury_, uint256 maxBatch_, uint128 num, uint128 den, ShapedKey[] memory keys, ShapedKey[] memory ownedKeys) {
         feeAdmin = feeAdmin_;
         treasury = treasury_;
         maxBatch = maxBatch_;
+        checkAndSetFeeRatio(num, den);
+        merkleRoot = bytes32(uint256(EMPTY_TREE_ROOT));
+        rootHistory[0][bytes32(uint256(EMPTY_TREE_ROOT))] = true;
         if (!((keys.length <= 64))) revert tooManyKeys();
         for (uint256 kIndex = 0; kIndex < keys.length; ++kIndex) {
             ShapedKey memory k = keys[kIndex];
@@ -157,13 +176,177 @@ contract PoolSol {
     }
 
     function insertLeaf(bytes32 leaf) internal {
+        uint256 i0 = nextLeafIndex;
+        if ((i0 == 65536)) {
+            uint256 tn0 = treeNumber;
+            uint256 tn1 = 0;
+            unchecked { tn1 = (tn0 + 1); }
+            if (!((tn1 >= tn0))) revert arithmetic();
+            treeNumber = tn1;
+            nextLeafIndex = 0;
+        }
         uint256 i = nextLeafIndex;
-        if (!((i < 65536))) revert treeFull();
-        bytes32 root = merkleRoot;
-        bytes32 root1 = PoseidonT3.poseidon([root, leaf]);
-        merkleRoot = root1;
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx1 = (i / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx2 = (idx1 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx3 = (idx2 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx4 = (idx3 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx5 = (idx4 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx6 = (idx5 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx7 = (idx6 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx8 = (idx7 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx9 = (idx8 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx10 = (idx9 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx11 = (idx10 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx12 = (idx11 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx13 = (idx12 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx14 = (idx13 / 2);
+        if (!((2 != 0))) revert arithmetic();
+        uint256 idx15 = (idx14 / 2);
+        uint256 lvl0 = 0;
+        uint256 lvl1 = 1;
+        uint256 lvl2 = 2;
+        uint256 lvl3 = 3;
+        uint256 lvl4 = 4;
+        uint256 lvl5 = 5;
+        uint256 lvl6 = 6;
+        uint256 lvl7 = 7;
+        uint256 lvl8 = 8;
+        uint256 lvl9 = 9;
+        uint256 lvl10 = 10;
+        uint256 lvl11 = 11;
+        uint256 lvl12 = 12;
+        uint256 lvl13 = 13;
+        uint256 lvl14 = 14;
+        uint256 lvl15 = 15;
+        if (!((lvl0 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled0 = filledSubTrees[lvl0];
+        bytes32 leftHash0 = PoseidonT3.poseidon([leaf, bytes32(uint256(ZERO_0))]);
+        bytes32 rightHash0 = PoseidonT3.poseidon([oldFilled0, leaf]);
+        if (!((lvl0 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl0] = (((i % 2) == 0) ? leaf : oldFilled0);
+        bytes32 cur1 = (((i % 2) == 0) ? leftHash0 : rightHash0);
+        if (!((lvl1 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled1 = filledSubTrees[lvl1];
+        bytes32 leftHash1 = PoseidonT3.poseidon([cur1, bytes32(uint256(ZERO_1))]);
+        bytes32 rightHash1 = PoseidonT3.poseidon([oldFilled1, cur1]);
+        if (!((lvl1 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl1] = (((idx1 % 2) == 0) ? cur1 : oldFilled1);
+        bytes32 cur2 = (((idx1 % 2) == 0) ? leftHash1 : rightHash1);
+        if (!((lvl2 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled2 = filledSubTrees[lvl2];
+        bytes32 leftHash2 = PoseidonT3.poseidon([cur2, bytes32(uint256(ZERO_2))]);
+        bytes32 rightHash2 = PoseidonT3.poseidon([oldFilled2, cur2]);
+        if (!((lvl2 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl2] = (((idx2 % 2) == 0) ? cur2 : oldFilled2);
+        bytes32 cur3 = (((idx2 % 2) == 0) ? leftHash2 : rightHash2);
+        if (!((lvl3 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled3 = filledSubTrees[lvl3];
+        bytes32 leftHash3 = PoseidonT3.poseidon([cur3, bytes32(uint256(ZERO_3))]);
+        bytes32 rightHash3 = PoseidonT3.poseidon([oldFilled3, cur3]);
+        if (!((lvl3 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl3] = (((idx3 % 2) == 0) ? cur3 : oldFilled3);
+        bytes32 cur4 = (((idx3 % 2) == 0) ? leftHash3 : rightHash3);
+        if (!((lvl4 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled4 = filledSubTrees[lvl4];
+        bytes32 leftHash4 = PoseidonT3.poseidon([cur4, bytes32(uint256(ZERO_4))]);
+        bytes32 rightHash4 = PoseidonT3.poseidon([oldFilled4, cur4]);
+        if (!((lvl4 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl4] = (((idx4 % 2) == 0) ? cur4 : oldFilled4);
+        bytes32 cur5 = (((idx4 % 2) == 0) ? leftHash4 : rightHash4);
+        if (!((lvl5 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled5 = filledSubTrees[lvl5];
+        bytes32 leftHash5 = PoseidonT3.poseidon([cur5, bytes32(uint256(ZERO_5))]);
+        bytes32 rightHash5 = PoseidonT3.poseidon([oldFilled5, cur5]);
+        if (!((lvl5 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl5] = (((idx5 % 2) == 0) ? cur5 : oldFilled5);
+        bytes32 cur6 = (((idx5 % 2) == 0) ? leftHash5 : rightHash5);
+        if (!((lvl6 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled6 = filledSubTrees[lvl6];
+        bytes32 leftHash6 = PoseidonT3.poseidon([cur6, bytes32(uint256(ZERO_6))]);
+        bytes32 rightHash6 = PoseidonT3.poseidon([oldFilled6, cur6]);
+        if (!((lvl6 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl6] = (((idx6 % 2) == 0) ? cur6 : oldFilled6);
+        bytes32 cur7 = (((idx6 % 2) == 0) ? leftHash6 : rightHash6);
+        if (!((lvl7 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled7 = filledSubTrees[lvl7];
+        bytes32 leftHash7 = PoseidonT3.poseidon([cur7, bytes32(uint256(ZERO_7))]);
+        bytes32 rightHash7 = PoseidonT3.poseidon([oldFilled7, cur7]);
+        if (!((lvl7 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl7] = (((idx7 % 2) == 0) ? cur7 : oldFilled7);
+        bytes32 cur8 = (((idx7 % 2) == 0) ? leftHash7 : rightHash7);
+        if (!((lvl8 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled8 = filledSubTrees[lvl8];
+        bytes32 leftHash8 = PoseidonT3.poseidon([cur8, bytes32(uint256(ZERO_8))]);
+        bytes32 rightHash8 = PoseidonT3.poseidon([oldFilled8, cur8]);
+        if (!((lvl8 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl8] = (((idx8 % 2) == 0) ? cur8 : oldFilled8);
+        bytes32 cur9 = (((idx8 % 2) == 0) ? leftHash8 : rightHash8);
+        if (!((lvl9 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled9 = filledSubTrees[lvl9];
+        bytes32 leftHash9 = PoseidonT3.poseidon([cur9, bytes32(uint256(ZERO_9))]);
+        bytes32 rightHash9 = PoseidonT3.poseidon([oldFilled9, cur9]);
+        if (!((lvl9 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl9] = (((idx9 % 2) == 0) ? cur9 : oldFilled9);
+        bytes32 cur10 = (((idx9 % 2) == 0) ? leftHash9 : rightHash9);
+        if (!((lvl10 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled10 = filledSubTrees[lvl10];
+        bytes32 leftHash10 = PoseidonT3.poseidon([cur10, bytes32(uint256(ZERO_10))]);
+        bytes32 rightHash10 = PoseidonT3.poseidon([oldFilled10, cur10]);
+        if (!((lvl10 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl10] = (((idx10 % 2) == 0) ? cur10 : oldFilled10);
+        bytes32 cur11 = (((idx10 % 2) == 0) ? leftHash10 : rightHash10);
+        if (!((lvl11 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled11 = filledSubTrees[lvl11];
+        bytes32 leftHash11 = PoseidonT3.poseidon([cur11, bytes32(uint256(ZERO_11))]);
+        bytes32 rightHash11 = PoseidonT3.poseidon([oldFilled11, cur11]);
+        if (!((lvl11 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl11] = (((idx11 % 2) == 0) ? cur11 : oldFilled11);
+        bytes32 cur12 = (((idx11 % 2) == 0) ? leftHash11 : rightHash11);
+        if (!((lvl12 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled12 = filledSubTrees[lvl12];
+        bytes32 leftHash12 = PoseidonT3.poseidon([cur12, bytes32(uint256(ZERO_12))]);
+        bytes32 rightHash12 = PoseidonT3.poseidon([oldFilled12, cur12]);
+        if (!((lvl12 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl12] = (((idx12 % 2) == 0) ? cur12 : oldFilled12);
+        bytes32 cur13 = (((idx12 % 2) == 0) ? leftHash12 : rightHash12);
+        if (!((lvl13 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled13 = filledSubTrees[lvl13];
+        bytes32 leftHash13 = PoseidonT3.poseidon([cur13, bytes32(uint256(ZERO_13))]);
+        bytes32 rightHash13 = PoseidonT3.poseidon([oldFilled13, cur13]);
+        if (!((lvl13 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl13] = (((idx13 % 2) == 0) ? cur13 : oldFilled13);
+        bytes32 cur14 = (((idx13 % 2) == 0) ? leftHash13 : rightHash13);
+        if (!((lvl14 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled14 = filledSubTrees[lvl14];
+        bytes32 leftHash14 = PoseidonT3.poseidon([cur14, bytes32(uint256(ZERO_14))]);
+        bytes32 rightHash14 = PoseidonT3.poseidon([oldFilled14, cur14]);
+        if (!((lvl14 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl14] = (((idx14 % 2) == 0) ? cur14 : oldFilled14);
+        bytes32 cur15 = (((idx14 % 2) == 0) ? leftHash14 : rightHash14);
+        if (!((lvl15 < filledSubTrees.length))) revert arithmetic();
+        bytes32 oldFilled15 = filledSubTrees[lvl15];
+        bytes32 leftHash15 = PoseidonT3.poseidon([cur15, bytes32(uint256(ZERO_15))]);
+        bytes32 rightHash15 = PoseidonT3.poseidon([oldFilled15, cur15]);
+        if (!((lvl15 < filledSubTrees.length))) revert arithmetic();
+        filledSubTrees[lvl15] = (((idx15 % 2) == 0) ? cur15 : oldFilled15);
+        bytes32 cur16 = (((idx15 % 2) == 0) ? leftHash15 : rightHash15);
+        merkleRoot = cur16;
         uint256 t = treeNumber;
-        rootHistory[t][root1] = true;
+        rootHistory[t][cur16] = true;
         uint256 i1 = 0;
         unchecked { i1 = (i + 1); }
         if (!((i1 >= i))) revert arithmetic();
@@ -354,9 +537,7 @@ contract PoolSol {
         }
     }
 
-    function setFeeRatio(uint128 num, uint128 den) external {
-        address sender = msg.sender;
-        if (!((sender == feeAdmin))) revert notFeeAdmin();
+    function checkAndSetFeeRatio(uint128 num, uint128 den) internal {
         if (!((0 < den))) revert invalidFeeRatio();
         if (!((num <= den))) revert invalidFeeRatio();
         uint256 num256 = num;
@@ -369,6 +550,12 @@ contract PoolSol {
         unchecked { denCap = (den256 * 10); }
         if (!((numPct <= denCap))) revert invalidFeeRatio();
         feeRatio = FeeRatio(num, den);
+    }
+
+    function setFeeRatio(uint128 num, uint128 den) external {
+        address sender = msg.sender;
+        if (!((sender == feeAdmin))) revert notFeeAdmin();
+        checkAndSetFeeRatio(num, den);
         emit FeeRatioSet(num, den);
     }
 }

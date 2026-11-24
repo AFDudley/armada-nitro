@@ -2,22 +2,27 @@
 // ABOUTME: fixturenet, each checked on chain, with one verdict line per function.
 
 /**
- * PoolSol scenarios (armada-laconic `labbook/2026-11-11-concrete-specification-design.md` §7,
- * item 5). The manifest's `armadaSol` entry (env/reconciler/modules/armada_sol.py) names the pool.
- * The scenarios run in this order, because `shield` needs a fee ratio:
+ * PoolSol scenarios (armada-laconic `labbook/2026-11-24-pool-for-nitro.md` §7, items P1, P2).
+ * The manifest's `armadaSol` entry (env/reconciler/modules/armada_sol.py) names the pool. The
+ * constructor now sets the initial fee ratio and the empty-tree root (P1), so `shield` needs no
+ * prior `setFeeRatio` call. The scenarios run in this order:
  *
  *   1. setFeeRatio(1, 200) from the fee admin: the `FeeRatioSet` event, and storage slot 23
  *      (`feeRatio`, solc's layout) holds the two halves.
- *   2. shield 10 USDC: the payer's balance drops by 10 USDC, the pool's rises by 10 USDC, and the
- *      `Shielded` commitment equals Poseidon(npk, token, 10 USDC less the fee), computed here with
- *      circomlibjs, not with the pool's Poseidon contract.
+ *   2. shield three notes of 10 USDC each: for each note, the payer's balance drops by 10 USDC,
+ *      the pool's rises by 10 USDC, and the `Shielded` commitment equals Poseidon(npk, token,
+ *      10 USDC less the fee), computed here with circomlibjs, not with the pool's Poseidon
+ *      contract. After each shield, storage slot 18 (`merkleRoot`, solc's layout) must equal the
+ *      root that circomlibjs computes for an independent depth-16 tree over every commitment
+ *      shielded so far, with Railgun's zero value (P2). Three notes put a leaf at both a left and
+ *      a right position at level 0.
  *   3. transact: a real Groth16 proof of a private transfer, made by Armada's SDK against Armada's
  *      own pool on the same chain. The SDK encodes Railgun's `transact` (selector d8ae136a); this
  *      script adds `ownerField = 0` and `publicOutputs = []` to make PoolSol's `transact`
  *      (407ae1b2). Both pools hash only the seven core bound parameters into the proof, so the
- *      proof stays valid. The proof's Merkle root is a root of Armada's tree. PoolSol's
- *      `insertLeaf` is not the frontier walk yet, so the expected result is a revert with
- *      `unknownRoot`, and the verdict is FAIL until the tree is real.
+ *      proof stays valid. The proof's Merkle root is a root of Armada's tree, not PoolSol's, so
+ *      the expected result is a revert with `unknownRoot` until PoolSol emits the events the SDK
+ *      scans for (P7), and the verdict is FAIL until then.
  *   4. transactOwned: the same transaction under selector 4b5d810b. Its `ownerField` is zero, not
  *      the caller, so the expected revert is `ownerMismatch`. The circuit release has no owned
  *      circuit, so no owned proof exists; the verdict is FAIL.
@@ -97,6 +102,13 @@ const TRANSFER_AMOUNT = ethers.parseUnits("3", 6);
 const FEE_NUM = 1n;
 const FEE_DEN = 200n;
 const FEE_RATIO_SLOT = 23n;
+const MERKLE_ROOT_SLOT = 18n;
+const TREE_DEPTH = 16;
+const SHIELD_NOTE_COUNT = 3;
+// Railgun's zero value (armada-laconic labbook/2026-11-24-pool-for-nitro.md §2.1).
+const ZERO_VALUE = BigInt(
+  "0x0488f89b25bc7011eaf6a5edce71aeafb9fe706faa3c0a5cd9cbe868ae3b9ffc",
+);
 
 // PoolSol's Transaction (out/PoolSol.sol); Railgun's is the same without the last two fields of
 // BoundParams (ownerField, publicOutputs).
@@ -140,6 +152,35 @@ async function revertName(
     const parsed = iface.parseError(revertData);
     return parsed ? parsed.name : `unknown(${revertData})`;
   }
+}
+
+/** circomlibjs ships no type declarations; this names the two members `treeRoot` calls. */
+interface PoseidonHasher {
+  (inputs: bigint[]): unknown;
+  F: { toString: (value: unknown) => string };
+}
+
+/**
+ * The root of a depth-16 incremental Merkle tree over `leaves`, in insertion order, with Poseidon
+ * as the hash and Railgun's zero value padding every missing sibling (armada-laconic labbook
+ * 2026-11-24-pool-for-nitro.md §2.1, §7 item P2). Independent of the pool's own `insertLeaf`.
+ */
+function treeRoot(poseidon: PoseidonHasher, leaves: bigint[]): bigint {
+  const hash2 = (a: bigint, b: bigint): bigint =>
+    BigInt(poseidon.F.toString(poseidon([a, b])));
+  const zeros = [ZERO_VALUE];
+  for (let level = 0; level < TREE_DEPTH; level++)
+    zeros.push(hash2(zeros[level], zeros[level]));
+  let level = leaves;
+  for (let depth = 0; depth < TREE_DEPTH; depth++) {
+    const next: bigint[] = [];
+    for (let i = 0; i < level.length; i += 2)
+      next.push(
+        hash2(level[i], i + 1 < level.length ? level[i + 1] : zeros[depth]),
+      );
+    level = next.length > 0 ? next : [zeros[depth + 1]];
+  }
+  return level[0];
 }
 
 async function waitForBalance(
@@ -214,48 +255,73 @@ async function main() {
     });
   }
 
-  // 2. shield
+  // 2. shield three notes, checking the Merkle root after each
   {
     const poseidon = await buildPoseidon();
-    const npk = BigInt(ethers.hexlify(ethers.randomBytes(31)));
-    const fee = (SHIELD_AMOUNT * FEE_NUM) / FEE_DEN;
-    const expected = BigInt(
-      poseidon.F.toString(
-        poseidon([npk, BigInt(usdcAddress), SHIELD_AMOUNT - fee]),
-      ),
-    );
-    const payerBefore: bigint = await usdc.balanceOf(payer.address);
-    const poolBefore: bigint = await usdc.balanceOf(poolSol);
-    await (await usdc.connect(payer).approve(poolSol, SHIELD_AMOUNT)).wait();
-    const receipt = await (
-      await pool.connect(payer).getFunction("shield")(
-        usdcAddress,
-        SHIELD_AMOUNT,
-        ethers.toBeHex(npk, 32),
+    const commitments: bigint[] = [];
+    let payerDeltaTotal = 0n;
+    let poolDeltaTotal = 0n;
+    let eventsOk = true;
+    let rootsOk = true;
+    let lastHash = "";
+    let onChainRoot = 0n;
+    let computedRoot = 0n;
+
+    for (let note = 0; note < SHIELD_NOTE_COUNT; note++) {
+      const npk = BigInt(ethers.hexlify(ethers.randomBytes(31)));
+      const fee = (SHIELD_AMOUNT * FEE_NUM) / FEE_DEN;
+      const expectedCommitment = BigInt(
+        poseidon.F.toString(
+          poseidon([npk, BigInt(usdcAddress), SHIELD_AMOUNT - fee]),
+        ),
+      );
+      const payerBefore: bigint = await usdc.balanceOf(payer.address);
+      const poolBefore: bigint = await usdc.balanceOf(poolSol);
+      await (await usdc.connect(payer).approve(poolSol, SHIELD_AMOUNT)).wait();
+      const receipt = await (
+        await pool.connect(payer).getFunction("shield")(
+          usdcAddress,
+          SHIELD_AMOUNT,
+          ethers.toBeHex(npk, 32),
+        )
+      ).wait();
+      lastHash = receipt!.hash;
+      const events = receipt!.logs
+        .filter(
+          (l: ethers.Log) => l.address.toLowerCase() === poolSol.toLowerCase(),
+        )
+        .map((l: ethers.Log) => iface.parseLog(l))
+        .filter((e) => e?.name === "Shielded");
+      const payerDelta = payerBefore - (await usdc.balanceOf(payer.address));
+      const poolDelta = (await usdc.balanceOf(poolSol)) - poolBefore;
+      payerDeltaTotal += payerDelta;
+      poolDeltaTotal += poolDelta;
+      const commitment =
+        events.length === 1 ? BigInt(events[0]!.args.commitment) : -1n;
+      if (
+        events.length !== 1 ||
+        commitment !== expectedCommitment ||
+        events[0]!.args.amount !== SHIELD_AMOUNT ||
+        payerDelta !== SHIELD_AMOUNT ||
+        poolDelta !== SHIELD_AMOUNT
       )
-    ).wait();
-    const events = receipt!.logs
-      .filter(
-        (l: ethers.Log) => l.address.toLowerCase() === poolSol.toLowerCase(),
-      )
-      .map((l: ethers.Log) => iface.parseLog(l))
-      .filter((e) => e?.name === "Shielded");
-    const payerDelta = payerBefore - (await usdc.balanceOf(payer.address));
-    const poolDelta = (await usdc.balanceOf(poolSol)) - poolBefore;
-    const commitment =
-      events.length === 1 ? BigInt(events[0]!.args.commitment) : -1n;
-    const pass =
-      events.length === 1 &&
-      commitment === expected &&
-      events[0]!.args.amount === SHIELD_AMOUNT &&
-      payerDelta === SHIELD_AMOUNT &&
-      poolDelta === SHIELD_AMOUNT;
+        eventsOk = false;
+      commitments.push(commitment < 0n ? 0n : commitment);
+
+      onChainRoot = BigInt(
+        await ethers.provider.getStorage(poolSol, MERKLE_ROOT_SLOT),
+      );
+      computedRoot = treeRoot(poseidon, commitments);
+      if (onChainRoot !== computedRoot) rootsOk = false;
+    }
+
     verdicts.push({
       fn: "shield",
-      pass,
+      pass: eventsOk && rootsOk,
       detail:
-        `tx ${receipt!.hash}; commitment ${ethers.toBeHex(commitment < 0n ? 0n : commitment, 32)} ` +
-        `(expected ${ethers.toBeHex(expected, 32)}); payer -${payerDelta}; pool +${poolDelta}`,
+        `tx ${lastHash}; ${SHIELD_NOTE_COUNT} notes; payer -${payerDeltaTotal}; ` +
+        `pool +${poolDeltaTotal}; merkleRoot ${ethers.toBeHex(onChainRoot, 32)} ` +
+        `(independent depth-16 root ${ethers.toBeHex(computedRoot, 32)})`,
     });
   }
 
