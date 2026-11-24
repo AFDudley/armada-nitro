@@ -7,24 +7,37 @@ source's SHA-256, the solc profile, and the SHA-256 of the runtime bytecode that
 statements are about (`ArmadaSol/Bytecode/Pool/Code.lean`), with the link and immutable offsets.
 See env/armada-sol/README.md.
 
+The constructor takes no keys (armada-laconic-mono 8d136e70, `evm-a58a`): it only sets the fee
+admin, the treasury, the maximum batch, and the initial fee ratio, and writes the empty-tree root.
+After the deploy, the fee admin registers each shape's verifying key with `registerKey` (plain) or
+`registerOwnedKey` (owned), then calls `seal()`. `shield`, `transact` and `transactOwned` revert
+with `notSealed` until `seal()` runs; `registerKey`/`registerOwnedKey`/`seal` revert with
+`alreadySealed` once it has.
+
 apply() compiles the source with solc 0.8.31 under the recorded profile, links the PoseidonT3 and
-PoseidonT4 contracts that the armada module records (Armada's own deploy creates them), and passes
-the verifying keys of Armada's circuit build (/src/armada-circuits/build/<n>x<m>/vkey.json) and the
-target's initial fee ratio to the constructor, for the shapes that Armada's deploy registers. The
-constructor sets the fee ratio and the empty-tree root (armada-laconic labbook
-2026-11-24-pool-for-nitro.md, item P1), and is the only writer of the keys. The circuit release has
-no owned circuit, so the owned key list is empty.
+PoseidonT4 contracts that the armada module records (Armada's own deploy creates them), deploys
+with the target's initial fee ratio, then registers the verifying keys of Armada's circuit build
+(/src/armada-circuits/build/<n>x<m>/vkey.json) for the shapes that Armada's deploy registers, and
+seals. The circuit release has no owned circuit, so no `registerOwnedKey` call is made.
 
 apply() redeploys when the recorded `monorepoCommit` differs from provenance.json's: a deployed pool
 of a different version is not a match, so apply() deploys the current version and replaces the
-manifest entry.
+manifest entry. Each step after the deploy is idempotent: a key whose storage already holds a
+nonzero `alpha1.x` is read as already registered and skipped; a pool whose storage already reads
+`poolSealed = true` is read as already sealed, and no registration or `seal()` call is made (every
+registration call reverts `alreadySealed` once sealed, so there is nothing left to do). A fresh
+deploy, registration and seal in the same run reports action "deployed"; finishing registration or
+sealing an existing, unsealed pool reports "configured"; an existing, already-sealed pool reports
+"present" and sends no transaction.
 
-verify() checks two oracles from outside the code under test:
+verify() checks three things, two of them oracles from outside the code under test:
 - the deployed runtime, with the link and immutable bytes set to zero, has the SHA-256 that the
   provenance records from the Lean statement; the link bytes are the recorded Poseidon addresses;
   the immutable bytes are the fee admin and the maximum batch;
+- the pool is sealed (storage reads `poolSealed = true`);
 - for each shape, the key in storage (read by solc's storage layout) is equal to the key that the
-  demo3 pool on Sepolia returns from `getVerificationKey`.
+  demo3 pool on Sepolia returns from `getVerificationKey`; a missing or zero key cannot equal
+  Sepolia's nonzero one, so this also proves the key is present.
 """
 
 from __future__ import annotations
@@ -50,19 +63,29 @@ _PROVENANCE = _SOURCE_DIR / "provenance.json"
 _SOLC = Path("/root/.svm/0.8.31/solc-0.8.31")
 
 # The treasury is Armada's (armada.py `_TREASURY_ACCOUNT_INDEX`); the fee admin is an account that
-# no other module uses, so a scenario can call `setFeeRatio` with a known key.
+# no other module uses, so a scenario can call `setFeeRatio`, `registerKey` and `seal` with a known
+# key.
 _TREASURY_ACCOUNT_INDEX = 7
 _FEE_ADMIN_ACCOUNT_INDEX = 8
 
-# The constructor's parameters: `ShapedKey` is (nullifiers, commitments, VerifyingKey), and
-# `VerifyingKey` is (artifactsIPFSHash, alpha1, beta2, gamma2, delta2, ic) (out/PoolSol.sol).
-_VK_TYPE = "(string,(uint256,uint256),(uint256[2],uint256[2]),(uint256[2],uint256[2]),(uint256[2],uint256[2]),(uint256,uint256)[])"
-_CONSTRUCTOR_SIG = f"constructor(address,address,uint256,uint128,uint128,(uint256,uint256,{_VK_TYPE})[],(uint256,uint256,{_VK_TYPE})[])"
+# The constructor takes no keys (8d136e70): only the fee admin, the treasury, the maximum batch
+# and the initial fee ratio.
+_CONSTRUCTOR_SIG = "constructor(address,address,uint256,uint128,uint128)"
 
-# solc's storage layout of PoolSol: `verificationKeys` is the mapping at slot 24, and a
-# `VerifyingKey` takes the string at +0, ten words at +1..+14 and the `ic` array at +15
+# `ShapedKey` is (nullifiers, commitments, VerifyingKey), and `VerifyingKey` is
+# (artifactsIPFSHash, alpha1, beta2, gamma2, delta2, ic) (out/PoolSol.sol).
+_VK_TYPE = "(string,(uint256,uint256),(uint256[2],uint256[2]),(uint256[2],uint256[2]),(uint256[2],uint256[2]),(uint256,uint256)[])"
+_REGISTER_KEY_SIG = f"registerKey((uint256,uint256,{_VK_TYPE}))"
+_REGISTER_OWNED_KEY_SIG = f"registerOwnedKey((uint256,uint256,{_VK_TYPE}))"
+_SEAL_SIG = "seal()"
+
+# solc's storage layout of PoolSol: `verificationKeys` is the mapping at slot 24,
+# `ownedVerificationKeys` at slot 25, `poolSealed` at slot 26 (a lone `bool`, so nonzero means
+# true). A `VerifyingKey` takes the string at +0, ten words at +1..+14 and the `ic` array at +15
 # (armada-sol/ArmadaSol/Bytecode/Pool/Decode.lean, the same table).
 _VERIFICATION_KEYS_SLOT = 24
+_OWNED_VERIFICATION_KEYS_SLOT = 25
+_POOL_SEALED_SLOT = 26
 _WORD = 1 << 256
 
 
@@ -140,55 +163,84 @@ def apply(ctx: Context, observed: dict[str, Any] | None) -> tuple[str, int]:
     if mode != "deploy":
         raise ctx.fail("armada_sol supports only deploy")
     prov = _provenance()
-    if observed and observed.get("pool") and observed.get("monorepoCommit") == prov["monorepoCommit"]:
-        return "present", 0
 
-    armada = ctx.manifest.get("armada")
-    if not armada or not armada.get("poseidonT3") or not armada.get("poseidonT4"):
-        raise ctx.fail(
-            "armada has not recorded its Poseidon contracts; run it before armada_sol (MODULE_ORDER)"
+    gas_total = 0
+    deployed_now = False
+    if observed and observed.get("pool") and observed.get("monorepoCommit") == prov["monorepoCommit"]:
+        sol = dict(observed)
+    else:
+        armada = ctx.manifest.get("armada")
+        if not armada or not armada.get("poseidonT3") or not armada.get("poseidonT4"):
+            raise ctx.fail(
+                "armada has not recorded its Poseidon contracts; run it before armada_sol (MODULE_ORDER)"
+            )
+
+        code = _link(_compile(prov), {"PoseidonT3": armada["poseidonT3"], "PoseidonT4": armada["poseidonT4"]})
+        fee_admin = _wallet.address(_FEE_ADMIN_ACCOUNT_INDEX)
+        treasury = _wallet.address(_TREASURY_ACCOUNT_INDEX)
+        max_batch = int(params["maxBatch"])
+        fee_num = int(params["feeNum"])
+        fee_den = int(params["feeDen"])
+        args = ctx._run(
+            [
+                "cast",
+                "abi-encode",
+                _CONSTRUCTOR_SIG,
+                fee_admin,
+                treasury,
+                str(max_batch),
+                str(fee_num),
+                str(fee_den),
+            ]
         )
 
-    code = _link(_compile(prov), {"PoseidonT3": armada["poseidonT3"], "PoseidonT4": armada["poseidonT4"]})
-    fee_admin = _wallet.address(_FEE_ADMIN_ACCOUNT_INDEX)
-    treasury = _wallet.address(_TREASURY_ACCOUNT_INDEX)
-    max_batch = int(params["maxBatch"])
-    fee_num = int(params["feeNum"])
-    fee_den = int(params["feeDen"])
-    keys = "[" + ",".join(f"({n},{m},{_vk_value(n, m)})" for n, m in _TESTING_ARTIFACT_CONFIGS) + "]"
-    args = ctx._run(
-        [
-            "cast",
-            "abi-encode",
-            _CONSTRUCTOR_SIG,
-            fee_admin,
-            treasury,
-            str(max_batch),
-            str(fee_num),
-            str(fee_den),
-            keys,
-            "[]",
-        ]
-    )
+        receipt = ctx.send("--create", "0x" + code + args.removeprefix("0x"))
+        if to_int(receipt["status"]) != 1:
+            raise ctx.fail(f"PoolSol deploy reverted: tx {receipt['transactionHash']}")
+        gas_total += to_int(receipt["gasUsed"])
+        sol = {
+            "pool": receipt["contractAddress"],
+            "deployBlock": to_int(receipt["blockNumber"]),
+            "feeAdmin": fee_admin,
+            "treasury": treasury,
+            "maxBatch": max_batch,
+            "poseidonT3": armada["poseidonT3"],
+            "poseidonT4": armada["poseidonT4"],
+            "monorepoCommit": prov["monorepoCommit"],
+        }
+        deployed_now = True
 
-    receipt = ctx.send("--create", "0x" + code + args.removeprefix("0x"))
-    if to_int(receipt["status"]) != 1:
-        raise ctx.fail(f"PoolSol deploy reverted: tx {receipt['transactionHash']}")
-    gas_used = to_int(receipt["gasUsed"])
+    pool = sol["pool"]
+    fee_admin_key = _wallet.private_key(_FEE_ADMIN_ACCOUNT_INDEX)
+    sealed = _storage(ctx, pool, _POOL_SEALED_SLOT) != 0
+    registered_now = False
+    if not sealed:
+        for n, m in _TESTING_ARTIFACT_CONFIGS:
+            if _key_registered(ctx, pool, _VERIFICATION_KEYS_SLOT, n, m):
+                continue
+            value = f"({n},{m},{_vk_value(n, m)})"
+            receipt = _send_as(ctx, fee_admin_key, pool, _REGISTER_KEY_SIG, value)
+            if to_int(receipt["status"]) != 1:
+                raise ctx.fail(f"registerKey({n},{m}) reverted: tx {receipt['transactionHash']}")
+            gas_total += to_int(receipt["gasUsed"])
+            registered_now = True
+        # The circuit release has no owned circuit (armada.py's _TESTING_ARTIFACT_CONFIGS has no
+        # owned shapes), so no registerOwnedKey call is made here; an owned shape would register
+        # the same way, against _OWNED_VERIFICATION_KEYS_SLOT and _REGISTER_OWNED_KEY_SIG.
+        receipt = _send_as(ctx, fee_admin_key, pool, _SEAL_SIG)
+        if to_int(receipt["status"]) != 1:
+            raise ctx.fail(f"seal() reverted: tx {receipt['transactionHash']}")
+        gas_total += to_int(receipt["gasUsed"])
+        registered_now = True
 
-    ctx.manifest["armadaSol"] = {
-        "pool": receipt["contractAddress"],
-        "deployBlock": to_int(receipt["blockNumber"]),
-        "feeAdmin": fee_admin,
-        "treasury": treasury,
-        "maxBatch": max_batch,
-        "poseidonT3": armada["poseidonT3"],
-        "poseidonT4": armada["poseidonT4"],
-        "monorepoCommit": prov["monorepoCommit"],
-    }
+    ctx.manifest["armadaSol"] = sol
     ctx.manifest.setdefault("gasUsed", {})
-    ctx.manifest["gasUsed"]["armada_sol"] = ctx.manifest["gasUsed"].get("armada_sol", 0) + gas_used
-    return "deployed", gas_used
+    ctx.manifest["gasUsed"]["armada_sol"] = ctx.manifest["gasUsed"].get("armada_sol", 0) + gas_total
+    if deployed_now:
+        return "deployed", gas_total
+    if registered_now:
+        return "configured", gas_total
+    return "present", gas_total
 
 
 def _word(n: int) -> str:
@@ -199,11 +251,33 @@ def _storage(ctx: Context, pool: str, slot: int) -> int:
     return int(ctx.cast("storage", pool, _word(slot)), 16)
 
 
+def _key_base(ctx: Context, slot: int, n: int, m: int) -> int:
+    """The storage slot of the `VerifyingKey` at `slot[n][m]` (`verificationKeys` or
+    `ownedVerificationKeys`). `cast index` is offline and takes no --rpc-url, so it runs
+    through `_run`."""
+    outer = ctx._run(["cast", "index", "uint256", str(n), str(slot)])
+    return int(ctx._run(["cast", "index", "uint256", str(m), outer]), 16)
+
+
+def _key_registered(ctx: Context, pool: str, slot: int, n: int, m: int) -> bool:
+    """A key is registered once its `alpha1.x` word (the `VerifyingKey` struct's +1 offset) is
+    nonzero; `registerKey`/`registerOwnedKey` read the same word to refuse a second write
+    (`keyAlreadySet`)."""
+    return _storage(ctx, pool, _key_base(ctx, slot, n, m) + 1) != 0
+
+
+def _send_as(ctx: Context, private_key: str, *args: str) -> dict[str, Any]:
+    """Sign and publish a transaction with an arbitrary private key, for the calls only PoolSol's
+    fee admin may make (`registerKey`, `registerOwnedKey`, `seal`). Mirrors `Context.send`,
+    substituting the key."""
+    out = ctx._run(["cast", "send", "--private-key", private_key, "--json", "--rpc-url", ctx.rpc_url, *args])
+    result: dict[str, Any] = json.loads(out)
+    return result
+
+
 def _stored_vk(ctx: Context, pool: str, n: int, m: int) -> str:
     """The key of shape (n, m) read from storage, ABI-encoded as `getVerificationKey` returns it."""
-    # `cast index` and `cast keccak` are offline and take no --rpc-url, so they run through `_run`.
-    outer = ctx._run(["cast", "index", "uint256", str(n), str(_VERIFICATION_KEYS_SLOT)])
-    base = int(ctx._run(["cast", "index", "uint256", str(m), outer]), 16)
+    base = _key_base(ctx, _VERIFICATION_KEYS_SLOT, n, m)
     head = _storage(ctx, pool, base)
     if head & 1:
         raise ctx.fail(
@@ -252,6 +326,10 @@ def verify(ctx: Context, action: str) -> None:
     if not sol:
         raise ctx.fail("no armadaSol recorded; run without --verify-only first")
     _check_code(ctx, sol, _provenance())
+
+    sealed = _storage(ctx, sol["pool"], _POOL_SEALED_SLOT) != 0
+    if not sealed:
+        raise ctx.fail("PoolSol is not sealed; shield/transact/transactOwned revert notSealed")
 
     mismatches = []
     for n, m in _TESTING_ARTIFACT_CONFIGS:

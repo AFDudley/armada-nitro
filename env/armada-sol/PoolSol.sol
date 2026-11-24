@@ -33,7 +33,9 @@ contract PoolSol {
     error proofRejected();
     error ownerMismatch();
     error batchTooLarge();
-    error tooManyKeys();
+    error notSealed();
+    error alreadySealed();
+    error keyAlreadySet();
     error ecAddFailed();
     error ecMulFailed();
     error pairingFailed();
@@ -152,27 +154,18 @@ contract PoolSol {
     FeeRatio internal feeRatio;
     mapping(uint256 => mapping(uint256 => VerifyingKey)) internal verificationKeys;
     mapping(uint256 => mapping(uint256 => VerifyingKey)) internal ownedVerificationKeys;
+    bool internal poolSealed;
     address internal immutable feeAdmin;
     address internal immutable treasury;
     uint256 internal immutable maxBatch;
 
-    constructor(address feeAdmin_, address treasury_, uint256 maxBatch_, uint128 num, uint128 den, ShapedKey[] memory keys, ShapedKey[] memory ownedKeys) {
+    constructor(address feeAdmin_, address treasury_, uint256 maxBatch_, uint128 num, uint128 den) {
         feeAdmin = feeAdmin_;
         treasury = treasury_;
         maxBatch = maxBatch_;
         checkAndSetFeeRatio(num, den);
         merkleRoot = bytes32(uint256(EMPTY_TREE_ROOT));
         rootHistory[0][bytes32(uint256(EMPTY_TREE_ROOT))] = true;
-        if (!((keys.length <= 64))) revert tooManyKeys();
-        for (uint256 kIndex = 0; kIndex < keys.length; ++kIndex) {
-            ShapedKey memory k = keys[kIndex];
-            verificationKeys[k.nullifiers][k.commitments] = k.key;
-        }
-        if (!((ownedKeys.length <= 64))) revert tooManyKeys();
-        for (uint256 kIndex = 0; kIndex < ownedKeys.length; ++kIndex) {
-            ShapedKey memory k = ownedKeys[kIndex];
-            ownedVerificationKeys[k.nullifiers][k.commitments] = k.key;
-        }
     }
 
     function insertLeaf(bytes32 leaf) internal {
@@ -480,6 +473,8 @@ contract PoolSol {
     }
 
     function shield(address token, uint256 amount, bytes32 npk) external {
+        bool isSealed = poolSealed;
+        if (!(isSealed)) revert notSealed();
         address sender = msg.sender;
         address me = address(this);
         FeeRatio memory ratio = feeRatio;
@@ -507,6 +502,8 @@ contract PoolSol {
     }
 
     function transact(Transaction[] memory batch) external {
+        bool isSealed = poolSealed;
+        if (!(isSealed)) revert notSealed();
         if (!((batch.length <= maxBatch))) revert batchTooLarge();
         for (uint256 txnIndex = 0; txnIndex < batch.length; ++txnIndex) {
             Transaction memory txn = batch[txnIndex];
@@ -522,6 +519,8 @@ contract PoolSol {
     }
 
     function transactOwned(Transaction[] memory batch) external {
+        bool isSealed = poolSealed;
+        if (!(isSealed)) revert notSealed();
         address sender = msg.sender;
         if (!((batch.length <= maxBatch))) revert batchTooLarge();
         for (uint256 txnIndex = 0; txnIndex < batch.length; ++txnIndex) {
@@ -557,5 +556,33 @@ contract PoolSol {
         if (!((sender == feeAdmin))) revert notFeeAdmin();
         checkAndSetFeeRatio(num, den);
         emit FeeRatioSet(num, den);
+    }
+
+    function registerKey(ShapedKey memory k) external {
+        address sender = msg.sender;
+        if (!((sender == feeAdmin))) revert notFeeAdmin();
+        bool isSealed = poolSealed;
+        if (!(!(isSealed))) revert alreadySealed();
+        VerifyingKey memory existing = verificationKeys[k.nullifiers][k.commitments];
+        if (!((existing.alpha1.x == 0))) revert keyAlreadySet();
+        verificationKeys[k.nullifiers][k.commitments] = k.key;
+    }
+
+    function registerOwnedKey(ShapedKey memory k) external {
+        address sender = msg.sender;
+        if (!((sender == feeAdmin))) revert notFeeAdmin();
+        bool isSealed = poolSealed;
+        if (!(!(isSealed))) revert alreadySealed();
+        VerifyingKey memory existing = ownedVerificationKeys[k.nullifiers][k.commitments];
+        if (!((existing.alpha1.x == 0))) revert keyAlreadySet();
+        ownedVerificationKeys[k.nullifiers][k.commitments] = k.key;
+    }
+
+    function seal() external {
+        address sender = msg.sender;
+        if (!((sender == feeAdmin))) revert notFeeAdmin();
+        bool isSealed = poolSealed;
+        if (!(!(isSealed))) revert alreadySealed();
+        poolSealed = true;
     }
 }
